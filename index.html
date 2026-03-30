@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Intelligence Reports</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  :root { --jagger:#370B55; --violet:#8136B2; --vixen:#AB74CF; --lavender:#D9BAEE; --gray:#4D4D4D; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Inter',sans-serif; background:#f0ecf5; color:var(--gray); min-height:100vh; }
+
+  header {
+    background:var(--jagger); padding:18px 32px;
+    display:flex; align-items:center; gap:12px;
+    box-shadow:0 2px 12px rgba(55,11,85,.45);
+  }
+  header svg { height:26px; }
+  .divider { width:1px; height:26px; background:rgba(255,255,255,.25); }
+  .subtitle { color:var(--lavender); font-size:12px; font-weight:500; letter-spacing:.8px; text-transform:uppercase; }
+
+  main { max-width:760px; margin:48px auto; padding:0 24px; }
+  h2 { font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:1.5px; color:var(--violet); margin-bottom:20px; }
+
+  .report-card {
+    background:#fff; border:1px solid #ddd; border-radius:12px;
+    padding:18px 20px; margin-bottom:12px;
+    display:flex; align-items:center; justify-content:space-between;
+    box-shadow:0 2px 8px rgba(55,11,85,.08);
+    text-decoration:none; color:inherit;
+    transition:box-shadow .15s, border-color .15s;
+  }
+  .report-card:hover { box-shadow:0 4px 16px rgba(55,11,85,.16); border-color:var(--vixen); }
+  .card-left { display:flex; flex-direction:column; gap:4px; }
+  .card-title { font-size:14px; font-weight:600; color:var(--jagger); }
+  .card-meta { font-size:11px; color:#999; }
+  .card-arrow { color:var(--vixen); font-size:18px; }
+</style>
+</head>
+<body>
+
+<header>
+  <svg viewBox="0 0 120 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <text x="0" y="23" font-family="Inter,sans-serif" font-weight="800" font-size="22" fill="#FFFFFF" letter-spacing="-0.5">Cars</text>
+    <text x="51" y="23" font-family="Inter,sans-serif" font-weight="800" font-size="22" fill="#AB74CF" letter-spacing="-0.5">.com</text>
+  </svg>
+  <div class="divider"></div>
+  <span class="subtitle">Market Intelligence Reports</span>
+</header>
+
+<main>
+  <h2>Available Reports</h2>
+
+  <a class="report-card" href="Mobile_Pensacola/market_intelligence_Mobile_Pensacola_Hyundai_03.30.26.html">
+    <div class="card-left">
+      <div class="card-title">Mobile – Pensacola · Hyundai</div>
+      <div class="card-meta">March 30, 2026</div>
+    </div>
+    <span class="card-arrow">→</span>
+  </a>
+
+  <a class="report-card" href="Mobile_Pensacola_Ft_Walt/market_intelligence_Mobile_Pensacola_Ft_Walt_Hyundai_03.30.26.html">
+    <div class="card-left">
+      <div class="card-title">Mobile – Pensacola – Ft. Walton · Hyundai</div>
+      <div class="card-meta">March 30, 2026</div>
+    </div>
+    <span class="card-arrow">→</span>
+  </a>
+
+</main>
+</body>
+</html>
