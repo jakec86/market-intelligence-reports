@@ -25,6 +25,7 @@
   #logo svg{height:28px;}
   #logo-divider{width:1px;height:28px;background:rgba(255,255,255,.25);}
   #logo-subtitle{color:var(--lavender);font-size:12px;font-weight:500;letter-spacing:.8px;text-transform:uppercase;}
+  #data-date{color:rgba(217,186,238,.65);font-size:10px;font-weight:400;letter-spacing:.5px;margin-left:4px;}
   #total-badge{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px 16px;text-align:right;}
   #total-badge .num{font-size:18px;font-weight:700;color:var(--white);letter-spacing:-.5px;}
   #total-badge .lbl{font-size:10px;color:var(--lavender);text-transform:uppercase;letter-spacing:1px;}
@@ -96,7 +97,7 @@
       <text x="51" y="23" font-family="Inter,sans-serif" font-weight="800" font-size="22" fill="#AB74CF" letter-spacing="-0.5">.com</text>
     </svg>
     <div id="logo-divider"></div>
-    <span id="logo-subtitle">Mobile-Pensacola Market Intelligence | Hyundai</span>
+    <span id="logo-subtitle">Mobile-Pensacola Market Intelligence | Hyundai</span><span id="data-date">· Data as of Q1 2026</span>
   </div>
   <div id="total-badge">
     <div class="num" id="total-num">—</div>
@@ -892,6 +893,12 @@ document.getElementById('total-num').textContent = grandTotal.toLocaleString();
   }).join('');
 })();
 
+function fmtZips(zips) {
+  if (!zips) return '';
+  const z = zips.split(', ');
+  return 'ZIP: ' + (z.length <= 4 ? zips : z.slice(0,4).join(', ') + ` \u2026 +${z.length-4} more`);
+}
+
 function getRadius(t){
   const mn=4,mx=52;
   return mn+(Math.sqrt(t)/Math.sqrt(maxTotal))*(mx-mn);
@@ -923,7 +930,7 @@ cities.forEach(c=>{
   circle.bindTooltip(
     `<div class="tt-city">${c.name}</div>
      <div class="tt-count">${c.total.toLocaleString()} searches</div>
-     <div class="tt-zips">ZIP: ${c.zips}</div>`,
+     <div class="tt-zips">${fmtZips(c.zips)}</div>`,
     {className:'cars-tooltip',sticky:true,offset:[10,0]}
   );
 
@@ -979,14 +986,16 @@ function haversineMi(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Sum searches for all cities whose centroid falls within RADIUS_MI of (lat, lng)
+// Sum searches and count cities whose centroid falls within RADIUS_MI of (lat, lng)
 function searchesInRadius(lat, lng) {
-  return cities.reduce((sum, c) => {
-    return haversineMi(lat, lng, c.lat, c.lng) <= RADIUS_MI ? sum + c.total : sum;
-  }, 0);
+  let searches = 0, count = 0;
+  cities.forEach(c => {
+    if (haversineMi(lat, lng, c.lat, c.lng) <= RADIUS_MI) { searches += c.total; count++; }
+  });
+  return { searches, count };
 }
 
-function makeBadgeIcon(count) {
+function makeBadgeIcon(searches, count) {
   return L.divIcon({
     html: `<div style="
       background:rgba(55,11,85,0.88);color:#fff;
@@ -994,7 +1003,7 @@ function makeBadgeIcon(count) {
       padding:3px 8px;border-radius:10px;white-space:nowrap;
       transform:translate(-50%, 14px);pointer-events:none;
       box-shadow:0 2px 8px rgba(55,11,85,.35);letter-spacing:.2px;
-    ">${count.toLocaleString()} searches</div>`,
+    ">${searches.toLocaleString()} searches · ${count} ${count === 1 ? 'city' : 'cities'}</div>`,
     className: '',
     iconSize: [0, 0],
     iconAnchor: [0, 0],
@@ -1025,10 +1034,10 @@ function placeRadius(lat, lng, label) {
     interactive: false,
   }).addTo(map);
 
-  const initialCount = searchesInRadius(lat, lng);
+  const initial = searchesInRadius(lat, lng);
 
   const badge = L.marker([lat, lng], {
-    icon: makeBadgeIcon(initialCount),
+    icon: makeBadgeIcon(initial.searches, initial.count),
     interactive: false,
     zIndexOffset: -200,
   }).addTo(map);
@@ -1056,13 +1065,15 @@ function placeRadius(lat, lng, label) {
     const { lat: la, lng: ln } = e.latlng;
     ring.setLatLng([la, ln]);
     badge.setLatLng([la, ln]);
-    badge.setIcon(makeBadgeIcon(searchesInRadius(la, ln)));
+    const r = searchesInRadius(la, ln);
+    badge.setIcon(makeBadgeIcon(r.searches, r.count));
   });
 
   pin.on('dragend', function() {
     map.getContainer().style.cursor = clickModeActive ? 'crosshair' : '';
     const { lat: la, lng: ln } = pin.getLatLng();
-    setStatus('✓ ' + searchesInRadius(la, ln).toLocaleString() + ' searches in radius', 4000);
+    const r = searchesInRadius(la, ln);
+    setStatus(`✓ ${r.searches.toLocaleString()} searches · ${r.count} cities in radius`, 4000);
   });
 
   radiusLayers.push(ring, badge, pin);

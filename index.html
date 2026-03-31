@@ -20,7 +20,21 @@
   .subtitle { color:var(--lavender); font-size:12px; font-weight:500; letter-spacing:.8px; text-transform:uppercase; }
 
   main { max-width:760px; margin:48px auto; padding:0 24px; }
-  h2 { font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:1.5px; color:var(--violet); margin-bottom:20px; }
+  h2 { font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:1.5px; color:var(--violet); margin-bottom:12px; }
+
+  .filters { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; }
+  .filter-group { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip {
+    padding:4px 12px; border-radius:20px; font-size:11px; font-weight:500;
+    border:1.5px solid var(--lavender); background:#fff; color:var(--violet);
+    cursor:pointer; transition:all .15s; user-select:none;
+  }
+  .chip:hover { border-color:var(--vixen); background:#f8f2fd; }
+  .chip.active { background:var(--violet); color:#fff; border-color:var(--violet); }
+  .chip.all { border-color:#ddd; color:var(--gray); }
+  .chip.all.active { background:var(--jagger); border-color:var(--jagger); color:#fff; }
+  .filter-sep { width:1px; background:#ddd; align-self:stretch; margin:2px 0; }
+  #no-results { display:none; font-size:13px; color:#999; padding:20px 0; }
 
   .report-card {
     background:#fff; border:1px solid #ddd; border-radius:12px;
@@ -31,6 +45,7 @@
     transition:box-shadow .15s, border-color .15s;
   }
   .report-card:hover { box-shadow:0 4px 16px rgba(55,11,85,.16); border-color:var(--vixen); }
+  .report-card.hidden { display:none; }
   .card-left { display:flex; flex-direction:column; gap:4px; }
   .card-title { font-size:14px; font-weight:600; color:var(--jagger); }
   .card-meta { font-size:11px; color:#999; }
@@ -51,7 +66,11 @@
 <main>
   <h2>Available Reports</h2>
 
-  <a class="report-card" href="Mobile_Pensacola/market_intelligence_Mobile_Pensacola_Hyundai_03.31.26.html">
+  <div class="filters" id="filters"></div>
+  <div id="no-results">No reports match the selected filters.</div>
+
+  <a class="report-card" href="Mobile_Pensacola/market_intelligence_Mobile_Pensacola_Hyundai_03.31.26.html"
+     data-dma="Mobile-Pensacola" data-make="Hyundai">
     <div class="card-left">
       <div class="card-title">Mobile – Pensacola · Hyundai</div>
       <div class="card-meta">March 31, 2026</div>
@@ -59,7 +78,72 @@
     <span class="card-arrow">→</span>
   </a>
 
-
 </main>
+
+<script>
+(function() {
+  const cards = Array.from(document.querySelectorAll('.report-card'));
+  const filtersEl = document.getElementById('filters');
+  const noResults = document.getElementById('no-results');
+
+  // Collect unique DMA and make values
+  const dmas  = [...new Set(cards.map(c => c.dataset.dma).filter(Boolean))].sort();
+  const makes = [...new Set(cards.map(c => c.dataset.make).filter(Boolean))].sort();
+
+  let activeDma  = null;
+  let activeMake = null;
+
+  function buildChips(values, key, getActive, setActive) {
+    const group = document.createElement('div');
+    group.className = 'filter-group';
+
+    const allChip = document.createElement('span');
+    allChip.className = 'chip all active';
+    allChip.textContent = 'All ' + (key === 'dma' ? 'DMAs' : 'Makes');
+    allChip.addEventListener('click', () => { setActive(null); applyFilters(); });
+    group.appendChild(allChip);
+
+    values.forEach(v => {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.textContent = v;
+      chip.dataset.value = v;
+      chip.addEventListener('click', () => { setActive(v); applyFilters(); });
+      group.appendChild(chip);
+    });
+    return group;
+  }
+
+  function updateChips(group, active) {
+    group.querySelectorAll('.chip').forEach(chip => {
+      const isAll = chip.classList.contains('all');
+      chip.classList.toggle('active', isAll ? active === null : chip.dataset.value === active);
+    });
+  }
+
+  function applyFilters() {
+    let visible = 0;
+    cards.forEach(card => {
+      const matchDma  = !activeDma  || card.dataset.dma  === activeDma;
+      const matchMake = !activeMake || card.dataset.make === activeMake;
+      const show = matchDma && matchMake;
+      card.classList.toggle('hidden', !show);
+      if (show) visible++;
+    });
+    noResults.style.display = visible === 0 ? 'block' : 'none';
+    updateChips(dmaGroup,  activeDma);
+    updateChips(makeGroup, activeMake);
+  }
+
+  const dmaGroup  = buildChips(dmas,  'dma',  () => activeDma,  v => activeDma  = v);
+  const makeGroup = buildChips(makes, 'make', () => activeMake, v => activeMake = v);
+
+  if (dmas.length > 1)  { filtersEl.appendChild(dmaGroup);  filtersEl.appendChild(Object.assign(document.createElement('div'), {className:'filter-sep'})); }
+  if (makes.length > 0) filtersEl.appendChild(makeGroup);
+
+  // Hide filters section if only one report total
+  if (cards.length <= 1) filtersEl.style.display = 'none';
+})();
+</script>
 </body>
 </html>
