@@ -37,8 +37,11 @@ TABLEAU_PAT_SECRET = os.environ.get("TABLEAU_PAT_SECRET", "")
 # "Searches by Zip Code" view (dashboard with 2 sheets)
 VIEW_ID = "39464986-86f3-49a2-af82-37f1486743ff"
 
-TEMPLATE_PATH = Path.home() / "Documents" / "templates" / "market_intelligence_template.html"
-REPORTS_BASE  = Path.home() / "Documents" / "Reports"
+_REPO_ROOT    = Path(__file__).parent
+TEMPLATE_PATH = _REPO_ROOT / "market_intelligence_template.html"
+if not TEMPLATE_PATH.exists():
+    TEMPLATE_PATH = Path.home() / "Documents" / "templates" / "market_intelligence_template.html"
+REPORTS_BASE  = _REPO_ROOT if (_REPO_ROOT / "Mobile_Pensacola").exists() else Path.home() / "Documents" / "Reports"
 TABLEAU_DIR   = Path.home() / "Documents" / "Tableau"
 
 # ── Prompts ───────────────────────────────────────────────────────────────────
