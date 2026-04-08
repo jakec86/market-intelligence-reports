@@ -86,6 +86,24 @@
   #radius-clear{color:var(--gray);border-color:#ddd;}
   #radius-clear:hover{background:#f5f0f8;}
   #radius-status{font-size:10px;color:#999;margin-top:6px;min-height:13px;line-height:1.3;}
+
+  /* ── View Toggle ── */
+  #view-toggle{position:absolute;top:74px;right:16px;z-index:1000;}
+  .toggle-row{display:flex;gap:4px;margin-bottom:6px;}
+  .view-btn{
+    flex:1;padding:5px 10px;background:#f0ecf5;color:var(--violet);
+    border:1px solid var(--lavender);border-radius:6px;font-size:10px;
+    font-family:'Inter',sans-serif;cursor:pointer;text-align:center;
+  }
+  .view-btn:hover{background:var(--lavender);}
+  .view-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+
+  /* ── Hitlist marker ── */
+  .hitlist-pin{
+    background:#E8A817;border:2px solid #B8860B;border-radius:50%;
+    box-shadow:0 1px 5px rgba(184,134,11,.5);
+  }
+  .dealer-star{font-size:20px;text-shadow:0 1px 5px rgba(55,11,85,.5);pointer-events:none;}
 </style>
 </head>
 <body>
@@ -124,12 +142,26 @@
   </div>
 </div>
 
+<div id="view-toggle" class="panel">
+  <h3>Map View</h3>
+  <div class="toggle-row">
+    <button id="btn-city" class="view-btn active" onclick="setView('city')">Cities</button>
+    <button id="btn-zip" class="view-btn" onclick="setView('zip')">ZIP Codes</button>
+  </div>
+</div>
+
 <div id="legend" class="panel">
   <h3>Search Volume</h3>
   <div class="legend-item"><div class="legend-circle" style="width:44px;height:44px;"></div><span>50,000+</span></div>
   <div class="legend-item"><div class="legend-circle" style="width:30px;height:30px;"></div><span>10,000 – 50,000</span></div>
   <div class="legend-item"><div class="legend-circle" style="width:18px;height:18px;"></div><span>1,000 – 10,000</span></div>
   <div class="legend-item"><div class="legend-circle" style="width:10px;height:10px;"></div><span>&lt; 1,000</span></div>
+  <div class="legend-item" id="hitlist-legend" style="display:none;margin-top:8px;padding-top:6px;border-top:1px solid #f0ecf5;">
+    <div class="hitlist-pin" style="width:14px;height:14px;"></div><span>Hitlist ZIP</span>
+  </div>
+  <div class="legend-item" id="dealer-legend" style="display:none;">
+    <span class="dealer-star" style="font-size:14px;">★</span><span>Dealer Location</span>
+  </div>
 </div>
 
 <div id="stats" class="panel">
@@ -932,6 +964,1498 @@ const cities = [
   }
 ];
 const mapConfig = {center: [30.5381, -87.4363], zoom: 8};
+const zipData = [
+  {
+    "zip": "32503",
+    "total": 6853,
+    "lat": 30.4564,
+    "lng": -87.2104,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "36526",
+    "total": 6368,
+    "lat": 30.6197,
+    "lng": -87.8895,
+    "city": "Daphne",
+    "state": "AL"
+  },
+  {
+    "zip": "36695",
+    "total": 5490,
+    "lat": 30.6474,
+    "lng": -88.2292,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "32571",
+    "total": 5459,
+    "lat": 30.6698,
+    "lng": -87.1794,
+    "city": "Milton",
+    "state": "FL"
+  },
+  {
+    "zip": "32566",
+    "total": 4291,
+    "lat": 30.4212,
+    "lng": -86.8926,
+    "city": "Navarre",
+    "state": "FL"
+  },
+  {
+    "zip": "36633",
+    "total": 4019,
+    "lat": 30.6589,
+    "lng": -88.178,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "32514",
+    "total": 3987,
+    "lat": 30.5241,
+    "lng": -87.2167,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "36532",
+    "total": 3975,
+    "lat": 30.5012,
+    "lng": -87.8835,
+    "city": "Fairhope",
+    "state": "AL"
+  },
+  {
+    "zip": "32526",
+    "total": 3925,
+    "lat": 30.4756,
+    "lng": -87.3179,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "32563",
+    "total": 3581,
+    "lat": 30.3962,
+    "lng": -87.0274,
+    "city": "Gulf Breeze",
+    "state": "FL"
+  },
+  {
+    "zip": "32505",
+    "total": 3448,
+    "lat": 30.4481,
+    "lng": -87.2589,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "32536",
+    "total": 3200,
+    "lat": 30.7644,
+    "lng": -86.5917,
+    "city": "Crestview",
+    "state": "FL"
+  },
+  {
+    "zip": "32533",
+    "total": 3004,
+    "lat": 30.6143,
+    "lng": -87.3251,
+    "city": "Cantonment",
+    "state": "FL"
+  },
+  {
+    "zip": "32570",
+    "total": 2884,
+    "lat": 30.6604,
+    "lng": -87.0473,
+    "city": "Milton",
+    "state": "FL"
+  },
+  {
+    "zip": "36608",
+    "total": 2865,
+    "lat": 30.6817,
+    "lng": -88.2945,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36527",
+    "total": 2856,
+    "lat": 30.6959,
+    "lng": -87.8867,
+    "city": "Spanish Fort",
+    "state": "AL"
+  },
+  {
+    "zip": "32506",
+    "total": 2754,
+    "lat": 30.4129,
+    "lng": -87.3092,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "32504",
+    "total": 2639,
+    "lat": 30.4873,
+    "lng": -87.1872,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "36606",
+    "total": 2625,
+    "lat": 30.6729,
+    "lng": -88.1009,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "32547",
+    "total": 2577,
+    "lat": 30.4487,
+    "lng": -86.6255,
+    "city": "Fort Walton Beach",
+    "state": "FL"
+  },
+  {
+    "zip": "36604",
+    "total": 2156,
+    "lat": 30.682,
+    "lng": -88.0678,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36536",
+    "total": 2139,
+    "lat": 30.4222,
+    "lng": -87.7064,
+    "city": "Foley",
+    "state": "AL"
+  },
+  {
+    "zip": "39452",
+    "total": 2040,
+    "lat": 30.8668,
+    "lng": -88.649,
+    "city": "Lucedale",
+    "state": "MS"
+  },
+  {
+    "zip": "36535",
+    "total": 1842,
+    "lat": 30.4007,
+    "lng": -87.6857,
+    "city": "Foley",
+    "state": "AL"
+  },
+  {
+    "zip": "32572",
+    "total": 1807,
+    "lat": 30.6592,
+    "lng": -87.0497,
+    "city": "Milton",
+    "state": "FL"
+  },
+  {
+    "zip": "36542",
+    "total": 1799,
+    "lat": 30.2717,
+    "lng": -87.7589,
+    "city": "Gulf Shores",
+    "state": "AL"
+  },
+  {
+    "zip": "36609",
+    "total": 1770,
+    "lat": 30.6605,
+    "lng": -88.1618,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "32583",
+    "total": 1641,
+    "lat": 30.5761,
+    "lng": -87.0663,
+    "city": "Milton",
+    "state": "FL"
+  },
+  {
+    "zip": "32541",
+    "total": 1636,
+    "lat": 30.3949,
+    "lng": -86.4692,
+    "city": "Destin",
+    "state": "FL"
+  },
+  {
+    "zip": "36571",
+    "total": 1573,
+    "lat": 30.8332,
+    "lng": -88.0934,
+    "city": "Saraland",
+    "state": "AL"
+  },
+  {
+    "zip": "32534",
+    "total": 1546,
+    "lat": 30.5301,
+    "lng": -87.2793,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "32578",
+    "total": 1536,
+    "lat": 30.5169,
+    "lng": -86.4822,
+    "city": "Niceville",
+    "state": "FL"
+  },
+  {
+    "zip": "32507",
+    "total": 1508,
+    "lat": 30.3737,
+    "lng": -87.3126,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "36693",
+    "total": 1434,
+    "lat": 30.6311,
+    "lng": -88.1588,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "32548",
+    "total": 1332,
+    "lat": 30.4206,
+    "lng": -86.6286,
+    "city": "Fort Walton Beach",
+    "state": "FL"
+  },
+  {
+    "zip": "32549",
+    "total": 1194,
+    "lat": 30.4208,
+    "lng": -86.6194,
+    "city": "Fort Walton Beach",
+    "state": "FL"
+  },
+  {
+    "zip": "32523",
+    "total": 1180,
+    "lat": 30.4213,
+    "lng": -87.2169,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "32539",
+    "total": 1120,
+    "lat": 30.7773,
+    "lng": -86.4832,
+    "city": "Crestview",
+    "state": "FL"
+  },
+  {
+    "zip": "36575",
+    "total": 1073,
+    "lat": 30.7544,
+    "lng": -88.2667,
+    "city": "Semmes",
+    "state": "AL"
+  },
+  {
+    "zip": "32501",
+    "total": 1043,
+    "lat": 30.4223,
+    "lng": -87.2248,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "36618",
+    "total": 966,
+    "lat": 30.7322,
+    "lng": -88.1758,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36582",
+    "total": 951,
+    "lat": 30.5444,
+    "lng": -88.1807,
+    "city": "Theodore",
+    "state": "AL"
+  },
+  {
+    "zip": "36507",
+    "total": 916,
+    "lat": 30.8635,
+    "lng": -87.7644,
+    "city": "Bay Minette",
+    "state": "AL"
+  },
+  {
+    "zip": "32588",
+    "total": 878,
+    "lat": 30.6612,
+    "lng": -86.5945,
+    "city": "Niceville",
+    "state": "FL"
+  },
+  {
+    "zip": "32508",
+    "total": 856,
+    "lat": 30.3511,
+    "lng": -87.2749,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "36576",
+    "total": 834,
+    "lat": 30.5222,
+    "lng": -87.7457,
+    "city": "Silverhill",
+    "state": "AL"
+  },
+  {
+    "zip": "32516",
+    "total": 792,
+    "lat": 30.4213,
+    "lng": -87.2169,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "36561",
+    "total": 786,
+    "lat": 30.281,
+    "lng": -87.5815,
+    "city": "Orange Beach",
+    "state": "AL"
+  },
+  {
+    "zip": "36551",
+    "total": 781,
+    "lat": 30.618,
+    "lng": -87.7562,
+    "city": "Loxley",
+    "state": "AL"
+  },
+  {
+    "zip": "36426",
+    "total": 765,
+    "lat": 31.1294,
+    "lng": -87.0961,
+    "city": "Brewton",
+    "state": "AL"
+  },
+  {
+    "zip": "32559",
+    "total": 763,
+    "lat": 30.3563,
+    "lng": -87.2773,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "32569",
+    "total": 761,
+    "lat": 30.4085,
+    "lng": -86.7352,
+    "city": "Mary Esther",
+    "state": "FL"
+  },
+  {
+    "zip": "36619",
+    "total": 735,
+    "lat": 30.5928,
+    "lng": -88.1946,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "32561",
+    "total": 729,
+    "lat": 30.3571,
+    "lng": -87.1639,
+    "city": "Gulf Breeze",
+    "state": "FL"
+  },
+  {
+    "zip": "32502",
+    "total": 723,
+    "lat": 30.4095,
+    "lng": -87.2229,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "32542",
+    "total": 702,
+    "lat": 30.5393,
+    "lng": -86.6087,
+    "city": "Eglin Afb",
+    "state": "FL"
+  },
+  {
+    "zip": "36544",
+    "total": 682,
+    "lat": 30.4802,
+    "lng": -88.2396,
+    "city": "Irvington",
+    "state": "AL"
+  },
+  {
+    "zip": "32579",
+    "total": 612,
+    "lat": 30.4456,
+    "lng": -86.5717,
+    "city": "Shalimar",
+    "state": "FL"
+  },
+  {
+    "zip": "36615",
+    "total": 567,
+    "lat": 30.6411,
+    "lng": -88.0622,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36567",
+    "total": 544,
+    "lat": 30.5616,
+    "lng": -87.6373,
+    "city": "Robertsdale",
+    "state": "AL"
+  },
+  {
+    "zip": "36559",
+    "total": 532,
+    "lat": 30.5623,
+    "lng": -87.9005,
+    "city": "Montrose",
+    "state": "AL"
+  },
+  {
+    "zip": "32564",
+    "total": 528,
+    "lat": 30.7416,
+    "lng": -86.7198,
+    "city": "Holt",
+    "state": "FL"
+  },
+  {
+    "zip": "32580",
+    "total": 515,
+    "lat": 30.5092,
+    "lng": -86.5009,
+    "city": "Valparaiso",
+    "state": "FL"
+  },
+  {
+    "zip": "36502",
+    "total": 509,
+    "lat": 31.0572,
+    "lng": -87.4873,
+    "city": "Atmore",
+    "state": "AL"
+  },
+  {
+    "zip": "36530",
+    "total": 471,
+    "lat": 30.3942,
+    "lng": -87.589,
+    "city": "Elberta",
+    "state": "AL"
+  },
+  {
+    "zip": "32531",
+    "total": 468,
+    "lat": 30.8316,
+    "lng": -86.677,
+    "city": "Baker",
+    "state": "FL"
+  },
+  {
+    "zip": "36617",
+    "total": 461,
+    "lat": 30.7145,
+    "lng": -88.0918,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36541",
+    "total": 427,
+    "lat": 30.4983,
+    "lng": -88.3282,
+    "city": "Grand Bay",
+    "state": "AL"
+  },
+  {
+    "zip": "36545",
+    "total": 421,
+    "lat": 31.5131,
+    "lng": -87.8672,
+    "city": "Jackson",
+    "state": "AL"
+  },
+  {
+    "zip": "32565",
+    "total": 412,
+    "lat": 30.8985,
+    "lng": -87.1332,
+    "city": "Jay",
+    "state": "FL"
+  },
+  {
+    "zip": "32524",
+    "total": 387,
+    "lat": 30.4213,
+    "lng": -87.2169,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "36691",
+    "total": 385,
+    "lat": 30.6944,
+    "lng": -88.0431,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "32511",
+    "total": 356,
+    "lat": 30.4061,
+    "lng": -87.2917,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "36590",
+    "total": 347,
+    "lat": 30.488,
+    "lng": -88.2533,
+    "city": "Theodore",
+    "state": "AL"
+  },
+  {
+    "zip": "36613",
+    "total": 331,
+    "lat": 30.7951,
+    "lng": -88.1823,
+    "city": "Eight Mile",
+    "state": "AL"
+  },
+  {
+    "zip": "32522",
+    "total": 326,
+    "lat": 30.4213,
+    "lng": -87.2169,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "32544",
+    "total": 321,
+    "lat": 30.4229,
+    "lng": -86.6985,
+    "city": "Hurlburt Field",
+    "state": "FL"
+  },
+  {
+    "zip": "36525",
+    "total": 319,
+    "lat": 30.9013,
+    "lng": -88.0174,
+    "city": "Creola",
+    "state": "AL"
+  },
+  {
+    "zip": "36549",
+    "total": 316,
+    "lat": 30.3972,
+    "lng": -87.4745,
+    "city": "Lillian",
+    "state": "AL"
+  },
+  {
+    "zip": "36460",
+    "total": 295,
+    "lat": 31.5153,
+    "lng": -87.341,
+    "city": "Monroeville",
+    "state": "AL"
+  },
+  {
+    "zip": "36587",
+    "total": 288,
+    "lat": 30.8137,
+    "lng": -88.3332,
+    "city": "Wilmer",
+    "state": "AL"
+  },
+  {
+    "zip": "36605",
+    "total": 287,
+    "lat": 30.6341,
+    "lng": -88.0846,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36401",
+    "total": 286,
+    "lat": 31.458,
+    "lng": -86.9258,
+    "city": "Evergreen",
+    "state": "AL"
+  },
+  {
+    "zip": "32530",
+    "total": 277,
+    "lat": 30.5986,
+    "lng": -87.0315,
+    "city": "Bagdad",
+    "state": "FL"
+  },
+  {
+    "zip": "36607",
+    "total": 276,
+    "lat": 30.6975,
+    "lng": -88.1029,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36461",
+    "total": 268,
+    "lat": 31.5221,
+    "lng": -87.3411,
+    "city": "Monroeville",
+    "state": "AL"
+  },
+  {
+    "zip": "36572",
+    "total": 261,
+    "lat": 30.8516,
+    "lng": -88.0533,
+    "city": "Satsuma",
+    "state": "AL"
+  },
+  {
+    "zip": "39367",
+    "total": 230,
+    "lat": 31.6754,
+    "lng": -88.6782,
+    "city": "Waynesboro",
+    "state": "MS"
+  },
+  {
+    "zip": "36602",
+    "total": 226,
+    "lat": 30.6888,
+    "lng": -88.0453,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36445",
+    "total": 215,
+    "lat": 31.4235,
+    "lng": -87.3817,
+    "city": "Frisco City",
+    "state": "AL"
+  },
+  {
+    "zip": "36451",
+    "total": 212,
+    "lat": 31.7088,
+    "lng": -87.7772,
+    "city": "Grove Hill",
+    "state": "AL"
+  },
+  {
+    "zip": "36784",
+    "total": 204,
+    "lat": 31.9067,
+    "lng": -87.7598,
+    "city": "Thomasville",
+    "state": "AL"
+  },
+  {
+    "zip": "36441",
+    "total": 200,
+    "lat": 31.0402,
+    "lng": -87.2664,
+    "city": "Flomaton",
+    "state": "AL"
+  },
+  {
+    "zip": "36558",
+    "total": 197,
+    "lat": 31.6269,
+    "lng": -88.3559,
+    "city": "Millry",
+    "state": "AL"
+  },
+  {
+    "zip": "39476",
+    "total": 196,
+    "lat": 31.3434,
+    "lng": -88.9101,
+    "city": "Richton",
+    "state": "MS"
+  },
+  {
+    "zip": "36610",
+    "total": 193,
+    "lat": 30.7309,
+    "lng": -88.0789,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36522",
+    "total": 186,
+    "lat": 31.0425,
+    "lng": -88.2549,
+    "city": "Citronelle",
+    "state": "AL"
+  },
+  {
+    "zip": "32577",
+    "total": 170,
+    "lat": 30.6902,
+    "lng": -87.3852,
+    "city": "Molino",
+    "state": "FL"
+  },
+  {
+    "zip": "36521",
+    "total": 169,
+    "lat": 30.9912,
+    "lng": -88.1311,
+    "city": "Chunchula",
+    "state": "AL"
+  },
+  {
+    "zip": "36550",
+    "total": 167,
+    "lat": 31.2246,
+    "lng": -87.7548,
+    "city": "Little River",
+    "state": "AL"
+  },
+  {
+    "zip": "36611",
+    "total": 159,
+    "lat": 30.7705,
+    "lng": -88.0781,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "32512",
+    "total": 152,
+    "lat": 30.3943,
+    "lng": -87.2991,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "36533",
+    "total": 150,
+    "lat": 30.4841,
+    "lng": -87.8606,
+    "city": "Fairhope",
+    "state": "AL"
+  },
+  {
+    "zip": "32540",
+    "total": 148,
+    "lat": 30.3935,
+    "lng": -86.4958,
+    "city": "Destin",
+    "state": "FL"
+  },
+  {
+    "zip": "36503",
+    "total": 145,
+    "lat": 31.0238,
+    "lng": -87.4939,
+    "city": "Atmore",
+    "state": "AL"
+  },
+  {
+    "zip": "36603",
+    "total": 139,
+    "lat": 30.6921,
+    "lng": -88.0562,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "32521",
+    "total": 134,
+    "lat": 30.4213,
+    "lng": -87.2169,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "32562",
+    "total": 132,
+    "lat": 30.3571,
+    "lng": -87.1639,
+    "city": "Gulf Breeze",
+    "state": "FL"
+  },
+  {
+    "zip": "36547",
+    "total": 132,
+    "lat": 30.246,
+    "lng": -87.7008,
+    "city": "Gulf Shores",
+    "state": "AL"
+  },
+  {
+    "zip": "36529",
+    "total": 126,
+    "lat": 31.2168,
+    "lng": -88.3172,
+    "city": "Deer Park",
+    "state": "AL"
+  },
+  {
+    "zip": "32535",
+    "total": 124,
+    "lat": 30.9687,
+    "lng": -87.3216,
+    "city": "Century",
+    "state": "FL"
+  },
+  {
+    "zip": "36580",
+    "total": 122,
+    "lat": 30.4752,
+    "lng": -87.6992,
+    "city": "Summerdale",
+    "state": "AL"
+  },
+  {
+    "zip": "36601",
+    "total": 120,
+    "lat": 30.6944,
+    "lng": -88.0431,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36427",
+    "total": 119,
+    "lat": 31.1052,
+    "lng": -87.0722,
+    "city": "Brewton",
+    "state": "AL"
+  },
+  {
+    "zip": "39451",
+    "total": 117,
+    "lat": 31.1238,
+    "lng": -88.5595,
+    "city": "Leakesville",
+    "state": "MS"
+  },
+  {
+    "zip": "36616",
+    "total": 113,
+    "lat": 30.671,
+    "lng": -88.1267,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "32568",
+    "total": 103,
+    "lat": 30.8686,
+    "lng": -87.4539,
+    "city": "Mc David",
+    "state": "FL"
+  },
+  {
+    "zip": "36612",
+    "total": 103,
+    "lat": 30.7518,
+    "lng": -88.1131,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36688",
+    "total": 102,
+    "lat": 30.6962,
+    "lng": -88.1821,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36518",
+    "total": 101,
+    "lat": 31.4876,
+    "lng": -88.2699,
+    "city": "Chatom",
+    "state": "AL"
+  },
+  {
+    "zip": "36640",
+    "total": 99,
+    "lat": 30.6589,
+    "lng": -88.178,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "39456",
+    "total": 99,
+    "lat": 31.0867,
+    "lng": -88.7977,
+    "city": "Mc Lain",
+    "state": "MS"
+  },
+  {
+    "zip": "32567",
+    "total": 95,
+    "lat": 30.9524,
+    "lng": -86.4003,
+    "city": "Laurel Hill",
+    "state": "FL"
+  },
+  {
+    "zip": "36528",
+    "total": 87,
+    "lat": 30.2521,
+    "lng": -88.1096,
+    "city": "Dauphin Island",
+    "state": "AL"
+  },
+  {
+    "zip": "36505",
+    "total": 84,
+    "lat": 30.9394,
+    "lng": -88.0159,
+    "city": "Axis",
+    "state": "AL"
+  },
+  {
+    "zip": "36578",
+    "total": 83,
+    "lat": 30.7476,
+    "lng": -87.7787,
+    "city": "Stapleton",
+    "state": "AL"
+  },
+  {
+    "zip": "36671",
+    "total": 82,
+    "lat": 30.6589,
+    "lng": -88.178,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36523",
+    "total": 81,
+    "lat": 30.3903,
+    "lng": -88.2076,
+    "city": "Coden",
+    "state": "AL"
+  },
+  {
+    "zip": "36569",
+    "total": 76,
+    "lat": 31.533,
+    "lng": -88.0521,
+    "city": "Saint Stephens",
+    "state": "AL"
+  },
+  {
+    "zip": "36574",
+    "total": 76,
+    "lat": 30.5048,
+    "lng": -87.4659,
+    "city": "Seminole",
+    "state": "AL"
+  },
+  {
+    "zip": "36421",
+    "total": 69,
+    "lat": 31.3247,
+    "lng": -86.5067,
+    "city": "Andalusia",
+    "state": "AL"
+  },
+  {
+    "zip": "36509",
+    "total": 59,
+    "lat": 30.408,
+    "lng": -88.2507,
+    "city": "Bayou La Batre",
+    "state": "AL"
+  },
+  {
+    "zip": "36560",
+    "total": 49,
+    "lat": 31.0974,
+    "lng": -88.035,
+    "city": "Mount Vernon",
+    "state": "AL"
+  },
+  {
+    "zip": "39362",
+    "total": 43,
+    "lat": 31.3916,
+    "lng": -88.5171,
+    "city": "State Line",
+    "state": "MS"
+  },
+  {
+    "zip": "36432",
+    "total": 39,
+    "lat": 31.2991,
+    "lng": -87.0225,
+    "city": "Castleberry",
+    "state": "AL"
+  },
+  {
+    "zip": "36564",
+    "total": 36,
+    "lat": 30.4741,
+    "lng": -87.9192,
+    "city": "Point Clear",
+    "state": "AL"
+  },
+  {
+    "zip": "32560",
+    "total": 34,
+    "lat": 30.5818,
+    "lng": -87.2929,
+    "city": "Gonzalez",
+    "state": "FL"
+  },
+  {
+    "zip": "36425",
+    "total": 34,
+    "lat": 31.7273,
+    "lng": -87.1719,
+    "city": "Beatrice",
+    "state": "AL"
+  },
+  {
+    "zip": "36475",
+    "total": 33,
+    "lat": 31.4256,
+    "lng": -87.172,
+    "city": "Repton",
+    "state": "AL"
+  },
+  {
+    "zip": "36577",
+    "total": 33,
+    "lat": 30.6749,
+    "lng": -87.9153,
+    "city": "Spanish Fort",
+    "state": "AL"
+  },
+  {
+    "zip": "32513",
+    "total": 30,
+    "lat": 30.5571,
+    "lng": -87.2596,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "36524",
+    "total": 30,
+    "lat": 31.7843,
+    "lng": -88.0715,
+    "city": "Coffeeville",
+    "state": "AL"
+  },
+  {
+    "zip": "36511",
+    "total": 29,
+    "lat": 30.3128,
+    "lng": -87.7431,
+    "city": "Bon Secour",
+    "state": "AL"
+  },
+  {
+    "zip": "36585",
+    "total": 29,
+    "lat": 31.4102,
+    "lng": -88.0705,
+    "city": "Wagarville",
+    "state": "AL"
+  },
+  {
+    "zip": "36553",
+    "total": 28,
+    "lat": 31.2361,
+    "lng": -88.0511,
+    "city": "Mc Intosh",
+    "state": "AL"
+  },
+  {
+    "zip": "32520",
+    "total": 26,
+    "lat": 30.4124,
+    "lng": -87.2035,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "39423",
+    "total": 25,
+    "lat": 31.1693,
+    "lng": -88.92,
+    "city": "Beaumont",
+    "state": "MS"
+  },
+  {
+    "zip": "36420",
+    "total": 24,
+    "lat": 31.2971,
+    "lng": -86.4905,
+    "city": "Andalusia",
+    "state": "AL"
+  },
+  {
+    "zip": "36579",
+    "total": 24,
+    "lat": 31.0129,
+    "lng": -87.8633,
+    "city": "Stockton",
+    "state": "AL"
+  },
+  {
+    "zip": "36584",
+    "total": 24,
+    "lat": 31.2584,
+    "lng": -88.3865,
+    "city": "Vinegar Bend",
+    "state": "AL"
+  },
+  {
+    "zip": "36436",
+    "total": 22,
+    "lat": 31.7635,
+    "lng": -87.7106,
+    "city": "Dickinson",
+    "state": "AL"
+  },
+  {
+    "zip": "36562",
+    "total": 19,
+    "lat": 31.0403,
+    "lng": -87.6667,
+    "city": "Perdido",
+    "state": "AL"
+  },
+  {
+    "zip": "32509",
+    "total": 15,
+    "lat": 30.4643,
+    "lng": -87.3403,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "36482",
+    "total": 14,
+    "lat": 31.6395,
+    "lng": -87.6565,
+    "city": "Whatley",
+    "state": "AL"
+  },
+  {
+    "zip": "36480",
+    "total": 13,
+    "lat": 31.3135,
+    "lng": -87.5705,
+    "city": "Uriah",
+    "state": "AL"
+  },
+  {
+    "zip": "36555",
+    "total": 13,
+    "lat": 30.3996,
+    "lng": -87.7761,
+    "city": "Magnolia Springs",
+    "state": "AL"
+  },
+  {
+    "zip": "36641",
+    "total": 13,
+    "lat": 30.6589,
+    "lng": -88.178,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "32591",
+    "total": 11,
+    "lat": 30.4213,
+    "lng": -87.2169,
+    "city": "Pensacola",
+    "state": "FL"
+  },
+  {
+    "zip": "36539",
+    "total": 11,
+    "lat": 31.3488,
+    "lng": -88.3766,
+    "city": "Fruitdale",
+    "state": "AL"
+  },
+  {
+    "zip": "36689",
+    "total": 11,
+    "lat": 30.6589,
+    "lng": -88.178,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36458",
+    "total": 10,
+    "lat": 31.5147,
+    "lng": -87.4084,
+    "city": "Mexia",
+    "state": "AL"
+  },
+  {
+    "zip": "36513",
+    "total": 10,
+    "lat": 31.1552,
+    "lng": -88.01,
+    "city": "Calvert",
+    "state": "AL"
+  },
+  {
+    "zip": "32537",
+    "total": 9,
+    "lat": 30.742,
+    "lng": -86.6552,
+    "city": "Milligan",
+    "state": "FL"
+  },
+  {
+    "zip": "36471",
+    "total": 9,
+    "lat": 31.59,
+    "lng": -87.26,
+    "city": "Peterman",
+    "state": "AL"
+  },
+  {
+    "zip": "36481",
+    "total": 9,
+    "lat": 31.8085,
+    "lng": -87.3164,
+    "city": "Vredenburgh",
+    "state": "AL"
+  },
+  {
+    "zip": "36556",
+    "total": 9,
+    "lat": 31.1913,
+    "lng": -88.0075,
+    "city": "Malcolm",
+    "state": "AL"
+  },
+  {
+    "zip": "36454",
+    "total": 8,
+    "lat": 31.3366,
+    "lng": -87.1855,
+    "city": "Lenox",
+    "state": "AL"
+  },
+  {
+    "zip": "36540",
+    "total": 8,
+    "lat": 31.4258,
+    "lng": -87.6822,
+    "city": "Gainestown",
+    "state": "AL"
+  },
+  {
+    "zip": "36663",
+    "total": 8,
+    "lat": 30.6944,
+    "lng": -88.0431,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36446",
+    "total": 6,
+    "lat": 31.7925,
+    "lng": -87.72,
+    "city": "Fulton",
+    "state": "AL"
+  },
+  {
+    "zip": "36504",
+    "total": 6,
+    "lat": 31.0158,
+    "lng": -87.4972,
+    "city": "Atmore",
+    "state": "AL"
+  },
+  {
+    "zip": "36548",
+    "total": 6,
+    "lat": 31.491,
+    "lng": -87.9687,
+    "city": "Leroy",
+    "state": "AL"
+  },
+  {
+    "zip": "36670",
+    "total": 6,
+    "lat": 30.6589,
+    "lng": -88.178,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36429",
+    "total": 5,
+    "lat": 31.2627,
+    "lng": -86.7711,
+    "city": "Brooklyn",
+    "state": "AL"
+  },
+  {
+    "zip": "36538",
+    "total": 5,
+    "lat": 31.6468,
+    "lng": -88.1332,
+    "city": "Frankville",
+    "state": "AL"
+  },
+  {
+    "zip": "36568",
+    "total": 5,
+    "lat": 30.5035,
+    "lng": -88.2542,
+    "city": "Saint Elmo",
+    "state": "AL"
+  },
+  {
+    "zip": "36660",
+    "total": 5,
+    "lat": 30.6589,
+    "lng": -88.178,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36439",
+    "total": 4,
+    "lat": 31.4279,
+    "lng": -87.3414,
+    "city": "Excel",
+    "state": "AL"
+  },
+  {
+    "zip": "36444",
+    "total": 4,
+    "lat": 31.7238,
+    "lng": -87.4412,
+    "city": "Franklin",
+    "state": "AL"
+  },
+  {
+    "zip": "36685",
+    "total": 4,
+    "lat": 30.6589,
+    "lng": -88.178,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36543",
+    "total": 3,
+    "lat": 31.2202,
+    "lng": -87.4619,
+    "city": "Huxford",
+    "state": "AL"
+  },
+  {
+    "zip": "36583",
+    "total": 3,
+    "lat": 31.4067,
+    "lng": -88.1758,
+    "city": "Tibbie",
+    "state": "AL"
+  },
+  {
+    "zip": "36652",
+    "total": 3,
+    "lat": 30.6944,
+    "lng": -88.0431,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "39461",
+    "total": 3,
+    "lat": 31.1793,
+    "lng": -88.7198,
+    "city": "Neely",
+    "state": "MS"
+  },
+  {
+    "zip": "36675",
+    "total": 1,
+    "lat": 30.6944,
+    "lng": -88.0431,
+    "city": "Mobile",
+    "state": "AL"
+  },
+  {
+    "zip": "36727",
+    "total": 1,
+    "lat": 31.9213,
+    "lng": -88.008,
+    "city": "Campbell",
+    "state": "AL"
+  }
+];
+const hitlistZips = [];
+const dealerPin = {};
 
 const maxTotal = Math.max(...cities.map(c=>c.total));
 const grandTotal = cities.reduce((s,c)=>s+c.total,0);
@@ -974,34 +2498,109 @@ const map = L.map('map',{center:mapConfig.center,zoom:mapConfig.zoom,zoomControl
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; <a href="https://carto.com/">CARTO</a>'}).addTo(map);
 L.control.zoom({position:'topright'}).addTo(map);
 
-cities.forEach(c=>{
-  const r  = getRadius(c.total);
-  const st = getTierStyle(c.total);
+// City markers are now rendered via renderCityMarkers() into cityLayerGroup
 
-  const circle = L.circleMarker([c.lat,c.lng],{
-    radius:r, fillColor:st.fill, fillOpacity:1,
-    color:st.stroke, weight:1.5,
-  }).addTo(map);
+// ── City/ZIP view toggle ────────────────────────────────────────────────────
+let cityLayerGroup = L.layerGroup();
+let zipLayerGroup = L.layerGroup();
+let hitlistLayerGroup = L.layerGroup();
+let dealerLayerGroup = L.layerGroup();
+let currentView = 'city';
 
-  circle.bindTooltip(
-    `<div class="tt-city">${c.name}</div>
-     <div class="tt-count">${c.total.toLocaleString()} searches</div>
-     <div class="tt-zips">${fmtZips(c.zips)}</div>`,
-    {className:'cars-tooltip',sticky:true,offset:[10,0]}
-  );
-
-  if(c.total>=2000){
-    const lbl=L.divIcon({
-      html:`<div style="
-        color:#370B55;font-family:Inter,sans-serif;font-size:10px;font-weight:600;
-        white-space:nowrap;text-shadow:0 1px 3px rgba(255,255,255,.95);
-        pointer-events:none;margin-top:${r+3}px;text-align:center;transform:translateX(-50%);
-      ">${c.name}</div>`,
-      className:'',iconAnchor:[0,0]
+// Move city markers into a layer group (re-render)
+function renderCityMarkers() {
+  cityLayerGroup.clearLayers();
+  cities.forEach(c => {
+    const r  = getRadius(c.total);
+    const st = getTierStyle(c.total);
+    const circle = L.circleMarker([c.lat,c.lng],{
+      radius:r, fillColor:st.fill, fillOpacity:1,
+      color:st.stroke, weight:1.5,
     });
-    L.marker([c.lat,c.lng],{icon:lbl,interactive:false}).addTo(map);
+    circle.bindTooltip(
+      `<div class="tt-city">${c.name}</div>
+       <div class="tt-count">${c.total.toLocaleString()} searches</div>
+       <div class="tt-zips">${fmtZips(c.zips)}</div>`,
+      {className:'cars-tooltip',sticky:true,offset:[10,0]}
+    );
+    cityLayerGroup.addLayer(circle);
+    if(c.total>=2000){
+      const lbl=L.divIcon({
+        html:`<div style="color:#370B55;font-family:Inter,sans-serif;font-size:10px;font-weight:600;white-space:nowrap;text-shadow:0 1px 3px rgba(255,255,255,.95);pointer-events:none;margin-top:${r+3}px;text-align:center;transform:translateX(-50%);">${c.name}</div>`,
+        className:'',iconAnchor:[0,0]
+      });
+      cityLayerGroup.addLayer(L.marker([c.lat,c.lng],{icon:lbl,interactive:false}));
+    }
+  });
+}
+
+function renderZipMarkers() {
+  zipLayerGroup.clearLayers();
+  if (typeof zipData === 'undefined' || !zipData.length) return;
+  const maxZip = Math.max(...zipData.map(z=>z.total));
+  zipData.forEach(z => {
+    const r = 3 + (Math.sqrt(z.total)/Math.sqrt(maxZip)) * 28;
+    const st = getTierStyle(z.total);
+    const isHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.includes(z.zip);
+    const opts = isHitlist
+      ? { radius:r, fillColor:'rgba(232,168,23,0.75)', fillOpacity:1, color:'#B8860B', weight:2.5 }
+      : { radius:r, fillColor:st.fill, fillOpacity:1, color:st.stroke, weight:1.5 };
+    const circle = L.circleMarker([z.lat,z.lng], opts);
+    circle.bindTooltip(
+      `<div class="tt-city">${z.zip}${isHitlist ? ' <span style="color:#B8860B;font-weight:700;">★ HITLIST</span>' : ''}</div>
+       <div class="tt-count">${z.total.toLocaleString()} searches</div>
+       <div class="tt-zips">${z.city}, ${z.state}</div>`,
+      {className:'cars-tooltip',sticky:true,offset:[10,0]}
+    );
+    zipLayerGroup.addLayer(circle);
+    if(z.total >= 1500) {
+      const lbl=L.divIcon({
+        html:`<div style="color:${isHitlist?'#B8860B':'#370B55'};font-family:Inter,sans-serif;font-size:9px;font-weight:600;white-space:nowrap;text-shadow:0 1px 3px rgba(255,255,255,.95);pointer-events:none;margin-top:${r+2}px;text-align:center;transform:translateX(-50%);">${z.zip}</div>`,
+        className:'',iconAnchor:[0,0]
+      });
+      zipLayerGroup.addLayer(L.marker([z.lat,z.lng],{icon:lbl,interactive:false}));
+    }
+  });
+}
+
+function renderDealerPin() {
+  dealerLayerGroup.clearLayers();
+  if (typeof dealerPin === 'undefined' || !dealerPin.lat) return;
+  const star = L.divIcon({
+    html:'<div class="dealer-star">★</div>',
+    className:'',iconSize:[20,20],iconAnchor:[10,10]
+  });
+  const marker = L.marker([dealerPin.lat, dealerPin.lng], {icon:star, zIndexOffset:1000, interactive:true});
+  marker.bindTooltip(
+    `<div class="tt-city">${dealerPin.name || 'Dealer'}</div><div class="tt-zips">${dealerPin.address || ''}</div>`,
+    {className:'cars-tooltip',offset:[12,0]}
+  );
+  dealerLayerGroup.addLayer(marker);
+  document.getElementById('dealer-legend').style.display = 'flex';
+}
+
+function setView(view) {
+  currentView = view;
+  document.getElementById('btn-city').classList.toggle('active', view==='city');
+  document.getElementById('btn-zip').classList.toggle('active', view==='zip');
+  if (view === 'city') {
+    map.removeLayer(zipLayerGroup);
+    map.addLayer(cityLayerGroup);
+  } else {
+    map.removeLayer(cityLayerGroup);
+    if (zipLayerGroup.getLayers().length === 0) renderZipMarkers();
+    map.addLayer(zipLayerGroup);
   }
-});
+  // Show hitlist legend in ZIP view if hitlist data exists
+  const hl = document.getElementById('hitlist-legend');
+  if (hl) hl.style.display = (view==='zip' && typeof hitlistZips !== 'undefined' && hitlistZips.length) ? 'flex' : 'none';
+}
+
+// Initialize
+renderCityMarkers();
+cityLayerGroup.addTo(map);
+renderDealerPin();
+dealerLayerGroup.addTo(map);
 
 // Tier legend
 const tl=L.control({position:'bottomright'});

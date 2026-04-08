@@ -37,11 +37,8 @@ TABLEAU_PAT_SECRET = os.environ.get("TABLEAU_PAT_SECRET", "")
 # "Searches by Zip Code" view (dashboard with 2 sheets)
 VIEW_ID = "39464986-86f3-49a2-af82-37f1486743ff"
 
-_REPO_ROOT    = Path(__file__).parent
-TEMPLATE_PATH = _REPO_ROOT / "market_intelligence_template.html"
-if not TEMPLATE_PATH.exists():
-    TEMPLATE_PATH = Path.home() / "Documents" / "templates" / "market_intelligence_template.html"
-REPORTS_BASE  = _REPO_ROOT if (_REPO_ROOT / "Mobile_Pensacola").exists() else Path.home() / "Documents" / "Reports"
+TEMPLATE_PATH = Path.home() / "Documents" / "templates" / "market_intelligence_template.html"
+REPORTS_BASE  = Path.home() / "Documents" / "Reports"
 TABLEAU_DIR   = Path.home() / "Documents" / "Tableau"
 
 # ── Prompts ───────────────────────────────────────────────────────────────────
@@ -134,14 +131,18 @@ def parse_csv(raw):
     return pd.read_csv(StringIO(text))
 
 
-def aggregate_quarter_cols(df):
+def aggregate_quarter_cols(df, quarters=None):
     """
     If the dataframe has quarterly columns (e.g. '2023 Q4', '2024 Q1'),
     sum them into a single 'searches' column and return updated df.
+    If quarters is set, only use the most recent N quarters.
     """
-    quarter_cols = [c for c in df.columns if re.match(r'^\d{4}\s+Q\d$', str(c).strip())]
+    quarter_cols = sorted([c for c in df.columns if re.match(r'^\d{4}\s+Q\d$', str(c).strip())])
     if not quarter_cols:
         return df
+    if quarters and quarters < len(quarter_cols):
+        quarter_cols = quarter_cols[-quarters:]
+        print(f"Using trailing {quarters} quarters: {quarter_cols}")
     for c in quarter_cols:
         df[c] = pd.to_numeric(df[c].astype(str).str.replace(',', ''), errors='coerce')
     df['searches'] = df[quarter_cols].sum(axis=1, min_count=1)
@@ -226,7 +227,8 @@ def build_report_title(dma, makes):
     return f"{dma} Market Intelligence{makes_label}"
 
 
-def inject_into_template(df_cities, dma, makes, template_path, data_date=""):
+def inject_into_template(df_cities, dma, makes, template_path, data_date="",
+                         zip_rows=None, hitlist_zips=None, dealer_pin=None):
     city_data = [
         {
             "name":  row["city"],
@@ -247,12 +249,30 @@ def inject_into_template(df_cities, dma, makes, template_path, data_date=""):
         f"const mapConfig = {{center: {center}, zoom: {zoom}}};"
     )
 
+    # ZIP-level data for toggle view
+    zip_block = "const zipData = [];"
+    if zip_rows:
+        zip_block = f"const zipData = {json.dumps(zip_rows, indent=2)};"
+
+    # Hitlist ZIPs
+    hl_block = "const hitlistZips = [];"
+    if hitlist_zips:
+        hl_block = f"const hitlistZips = {json.dumps(hitlist_zips)};"
+
+    # Dealer pin
+    dp_block = "const dealerPin = {};"
+    if dealer_pin:
+        dp_block = f"const dealerPin = {json.dumps(dealer_pin)};"
+
     html = template_path.read_text(encoding="utf-8")
 
     if "// %%CITY_DATA%%" not in html:
         raise ValueError("Template missing '// %%CITY_DATA%%' placeholder.")
 
     html = html.replace("// %%CITY_DATA%%", js_block)
+    html = html.replace("// %%ZIP_DATA%%", zip_block)
+    html = html.replace("// %%HITLIST_ZIPS%%", hl_block)
+    html = html.replace("// %%DEALER_PIN%%", dp_block)
     html = html.replace("%%PAGE_TITLE%%", page_title)
     html = html.replace("%%REPORT_TITLE%%", report_title)
     html = html.replace("%%DATA_DATE%%", data_date)
@@ -270,7 +290,14 @@ def main():
     parser.add_argument("--makes", help="Comma-separated makes to filter, or 'All'")
     parser.add_argument("--force-tableau", action="store_true",
                         help="Skip manual CSV fallback; always pull fresh data from Tableau API")
+    parser.add_argument("--quarters", type=int, default=None,
+                        help="Use only the most recent N quarters (e.g. --quarters 4 for trailing year)")
+    parser.add_argument("--config", help="YAML config file for batch runs (overrides --dma/--makes)")
     args = parser.parse_args()
+
+    if args.config:
+        run_config(args.config, args)
+        return
 
     dma, makes_str = prompt_inputs(args)
     makes = parse_makes(makes_str)
@@ -312,7 +339,7 @@ def main():
 
     # ── Step 2: Parse & validate ──────────────────────────────────────────────
     df = parse_csv(csv_text)
-    df = aggregate_quarter_cols(df)
+    df = aggregate_quarter_cols(df, quarters=args.quarters)
 
     # Determine data period range from quarterly columns for "Data as of" stamp
     quarter_cols_found = [c for c in df.columns if re.match(r'^\d{4}\s+Q\d$', str(c).strip())]
@@ -369,6 +396,26 @@ def main():
         sys.exit(1)
 
     # ── Step 4: ZIP → city mapping ────────────────────────────────────────────
+    # Capture ZIP-level data before city aggregation
+    nomi = pgeocode.Nominatim("us")
+    zip_rows = []
+    for _, row in df.iterrows():
+        z = str(row[zip_col]).zfill(5)
+        try:
+            searches = float(str(row[search_col]).replace(",", "").replace("%", ""))
+        except (ValueError, TypeError):
+            continue
+        info = nomi.query_postal_code(z)
+        if pd.isna(info.place_name) or pd.isna(info.latitude):
+            continue
+        zip_rows.append({
+            "zip": z, "total": int(searches),
+            "lat": round(float(info.latitude), 5),
+            "lng": round(float(info.longitude), 5),
+            "city": info.place_name, "state": info.state_code or "",
+        })
+    zip_rows.sort(key=lambda x: x["total"], reverse=True)
+
     print("Mapping ZIPs to cities...")
     df_cities = map_zips_to_cities(df, zip_col, search_col)
 
@@ -387,7 +434,10 @@ def main():
 
     print("\nInjecting data into template...")
     try:
-        final_html = inject_into_template(df_cities, dma, makes, TEMPLATE_PATH, data_date)
+        final_html = inject_into_template(
+            df_cities, dma, makes, TEMPLATE_PATH, data_date,
+            zip_rows=zip_rows,
+        )
     except ValueError as e:
         print(f"\n⚠  {e}")
         sys.exit(1)
@@ -395,6 +445,98 @@ def main():
     output_path.write_text(final_html, encoding="utf-8")
     print(f"\n✓ Report saved: {output_path}")
     print("  Open in any browser — fully standalone.")
+
+    # ── Auto-rebuild index.html ──────────────────────────────────────────────
+    build_index = REPORTS_BASE / "build_index.py"
+    if build_index.exists():
+        import subprocess
+        print("\nRebuilding index.html...")
+        subprocess.run([sys.executable, str(build_index), str(REPORTS_BASE)], check=False)
+
+
+def run_config(config_path, args):
+    """Run batch reports from a YAML config file."""
+    try:
+        import yaml
+    except ImportError:
+        print("pip install pyyaml to use --config")
+        sys.exit(1)
+
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+
+    for entry in config.get("reports", []):
+        dma = entry["dma"]
+        makes_str = entry.get("makes", "All")
+        makes = parse_makes(makes_str)
+        quarters = entry.get("quarters", args.quarters)
+
+        today = datetime.now().strftime("%m.%d.%y")
+        dma_slug = slugify(dma)
+        output_dir = REPORTS_BASE / dma_slug
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        makes_slug = ("_" + "_".join(makes)) if makes else ""
+        output_path = output_dir / f"market_intelligence_{dma_slug}{makes_slug}_{today}.html"
+
+        makes_label = ", ".join(makes) if makes else "All makes"
+        print(f"\n{'='*60}")
+        print(f"  DMA:   {dma}")
+        print(f"  Makes: {makes_label}")
+        print(f"  Output: {output_path}\n")
+
+        csv_text = None
+        manual_csv = TABLEAU_DIR / "SearchVolumeByZipCode.csv"
+
+        if manual_csv.exists() and not args.force_tableau:
+            csv_text = manual_csv.read_bytes()
+        else:
+            try:
+                token, site_id = tableau_signin()
+                csv_text = download_view_csv(token, site_id, dma, makes)
+                tableau_signout(token)
+            except Exception as e:
+                print(f"Tableau failed for {dma}: {e}")
+                continue
+
+        df = parse_csv(csv_text)
+        df = aggregate_quarter_cols(df, quarters=quarters)
+
+        quarter_cols_found = [c for c in df.columns if re.match(r'^\d{4}\s+Q\d$', str(c).strip())]
+        if quarter_cols_found:
+            earliest_q = min(quarter_cols_found).strip()
+            latest_q = max(quarter_cols_found).strip()
+            e_parts = earliest_q.split()
+            l_parts = latest_q.split()
+            data_date = f"{e_parts[1]} {e_parts[0]} \u2013 {l_parts[1]} {l_parts[0]}"
+        else:
+            data_date = datetime.now().strftime("%b %Y")
+
+        zip_col = next((c for c in df.columns if "zip" in c.lower()), None)
+        search_col = next((c for c in df.columns if c == "searches"), None)
+        dma_col = next((c for c in df.columns if "dma" in c.lower()), None)
+        if dma_col:
+            df = df[df[dma_col].str.contains(dma, na=False, case=False, regex=False)]
+
+        make_col = next((c for c in df.columns if c.lower() == "make"), None)
+        if makes and make_col:
+            df = df[df[make_col].str.lower().isin([m.lower() for m in makes])]
+
+        if df.empty:
+            print(f"No data for {dma}")
+            continue
+
+        df_cities = map_zips_to_cities(df, zip_col, search_col)
+        final_html = inject_into_template(df_cities, dma, makes, TEMPLATE_PATH, data_date)
+        output_path.write_text(final_html, encoding="utf-8")
+        print(f"✓ Report saved: {output_path}")
+
+    # Rebuild index after all reports
+    build_index_script = REPORTS_BASE / "build_index.py"
+    if build_index_script.exists():
+        import subprocess
+        print("\nRebuilding index.html...")
+        subprocess.run([sys.executable, str(build_index_script), str(REPORTS_BASE)], check=False)
 
 
 if __name__ == "__main__":
