@@ -314,12 +314,14 @@ def main():
     df = parse_csv(csv_text)
     df = aggregate_quarter_cols(df)
 
-    # Determine latest data period from quarterly columns for "Data as of" stamp
+    # Determine data period range from quarterly columns for "Data as of" stamp
     quarter_cols_found = [c for c in df.columns if re.match(r'^\d{4}\s+Q\d$', str(c).strip())]
     if quarter_cols_found:
-        latest_q = max(quarter_cols_found).strip()   # e.g. "2026 Q1"
-        parts = latest_q.split()
-        data_date = f"{parts[1]} {parts[0]}"         # → "Q1 2026"
+        earliest_q = min(quarter_cols_found).strip()  # e.g. "2023 Q4"
+        latest_q = max(quarter_cols_found).strip()    # e.g. "2026 Q1"
+        e_parts = earliest_q.split()
+        l_parts = latest_q.split()
+        data_date = f"{e_parts[1]} {e_parts[0]} \u2013 {l_parts[1]} {l_parts[0]}"  # "Q4 2023 – Q1 2026"
     else:
         data_date = datetime.now().strftime("%b %Y")
 
