@@ -104,6 +104,15 @@
     box-shadow:0 1px 5px rgba(184,134,11,.5);
   }
   .dealer-star{font-size:20px;text-shadow:0 1px 5px rgba(55,11,85,.5);pointer-events:none;}
+
+  /* ── Radius ZIP results ── */
+  .rz-row{display:flex;align-items:center;padding:3px 0;border-bottom:1px solid #f8f5fb;}
+  .rz-row:last-child{border-bottom:none;}
+  .rz-row.rz-hitlist{background:#f0f8e8;border-radius:3px;padding:3px 4px;margin:1px 0;}
+  .rz-zip{width:48px;font-weight:600;color:#370B55;}
+  .rz-city{flex:1;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-vol{width:50px;text-align:right;font-weight:600;color:#8136B2;}
+  .rz-hl{width:14px;text-align:center;margin-left:4px;}
 </style>
 </head>
 <body>
@@ -137,8 +146,25 @@
     <button id="radius-clear" class="radius-btn" onclick="clearRadii()">Clear All</button>
   </div>
   <div id="radius-status"></div>
-  <div style="font-size:9.5px;color:#aaa;margin-top:8px;line-height:1.5;border-top:1px solid #f0ecf5;padding-top:8px;">
-    Search counts are estimated by city center, not individual ZIP codes. Cities that fall near the edge of the radius may be counted as fully inside or outside.
+  <div id="radius-results" style="display:none;margin-top:8px;border-top:1px solid #f0ecf5;padding-top:8px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#8136B2;">ZIPs in Radius</span>
+      <span id="radius-zip-count" style="font-size:10px;color:#999;"></span>
+    </div>
+    <div id="radius-summary" style="display:flex;gap:8px;margin-bottom:6px;">
+      <div style="flex:1;background:#f0ecf5;border-radius:6px;padding:5px 8px;text-align:center;">
+        <div id="radius-total-searches" style="font-size:14px;font-weight:700;color:#370B55;">0</div>
+        <div style="font-size:8px;color:#999;text-transform:uppercase;letter-spacing:.5px;">Searches</div>
+      </div>
+      <div style="flex:1;background:#D9EAD3;border-radius:6px;padding:5px 8px;text-align:center;">
+        <div id="radius-hitlist-count" style="font-size:14px;font-weight:700;color:#38761D;">0</div>
+        <div style="font-size:8px;color:#999;text-transform:uppercase;letter-spacing:.5px;">Hitlist</div>
+      </div>
+    </div>
+    <div id="radius-zip-list" style="max-height:240px;overflow-y:auto;font-size:10px;"></div>
+  </div>
+  <div id="radius-note" style="font-size:9.5px;color:#aaa;margin-top:8px;line-height:1.5;border-top:1px solid #f0ecf5;padding-top:8px;">
+    ZIP-level breakdown available when ZIP data is loaded. City view uses city-center approximation.
   </div>
 </div>
 
@@ -368,6 +394,48 @@ function searchesInRadius(lat, lng) {
   return { searches, count };
 }
 
+// ZIP-level radius capture — returns detailed list
+function zipsInRadius(lat, lng) {
+  if (typeof zipData === 'undefined' || !zipData.length) return [];
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  return zipData
+    .filter(z => haversineMi(lat, lng, z.lat, z.lng) <= RADIUS_MI)
+    .map(z => ({
+      zip: z.zip, city: z.city, state: z.state, total: z.total,
+      hitlist: hasHitlist && hitlistZips.includes(z.zip),
+      dist: Math.round(haversineMi(lat, lng, z.lat, z.lng) * 10) / 10,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+function updateRadiusResults(lat, lng) {
+  const panel = document.getElementById('radius-results');
+  const list = document.getElementById('radius-zip-list');
+  const captured = zipsInRadius(lat, lng);
+
+  if (!captured.length) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+  const totalSearches = captured.reduce((s, z) => s + z.total, 0);
+  const hitlistCount = captured.filter(z => z.hitlist).length;
+
+  document.getElementById('radius-zip-count').textContent = captured.length + ' ZIPs';
+  document.getElementById('radius-total-searches').textContent = totalSearches.toLocaleString();
+  document.getElementById('radius-hitlist-count').textContent = hitlistCount;
+
+  list.innerHTML = captured.map(z =>
+    `<div class="rz-row${z.hitlist ? ' rz-hitlist' : ''}">
+      <span class="rz-zip">${z.zip}</span>
+      <span class="rz-city">${z.city}</span>
+      <span class="rz-vol">${z.total.toLocaleString()}</span>
+      <span class="rz-hl">${z.hitlist ? '★' : ''}</span>
+    </div>`
+  ).join('');
+}
+
 function makeBadgeIcon(searches, count) {
   return L.divIcon({
     html: `<div style="
@@ -421,13 +489,14 @@ function placeRadius(lat, lng, label) {
     zIndexOffset: 500,
   }).addTo(map);
 
-  const hintLine = label
-    ? `<div style="font-size:10px;color:#999;margin-top:2px;">30-mile radius · drag to reposition</div>`
-    : `<div style="font-size:10px;color:#999;margin-top:2px;">30-mile radius · drag to reposition</div>`;
+  const hintLine = `<div style="font-size:10px;color:#999;margin-top:2px;">30-mile radius · drag to reposition</div>`;
   pin.bindTooltip(
     `${label ? `<div class="tt-city">${label}</div>` : ''}${hintLine}`,
     { className: 'cars-tooltip', sticky: false, offset: [12, 0] }
   );
+
+  // Show ZIP breakdown on initial place
+  updateRadiusResults(lat, lng);
 
   pin.on('dragstart', function() {
     map.getContainer().style.cursor = 'grabbing';
@@ -447,6 +516,8 @@ function placeRadius(lat, lng, label) {
     const { lat: la, lng: ln } = pin.getLatLng();
     const r = searchesInRadius(la, ln);
     setStatus(`✓ ${r.searches.toLocaleString()} searches · ${r.count} cities in radius`, 4000);
+    // Update ZIP breakdown after drag
+    updateRadiusResults(la, ln);
   });
 
   radiusLayers.push(ring, badge, pin);
@@ -493,6 +564,7 @@ function clearRadii() {
   radiusLayers.forEach(l => map.removeLayer(l));
   radiusLayers = [];
   setStatus('');
+  document.getElementById('radius-results').style.display = 'none';
 }
 
 function setStatus(msg, clearAfterMs) {
