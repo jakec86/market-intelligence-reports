@@ -151,17 +151,19 @@
       <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#8136B2;">ZIPs in Radius</span>
       <span id="radius-zip-count" style="font-size:10px;color:#999;"></span>
     </div>
-    <div id="radius-summary" style="display:flex;gap:8px;margin-bottom:6px;">
-      <div style="flex:1;background:#f0ecf5;border-radius:6px;padding:5px 8px;text-align:center;">
-        <div id="radius-total-searches" style="font-size:14px;font-weight:700;color:#370B55;">0</div>
-        <div style="font-size:8px;color:#999;text-transform:uppercase;letter-spacing:.5px;">Searches</div>
-      </div>
-      <div style="flex:1;background:#D9EAD3;border-radius:6px;padding:5px 8px;text-align:center;">
-        <div id="radius-hitlist-count" style="font-size:14px;font-weight:700;color:#38761D;">0</div>
-        <div style="font-size:8px;color:#999;text-transform:uppercase;letter-spacing:.5px;">Hitlist</div>
+    <div style="display:flex;gap:4px;margin-bottom:6px;">
+      <button onclick="copyRadiusTable()" class="radius-btn" style="flex:1;font-size:9px;padding:4px 0;">Copy to Clipboard</button>
+      <button onclick="downloadRadiusCsv()" class="radius-btn" style="flex:1;font-size:9px;padding:4px 0;">Download CSV</button>
+    </div>
+    <div id="radius-zip-list" style="max-height:280px;overflow-y:auto;font-size:10px;">
+      <div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
+        <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
       </div>
     </div>
-    <div id="radius-zip-list" style="max-height:240px;overflow-y:auto;font-size:10px;"></div>
+    <div id="radius-totals" style="display:flex;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid #f0ecf5;">
+      <div style="flex:1;font-size:10px;"><span style="color:#999;">Total:</span> <strong id="radius-total-searches" style="color:#370B55;">0</strong></div>
+      <div style="flex:1;font-size:10px;"><span style="color:#999;">Hitlist:</span> <strong id="radius-hitlist-count" style="color:#38761D;">0</strong></div>
+    </div>
   </div>
   <div id="radius-note" style="font-size:9.5px;color:#aaa;margin-top:8px;line-height:1.5;border-top:1px solid #f0ecf5;padding-top:8px;">
     ZIP-level breakdown available when ZIP data is loaded. City view uses city-center approximation.
@@ -2690,10 +2692,13 @@ function zipsInRadius(lat, lng) {
     .sort((a, b) => b.total - a.total);
 }
 
+let lastRadiusCapture = [];
+
 function updateRadiusResults(lat, lng) {
   const panel = document.getElementById('radius-results');
   const list = document.getElementById('radius-zip-list');
   const captured = zipsInRadius(lat, lng);
+  lastRadiusCapture = captured;
 
   if (!captured.length) {
     panel.style.display = 'none';
@@ -2706,16 +2711,50 @@ function updateRadiusResults(lat, lng) {
 
   document.getElementById('radius-zip-count').textContent = captured.length + ' ZIPs';
   document.getElementById('radius-total-searches').textContent = totalSearches.toLocaleString();
-  document.getElementById('radius-hitlist-count').textContent = hitlistCount;
+  document.getElementById('radius-hitlist-count').textContent = hitlistCount + ' of ' + captured.length;
 
-  list.innerHTML = captured.map(z =>
-    `<div class="rz-row${z.hitlist ? ' rz-hitlist' : ''}">
-      <span class="rz-zip">${z.zip}</span>
-      <span class="rz-city">${z.city}</span>
-      <span class="rz-vol">${z.total.toLocaleString()}</span>
-      <span class="rz-hl">${z.hitlist ? '★' : ''}</span>
-    </div>`
-  ).join('');
+  // Header row + data rows
+  list.innerHTML =
+    `<div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
+      <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
+    </div>` +
+    captured.map(z =>
+      `<div class="rz-row${z.hitlist ? ' rz-hitlist' : ''}">
+        <span class="rz-zip">${z.zip}</span>
+        <span class="rz-city">${z.city}, ${z.state}</span>
+        <span class="rz-vol">${z.total.toLocaleString()}</span>
+        <span class="rz-hl">${z.hitlist ? '★' : ''}</span>
+      </div>`
+    ).join('');
+}
+
+function copyRadiusTable() {
+  if (!lastRadiusCapture.length) return;
+  const header = 'ZIP\tCity\tState\tSearches\tHitlist';
+  const rows = lastRadiusCapture.map(z =>
+    `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}`
+  );
+  const tsv = [header, ...rows].join('\n');
+  navigator.clipboard.writeText(tsv).then(() => {
+    setStatus('✓ Copied ' + lastRadiusCapture.length + ' ZIPs — paste into Sheets', 3000);
+  });
+}
+
+function downloadRadiusCsv() {
+  if (!lastRadiusCapture.length) return;
+  const header = 'ZIP,City,State,Searches,Hitlist';
+  const rows = lastRadiusCapture.map(z =>
+    `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''}`
+  );
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'radius_zips_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('✓ Downloaded ' + lastRadiusCapture.length + ' ZIPs', 3000);
 }
 
 function makeBadgeIcon(searches, count) {
