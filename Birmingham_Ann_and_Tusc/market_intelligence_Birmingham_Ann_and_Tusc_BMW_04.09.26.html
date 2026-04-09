@@ -1,0 +1,4079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Birmingham (Ann and Tusc) Search Volume — Cars.com</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  :root {
+    --jagger:#370B55; --violet:#8136B2; --vixen:#AB74CF;
+    --lavender:#D9BAEE; --gray:#4D4D4D; --white:#FFFFFF;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Inter',sans-serif;background:#f0ecf5;color:var(--gray);height:100vh;overflow:hidden;}
+
+  #topbar{
+    position:absolute;top:0;left:0;right:0;z-index:1100;height:62px;
+    background:var(--jagger);display:flex;align-items:center;
+    justify-content:space-between;padding:0 20px;
+    box-shadow:0 2px 12px rgba(55,11,85,.45);
+  }
+  #logo{display:flex;align-items:center;gap:10px;}
+  #logo svg{height:28px;}
+  #logo-divider{width:1px;height:28px;background:rgba(255,255,255,.25);}
+  #logo-subtitle{color:var(--lavender);font-size:12px;font-weight:500;letter-spacing:.8px;text-transform:uppercase;}
+  #data-date{color:rgba(217,186,238,.65);font-size:10px;font-weight:400;letter-spacing:.5px;margin-left:4px;}
+  #total-badge{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px 16px;text-align:right;}
+  #total-badge .num{font-size:18px;font-weight:700;color:var(--white);letter-spacing:-.5px;}
+  #total-badge .lbl{font-size:10px;color:var(--lavender);text-transform:uppercase;letter-spacing:1px;}
+
+  #map{width:100%;height:100vh;padding-top:62px;}
+  .leaflet-container{background:#ede8f2!important;}
+
+  .panel{background:var(--white);border:1px solid #ddd;border-radius:10px;padding:14px 16px;
+    box-shadow:0 2px 10px rgba(55,11,85,.12);font-family:'Inter',sans-serif;}
+  .panel h3{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
+    color:var(--violet);margin-bottom:10px;border-bottom:2px solid var(--lavender);padding-bottom:6px;}
+
+  #legend{position:absolute;bottom:24px;left:16px;z-index:1000;}
+  .legend-item{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:11px;color:var(--gray);}
+  .legend-circle{border-radius:50%;background:rgba(129,54,178,.18);border:2px solid rgba(129,54,178,.65);flex-shrink:0;}
+
+  #stats{position:absolute;bottom:24px;right:16px;z-index:1000;min-width:200px;}
+  .stat-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:11px;}
+  .stat-city{color:var(--gray);}
+  .stat-num{color:var(--violet);font-weight:600;}
+  .stat-bar-wrap{width:100%;height:4px;background:#f0ecf5;border-radius:2px;margin-bottom:8px;}
+  .stat-bar{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--jagger),var(--vixen));}
+
+  .cars-tooltip{background:var(--white)!important;border:1.5px solid var(--vixen)!important;
+    border-radius:10px!important;color:var(--gray)!important;font-family:'Inter',sans-serif!important;
+    font-size:12px!important;padding:10px 14px!important;box-shadow:0 6px 18px rgba(55,11,85,.18)!important;}
+  .tt-city{font-size:14px;font-weight:700;color:var(--jagger);margin-bottom:3px;}
+  .tt-count{font-size:13px;font-weight:600;color:var(--violet);}
+  .tt-zips{font-size:10px;color:#888;margin-top:4px;max-width:240px;line-height:1.6;}
+
+  .tier-legend{min-width:170px;}
+  .tier-item{display:flex;align-items:center;gap:9px;margin-bottom:6px;font-size:11px;color:var(--gray);}
+  .tier-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;}
+
+  /* ── Radius Panel ── */
+  #radius-panel{position:absolute;top:74px;left:16px;z-index:1000;width:228px;}
+  #radius-panel h3{margin-bottom:8px;}
+  #radius-input-row{display:flex;gap:6px;margin-bottom:7px;}
+  #radius-address{
+    flex:1;padding:6px 8px;border:1px solid #ddd;border-radius:6px;
+    font-size:11px;font-family:'Inter',sans-serif;color:var(--gray);outline:none;
+  }
+  #radius-address:focus{border-color:var(--vixen);}
+  #radius-go{
+    padding:6px 10px;background:var(--violet);color:#fff;border:none;
+    border-radius:6px;font-size:11px;font-family:'Inter',sans-serif;cursor:pointer;
+    white-space:nowrap;
+  }
+  #radius-go:hover{background:var(--jagger);}
+  #radius-btn-row{display:flex;gap:6px;}
+  .radius-btn{
+    flex:1;padding:5px 0;background:#f0ecf5;color:var(--violet);
+    border:1px solid var(--lavender);border-radius:6px;font-size:10px;
+    font-family:'Inter',sans-serif;cursor:pointer;text-align:center;
+  }
+  .radius-btn:hover{background:var(--lavender);}
+  .radius-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+  #radius-clear{color:var(--gray);border-color:#ddd;}
+  #radius-clear:hover{background:#f5f0f8;}
+  #radius-status{font-size:10px;color:#999;margin-top:6px;min-height:13px;line-height:1.3;}
+
+  /* ── View Toggle ── */
+  #view-toggle{position:absolute;top:74px;right:16px;z-index:1000;}
+  .toggle-row{display:flex;gap:4px;margin-bottom:6px;}
+  .view-btn{
+    flex:1;padding:5px 10px;background:#f0ecf5;color:var(--violet);
+    border:1px solid var(--lavender);border-radius:6px;font-size:10px;
+    font-family:'Inter',sans-serif;cursor:pointer;text-align:center;
+  }
+  .view-btn:hover{background:var(--lavender);}
+  .view-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+
+  /* ── Hitlist marker ── */
+  .hitlist-pin{
+    background:#E8A817;border:2px solid #B8860B;border-radius:50%;
+    box-shadow:0 1px 5px rgba(184,134,11,.5);
+  }
+  .dealer-star{font-size:20px;text-shadow:0 1px 5px rgba(55,11,85,.5);pointer-events:none;}
+
+  /* ── Radius ZIP results ── */
+  .rz-row{display:flex;align-items:center;padding:3px 0;border-bottom:1px solid #f8f5fb;}
+  .rz-row:last-child{border-bottom:none;}
+  .rz-row.rz-hitlist{background:#f0f8e8;border-radius:3px;padding:3px 4px;margin:1px 0;}
+  .rz-zip{width:48px;font-weight:600;color:#370B55;}
+  .rz-city{flex:1;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-vol{width:50px;text-align:right;font-weight:600;color:#8136B2;}
+  .rz-hl{width:14px;text-align:center;margin-left:4px;}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div id="logo">
+    <svg viewBox="0 0 120 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <text x="0" y="23" font-family="Inter,sans-serif" font-weight="800" font-size="22" fill="#FFFFFF" letter-spacing="-0.5">Cars</text>
+      <text x="51" y="23" font-family="Inter,sans-serif" font-weight="800" font-size="22" fill="#AB74CF" letter-spacing="-0.5">.com</text>
+    </svg>
+    <div id="logo-divider"></div>
+    <span id="logo-subtitle">Birmingham (Ann and Tusc) Market Intelligence | BMW</span><span id="data-date">· Data as of Q4 2023 – Q2 2026</span>
+  </div>
+  <div id="total-badge">
+    <div class="num" id="total-num">—</div>
+    <div class="lbl">Total Searches</div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<!-- Radius Tool Panel -->
+<div id="radius-panel" class="panel">
+  <h3>30-Mile Radius</h3>
+  <div id="radius-input-row">
+    <input id="radius-address" type="text" placeholder="Address, city, or ZIP…" autocomplete="off">
+    <button id="radius-go" onclick="geocodeAndPlace()">Place</button>
+  </div>
+  <div id="radius-btn-row">
+    <button id="click-toggle" class="radius-btn" onclick="toggleClickMode()">Click to Place</button>
+    <button id="radius-clear" class="radius-btn" onclick="clearRadii()">Clear All</button>
+  </div>
+  <div id="radius-status"></div>
+  <div id="radius-results" style="display:none;margin-top:8px;border-top:1px solid #f0ecf5;padding-top:8px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#8136B2;">ZIPs in Radius</span>
+      <span id="radius-zip-count" style="font-size:10px;color:#999;"></span>
+    </div>
+    <div style="display:flex;gap:4px;margin-bottom:6px;">
+      <button onclick="copyRadiusTable()" class="radius-btn" style="flex:1;font-size:9px;padding:4px 0;">Copy to Clipboard</button>
+      <button onclick="downloadRadiusCsv()" class="radius-btn" style="flex:1;font-size:9px;padding:4px 0;">Download CSV</button>
+    </div>
+    <div id="radius-zip-list" style="max-height:280px;overflow-y:auto;font-size:10px;">
+      <div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
+        <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
+      </div>
+    </div>
+    <div id="radius-totals" style="display:flex;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid #f0ecf5;">
+      <div style="flex:1;font-size:10px;"><span style="color:#999;">Total:</span> <strong id="radius-total-searches" style="color:#370B55;">0</strong></div>
+      <div style="flex:1;font-size:10px;"><span style="color:#999;">Hitlist:</span> <strong id="radius-hitlist-count" style="color:#38761D;">0</strong></div>
+    </div>
+  </div>
+  <div id="radius-note" style="font-size:9.5px;color:#aaa;margin-top:8px;line-height:1.5;border-top:1px solid #f0ecf5;padding-top:8px;">
+    ZIP-level breakdown available when ZIP data is loaded. City view uses city-center approximation.
+  </div>
+</div>
+
+<div id="view-toggle" class="panel">
+  <h3>Map View</h3>
+  <div class="toggle-row">
+    <button id="btn-city" class="view-btn active" onclick="setView('city')">Cities</button>
+    <button id="btn-zip" class="view-btn" onclick="setView('zip')">ZIP Codes</button>
+  </div>
+</div>
+
+<div id="legend" class="panel">
+  <h3>Search Volume</h3>
+  <div class="legend-item"><div class="legend-circle" style="width:44px;height:44px;"></div><span>50,000+</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:30px;height:30px;"></div><span>10,000 – 50,000</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:18px;height:18px;"></div><span>1,000 – 10,000</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:10px;height:10px;"></div><span>&lt; 1,000</span></div>
+  <div class="legend-item" id="hitlist-legend" style="display:none;margin-top:8px;padding-top:6px;border-top:1px solid #f0ecf5;">
+    <div class="hitlist-pin" style="width:14px;height:14px;"></div><span>Hitlist ZIP</span>
+  </div>
+  <div class="legend-item" id="dealer-legend" style="display:none;">
+    <span class="dealer-star" style="font-size:14px;">★</span><span>Dealer Location</span>
+  </div>
+</div>
+
+<div id="stats" class="panel">
+  <h3>Top 8 Cities</h3>
+  <div id="stats-body"></div>
+</div>
+
+<script>
+const cities = [
+  {
+    "name": "Birmingham",
+    "total": 125659,
+    "lat": 33.52145,
+    "lng": -86.83,
+    "zips": "35201, 35202, 35203, 35204, 35205, 35206, 35207, 35208, 35209, 35210, 35211, 35212, 35213, 35214, 35215, 35216, 35217, 35218, 35219, 35221, 35222, 35223, 35224, 35226, 35228, 35229, 35231, 35232, 35233, 35234, 35235, 35236, 35237, 35242, 35243, 35244, 35246, 35249, 35253, 35254, 35255, 35259, 35260, 35261, 35266, 35270, 35282, 35283, 35285, 35290, 35291, 35293, 35294, 35296, 35297, 35298"
+  },
+  {
+    "name": "Tuscaloosa",
+    "total": 13622,
+    "lat": 33.2098,
+    "lng": -87.527,
+    "zips": "35401, 35402, 35403, 35404, 35405, 35406, 35407, 35486, 35487"
+  },
+  {
+    "name": "Bessemer",
+    "total": 6519,
+    "lat": 33.4385,
+    "lng": -86.9566,
+    "zips": "35020, 35021, 35022, 35023"
+  },
+  {
+    "name": "Trussville",
+    "total": 5431,
+    "lat": 33.6339,
+    "lng": -86.5981,
+    "zips": "35173"
+  },
+  {
+    "name": "Pelham",
+    "total": 5140,
+    "lat": 33.2932,
+    "lng": -86.768,
+    "zips": "35124"
+  },
+  {
+    "name": "Calera",
+    "total": 4007,
+    "lat": 33.1098,
+    "lng": -86.756,
+    "zips": "35040"
+  },
+  {
+    "name": "Cullman",
+    "total": 3911,
+    "lat": 34.17545,
+    "lng": -86.8367,
+    "zips": "35055, 35056, 35057, 35058"
+  },
+  {
+    "name": "Northport",
+    "total": 3720,
+    "lat": 33.2723,
+    "lng": -87.5825,
+    "zips": "35473, 35475, 35476"
+  },
+  {
+    "name": "Anniston",
+    "total": 3358,
+    "lat": 33.72745,
+    "lng": -85.8378,
+    "zips": "36201, 36202, 36204, 36205, 36206, 36207"
+  },
+  {
+    "name": "Odenville",
+    "total": 3250,
+    "lat": 33.6756,
+    "lng": -86.409,
+    "zips": "35120"
+  },
+  {
+    "name": "Gadsden",
+    "total": 3119,
+    "lat": 33.9994,
+    "lng": -85.9821,
+    "zips": "35901, 35902, 35903, 35904, 35905, 35907"
+  },
+  {
+    "name": "Chelsea",
+    "total": 3056,
+    "lat": 33.2982,
+    "lng": -86.6563,
+    "zips": "35043"
+  },
+  {
+    "name": "Alabaster",
+    "total": 2691,
+    "lat": 33.1934,
+    "lng": -86.7944,
+    "zips": "35007"
+  },
+  {
+    "name": "Talladega",
+    "total": 2290,
+    "lat": 33.4278,
+    "lng": -86.1081,
+    "zips": "35160, 35161"
+  },
+  {
+    "name": "Helena",
+    "total": 1968,
+    "lat": 33.2663,
+    "lng": -86.902,
+    "zips": "35080"
+  },
+  {
+    "name": "Pinson",
+    "total": 1967,
+    "lat": 33.7299,
+    "lng": -86.6451,
+    "zips": "35126"
+  },
+  {
+    "name": "Pell City",
+    "total": 1856,
+    "lat": 33.5926,
+    "lng": -86.3399,
+    "zips": "35125, 35128"
+  },
+  {
+    "name": "Mc Calla",
+    "total": 1855,
+    "lat": 33.2845,
+    "lng": -87.1024,
+    "zips": "35111"
+  },
+  {
+    "name": "Warrior",
+    "total": 1645,
+    "lat": 33.8529,
+    "lng": -86.8198,
+    "zips": "35180"
+  },
+  {
+    "name": "Sylacauga",
+    "total": 1638,
+    "lat": 33.17365,
+    "lng": -86.31435,
+    "zips": "35150, 35151"
+  },
+  {
+    "name": "Oxford",
+    "total": 1615,
+    "lat": 33.5815,
+    "lng": -85.8328,
+    "zips": "36203"
+  },
+  {
+    "name": "Montevallo",
+    "total": 1610,
+    "lat": 33.1248,
+    "lng": -86.8622,
+    "zips": "35115"
+  },
+  {
+    "name": "Jasper",
+    "total": 1377,
+    "lat": 33.86195,
+    "lng": -87.2775,
+    "zips": "35501, 35502, 35503, 35504"
+  },
+  {
+    "name": "Springville",
+    "total": 1213,
+    "lat": 33.7386,
+    "lng": -86.4394,
+    "zips": "35146"
+  },
+  {
+    "name": "Moody",
+    "total": 1187,
+    "lat": 33.6035,
+    "lng": -86.4668,
+    "zips": "35004"
+  },
+  {
+    "name": "Jacksonville",
+    "total": 1065,
+    "lat": 33.831,
+    "lng": -85.7752,
+    "zips": "36265"
+  },
+  {
+    "name": "Gardendale",
+    "total": 1057,
+    "lat": 33.7189,
+    "lng": -86.8225,
+    "zips": "35071"
+  },
+  {
+    "name": "Pleasant Grove",
+    "total": 1014,
+    "lat": 33.4883,
+    "lng": -86.9766,
+    "zips": "35127"
+  },
+  {
+    "name": "Leeds",
+    "total": 945,
+    "lat": 33.5283,
+    "lng": -86.5748,
+    "zips": "35094"
+  },
+  {
+    "name": "Maylene",
+    "total": 923,
+    "lat": 33.2317,
+    "lng": -86.8727,
+    "zips": "35114"
+  },
+  {
+    "name": "Clanton",
+    "total": 878,
+    "lat": 32.8792,
+    "lng": -86.59375,
+    "zips": "35045, 35046"
+  },
+  {
+    "name": "Adamsville",
+    "total": 635,
+    "lat": 33.5884,
+    "lng": -86.9597,
+    "zips": "35005"
+  },
+  {
+    "name": "Rainbow City",
+    "total": 625,
+    "lat": 33.9318,
+    "lng": -86.0898,
+    "zips": "35906"
+  },
+  {
+    "name": "Hamilton",
+    "total": 612,
+    "lat": 34.1534,
+    "lng": -88.0085,
+    "zips": "35570"
+  },
+  {
+    "name": "Siluria",
+    "total": 610,
+    "lat": 33.2293,
+    "lng": -86.825,
+    "zips": "35144"
+  },
+  {
+    "name": "Kimberly",
+    "total": 604,
+    "lat": 33.7684,
+    "lng": -86.8084,
+    "zips": "35091"
+  },
+  {
+    "name": "Childersburg",
+    "total": 590,
+    "lat": 33.2459,
+    "lng": -86.3641,
+    "zips": "35044"
+  },
+  {
+    "name": "Fultondale",
+    "total": 537,
+    "lat": 33.6017,
+    "lng": -86.8265,
+    "zips": "35068"
+  },
+  {
+    "name": "Winfield",
+    "total": 533,
+    "lat": 33.9303,
+    "lng": -87.7972,
+    "zips": "35594"
+  },
+  {
+    "name": "Alpine",
+    "total": 501,
+    "lat": 33.404,
+    "lng": -86.2339,
+    "zips": "35014"
+  },
+  {
+    "name": "Dora",
+    "total": 472,
+    "lat": 33.7357,
+    "lng": -87.0546,
+    "zips": "35062"
+  },
+  {
+    "name": "Lincoln",
+    "total": 445,
+    "lat": 33.6059,
+    "lng": -86.1112,
+    "zips": "35096"
+  },
+  {
+    "name": "Oneonta",
+    "total": 411,
+    "lat": 33.9259,
+    "lng": -86.4741,
+    "zips": "35121"
+  },
+  {
+    "name": "Wilsonville",
+    "total": 399,
+    "lat": 33.2293,
+    "lng": -86.5299,
+    "zips": "35186"
+  },
+  {
+    "name": "Columbiana",
+    "total": 378,
+    "lat": 33.177,
+    "lng": -86.6161,
+    "zips": "35051"
+  },
+  {
+    "name": "Cropwell",
+    "total": 363,
+    "lat": 33.5296,
+    "lng": -86.3007,
+    "zips": "35054"
+  },
+  {
+    "name": "Brookwood",
+    "total": 348,
+    "lat": 33.2775,
+    "lng": -87.309,
+    "zips": "35444"
+  },
+  {
+    "name": "Hayden",
+    "total": 341,
+    "lat": 33.9534,
+    "lng": -86.7455,
+    "zips": "35079"
+  },
+  {
+    "name": "Cottondale",
+    "total": 318,
+    "lat": 33.1767,
+    "lng": -87.3871,
+    "zips": "35453"
+  },
+  {
+    "name": "Harpersville",
+    "total": 288,
+    "lat": 33.3234,
+    "lng": -86.4424,
+    "zips": "35078"
+  },
+  {
+    "name": "Centre",
+    "total": 270,
+    "lat": 34.1116,
+    "lng": -85.6092,
+    "zips": "35960"
+  },
+  {
+    "name": "Wilton",
+    "total": 264,
+    "lat": 33.081,
+    "lng": -86.8793,
+    "zips": "35187"
+  },
+  {
+    "name": "Hanceville",
+    "total": 247,
+    "lat": 34.0516,
+    "lng": -86.7848,
+    "zips": "35077"
+  },
+  {
+    "name": "Attalla",
+    "total": 244,
+    "lat": 34.0296,
+    "lng": -86.0967,
+    "zips": "35954"
+  },
+  {
+    "name": "New Castle",
+    "total": 233,
+    "lat": 33.649,
+    "lng": -86.7686,
+    "zips": "35119"
+  },
+  {
+    "name": "Sumiton",
+    "total": 233,
+    "lat": 33.768,
+    "lng": -87.0445,
+    "zips": "35148"
+  },
+  {
+    "name": "Vance",
+    "total": 230,
+    "lat": 33.175,
+    "lng": -87.2574,
+    "zips": "35490"
+  },
+  {
+    "name": "Piedmont",
+    "total": 228,
+    "lat": 33.8389,
+    "lng": -85.646,
+    "zips": "36272"
+  },
+  {
+    "name": "Fairfield",
+    "total": 207,
+    "lat": 33.4735,
+    "lng": -86.9183,
+    "zips": "35064"
+  },
+  {
+    "name": "Mount Olive",
+    "total": 201,
+    "lat": 33.6768,
+    "lng": -86.8717,
+    "zips": "35117"
+  },
+  {
+    "name": "Moundville",
+    "total": 192,
+    "lat": 32.9108,
+    "lng": -87.5935,
+    "zips": "35474"
+  },
+  {
+    "name": "Fayette",
+    "total": 176,
+    "lat": 33.6974,
+    "lng": -87.8346,
+    "zips": "35555"
+  },
+  {
+    "name": "Ashville",
+    "total": 174,
+    "lat": 33.8374,
+    "lng": -86.2552,
+    "zips": "35953"
+  },
+  {
+    "name": "Munford",
+    "total": 164,
+    "lat": 33.541,
+    "lng": -85.9363,
+    "zips": "36268"
+  },
+  {
+    "name": "Thorsby",
+    "total": 160,
+    "lat": 32.9157,
+    "lng": -86.7158,
+    "zips": "35171"
+  },
+  {
+    "name": "Jemison",
+    "total": 148,
+    "lat": 32.9805,
+    "lng": -86.7181,
+    "zips": "35085"
+  },
+  {
+    "name": "Haleyville",
+    "total": 144,
+    "lat": 34.2314,
+    "lng": -87.5938,
+    "zips": "35565"
+  },
+  {
+    "name": "Riverside",
+    "total": 140,
+    "lat": 33.6166,
+    "lng": -86.1996,
+    "zips": "35135"
+  },
+  {
+    "name": "Ashland",
+    "total": 140,
+    "lat": 33.2474,
+    "lng": -85.829,
+    "zips": "36251"
+  },
+  {
+    "name": "Ohatchee",
+    "total": 135,
+    "lat": 33.7788,
+    "lng": -86.0254,
+    "zips": "36271"
+  },
+  {
+    "name": "Crane Hill",
+    "total": 128,
+    "lat": 34.0821,
+    "lng": -87.0484,
+    "zips": "35053"
+  },
+  {
+    "name": "Boaz",
+    "total": 127,
+    "lat": 34.1437,
+    "lng": -86.148,
+    "zips": "35956"
+  },
+  {
+    "name": "Morris",
+    "total": 125,
+    "lat": 33.7392,
+    "lng": -86.7726,
+    "zips": "35116"
+  },
+  {
+    "name": "Sterrett",
+    "total": 124,
+    "lat": 33.4461,
+    "lng": -86.4917,
+    "zips": "35147"
+  },
+  {
+    "name": "Wellington",
+    "total": 123,
+    "lat": 33.8226,
+    "lng": -85.8927,
+    "zips": "36279"
+  },
+  {
+    "name": "Duncanville",
+    "total": 123,
+    "lat": 33.0618,
+    "lng": -87.4422,
+    "zips": "35456"
+  },
+  {
+    "name": "Arley",
+    "total": 121,
+    "lat": 34.0632,
+    "lng": -87.1828,
+    "zips": "35541"
+  },
+  {
+    "name": "Alexandria",
+    "total": 119,
+    "lat": 33.7808,
+    "lng": -85.8924,
+    "zips": "36250"
+  },
+  {
+    "name": "West Blocton",
+    "total": 112,
+    "lat": 33.1424,
+    "lng": -87.1369,
+    "zips": "35184"
+  },
+  {
+    "name": "Weaver",
+    "total": 112,
+    "lat": 33.7563,
+    "lng": -85.8107,
+    "zips": "36277"
+  },
+  {
+    "name": "Ragland",
+    "total": 109,
+    "lat": 33.7367,
+    "lng": -86.1619,
+    "zips": "35131"
+  },
+  {
+    "name": "Burnwell",
+    "total": 108,
+    "lat": 33.7079,
+    "lng": -87.0875,
+    "zips": "35038"
+  },
+  {
+    "name": "Reform",
+    "total": 105,
+    "lat": 33.3959,
+    "lng": -88.0203,
+    "zips": "35481"
+  },
+  {
+    "name": "Vincent",
+    "total": 100,
+    "lat": 33.401,
+    "lng": -86.3994,
+    "zips": "35178"
+  },
+  {
+    "name": "Bynum",
+    "total": 98,
+    "lat": 33.7622,
+    "lng": -85.8378,
+    "zips": "36253"
+  },
+  {
+    "name": "Cordova",
+    "total": 95,
+    "lat": 33.768,
+    "lng": -87.1841,
+    "zips": "35550"
+  },
+  {
+    "name": "Bremen",
+    "total": 90,
+    "lat": 33.9737,
+    "lng": -87.0043,
+    "zips": "35033"
+  },
+  {
+    "name": "Dolomite",
+    "total": 89,
+    "lat": 33.4654,
+    "lng": -86.9564,
+    "zips": "35061"
+  },
+  {
+    "name": "Cleveland",
+    "total": 84,
+    "lat": 33.9778,
+    "lng": -86.5598,
+    "zips": "35049"
+  },
+  {
+    "name": "Trafford",
+    "total": 81,
+    "lat": 33.819,
+    "lng": -86.7434,
+    "zips": "35172"
+  },
+  {
+    "name": "Aliceville",
+    "total": 80,
+    "lat": 33.1228,
+    "lng": -88.1667,
+    "zips": "35442"
+  },
+  {
+    "name": "Parrish",
+    "total": 80,
+    "lat": 33.7213,
+    "lng": -87.2658,
+    "zips": "35580"
+  },
+  {
+    "name": "Woodstock",
+    "total": 80,
+    "lat": 33.2068,
+    "lng": -87.15,
+    "zips": "35188"
+  },
+  {
+    "name": "Vinemont",
+    "total": 74,
+    "lat": 34.2621,
+    "lng": -86.9125,
+    "zips": "35179"
+  },
+  {
+    "name": "Forkland",
+    "total": 73,
+    "lat": 32.6108,
+    "lng": -87.8441,
+    "zips": "36740"
+  },
+  {
+    "name": "Coker",
+    "total": 71,
+    "lat": 33.2934,
+    "lng": -87.6888,
+    "zips": "35452"
+  },
+  {
+    "name": "Blountsville",
+    "total": 71,
+    "lat": 34.0929,
+    "lng": -86.5686,
+    "zips": "35031"
+  },
+  {
+    "name": "Shelby",
+    "total": 70,
+    "lat": 33.0785,
+    "lng": -86.5536,
+    "zips": "35143"
+  },
+  {
+    "name": "Leesburg",
+    "total": 69,
+    "lat": 34.1911,
+    "lng": -85.7705,
+    "zips": "35983"
+  },
+  {
+    "name": "Equality",
+    "total": 68,
+    "lat": 32.8139,
+    "lng": -86.1051,
+    "zips": "36026"
+  },
+  {
+    "name": "Lineville",
+    "total": 66,
+    "lat": 33.3286,
+    "lng": -85.7346,
+    "zips": "36266"
+  },
+  {
+    "name": "Verbena",
+    "total": 64,
+    "lat": 32.7499,
+    "lng": -86.5114,
+    "zips": "36091"
+  },
+  {
+    "name": "Gordo",
+    "total": 61,
+    "lat": 33.3469,
+    "lng": -87.9005,
+    "zips": "35466"
+  },
+  {
+    "name": "Mulga",
+    "total": 58,
+    "lat": 33.5363,
+    "lng": -87.051,
+    "zips": "35118"
+  },
+  {
+    "name": "Eutaw",
+    "total": 56,
+    "lat": 32.8889,
+    "lng": -87.9303,
+    "zips": "35462"
+  },
+  {
+    "name": "Graysville",
+    "total": 52,
+    "lat": 33.6539,
+    "lng": -86.9803,
+    "zips": "35073"
+  },
+  {
+    "name": "Adger",
+    "total": 50,
+    "lat": 33.4343,
+    "lng": -87.1675,
+    "zips": "35006"
+  },
+  {
+    "name": "Steele",
+    "total": 50,
+    "lat": 33.9417,
+    "lng": -86.2289,
+    "zips": "35987"
+  },
+  {
+    "name": "Delmar",
+    "total": 50,
+    "lat": 34.1701,
+    "lng": -87.6059,
+    "zips": "35551"
+  },
+  {
+    "name": "Greensboro",
+    "total": 49,
+    "lat": 32.7167,
+    "lng": -87.5905,
+    "zips": "36744"
+  },
+  {
+    "name": "Carrollton",
+    "total": 47,
+    "lat": 33.2485,
+    "lng": -88.1321,
+    "zips": "35447"
+  },
+  {
+    "name": "Eastaboga",
+    "total": 44,
+    "lat": 33.6031,
+    "lng": -85.9608,
+    "zips": "36260"
+  },
+  {
+    "name": "Margaret",
+    "total": 44,
+    "lat": 33.6862,
+    "lng": -86.475,
+    "zips": "35112"
+  },
+  {
+    "name": "Vandiver",
+    "total": 43,
+    "lat": 33.4807,
+    "lng": -86.5013,
+    "zips": "35176"
+  },
+  {
+    "name": "Shannon",
+    "total": 43,
+    "lat": 33.4069,
+    "lng": -86.8735,
+    "zips": "35142"
+  },
+  {
+    "name": "Centreville",
+    "total": 42,
+    "lat": 32.9503,
+    "lng": -87.1192,
+    "zips": "35042"
+  },
+  {
+    "name": "Westover",
+    "total": 41,
+    "lat": 33.3356,
+    "lng": -86.5437,
+    "zips": "35185"
+  },
+  {
+    "name": "Hollins",
+    "total": 40,
+    "lat": 33.1162,
+    "lng": -86.1386,
+    "zips": "35082"
+  },
+  {
+    "name": "Bon Air",
+    "total": 40,
+    "lat": 33.2649,
+    "lng": -86.3364,
+    "zips": "35032"
+  },
+  {
+    "name": "Garden City",
+    "total": 39,
+    "lat": 34.0058,
+    "lng": -86.7499,
+    "zips": "35070"
+  },
+  {
+    "name": "Bear Creek",
+    "total": 38,
+    "lat": 34.1649,
+    "lng": -87.7396,
+    "zips": "35543"
+  },
+  {
+    "name": "Randolph",
+    "total": 37,
+    "lat": 32.8888,
+    "lng": -86.907,
+    "zips": "36792"
+  },
+  {
+    "name": "Maplesville",
+    "total": 37,
+    "lat": 32.8045,
+    "lng": -86.8717,
+    "zips": "36750"
+  },
+  {
+    "name": "Spring Garden",
+    "total": 37,
+    "lat": 33.9778,
+    "lng": -85.5521,
+    "zips": "36275"
+  },
+  {
+    "name": "Oakman",
+    "total": 30,
+    "lat": 33.7002,
+    "lng": -87.3686,
+    "zips": "35579"
+  },
+  {
+    "name": "Fosters",
+    "total": 30,
+    "lat": 33.0843,
+    "lng": -87.6975,
+    "zips": "35463"
+  },
+  {
+    "name": "Allgood",
+    "total": 28,
+    "lat": 33.9222,
+    "lng": -86.4493,
+    "zips": "35013"
+  },
+  {
+    "name": "Remlap",
+    "total": 27,
+    "lat": 33.8168,
+    "lng": -86.6008,
+    "zips": "35133"
+  },
+  {
+    "name": "Goodwater",
+    "total": 26,
+    "lat": 33.0746,
+    "lng": -86.0781,
+    "zips": "35072"
+  },
+  {
+    "name": "Kellyton",
+    "total": 25,
+    "lat": 32.9791,
+    "lng": -86.0484,
+    "zips": "35089"
+  },
+  {
+    "name": "Ralph",
+    "total": 24,
+    "lat": 33.1274,
+    "lng": -87.7624,
+    "zips": "35480"
+  },
+  {
+    "name": "Locust Fork",
+    "total": 23,
+    "lat": 33.905,
+    "lng": -86.6261,
+    "zips": "35097"
+  },
+  {
+    "name": "Clay",
+    "total": 22,
+    "lat": 33.7026,
+    "lng": -86.5997,
+    "zips": "35048"
+  },
+  {
+    "name": "Cedar Bluff",
+    "total": 22,
+    "lat": 34.2417,
+    "lng": -85.6026,
+    "zips": "35959"
+  },
+  {
+    "name": "Docena",
+    "total": 21,
+    "lat": 33.5589,
+    "lng": -86.9294,
+    "zips": "35060"
+  },
+  {
+    "name": "Lynn",
+    "total": 20,
+    "lat": 34.053,
+    "lng": -87.5398,
+    "zips": "35575"
+  },
+  {
+    "name": "Elrod",
+    "total": 20,
+    "lat": 33.2562,
+    "lng": -87.7922,
+    "zips": "35458"
+  },
+  {
+    "name": "Brierfield",
+    "total": 19,
+    "lat": 33.0427,
+    "lng": -86.9517,
+    "zips": "35035"
+  },
+  {
+    "name": "Carbon Hill",
+    "total": 18,
+    "lat": 33.9093,
+    "lng": -87.5403,
+    "zips": "35549"
+  },
+  {
+    "name": "Watson",
+    "total": 16,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "zips": "35181"
+  },
+  {
+    "name": "Nauvoo",
+    "total": 15,
+    "lat": 33.9299,
+    "lng": -87.4324,
+    "zips": "35578"
+  },
+  {
+    "name": "Guin",
+    "total": 15,
+    "lat": 33.9676,
+    "lng": -87.9024,
+    "zips": "35563"
+  },
+  {
+    "name": "Empire",
+    "total": 15,
+    "lat": 33.8256,
+    "lng": -87.0161,
+    "zips": "35063"
+  },
+  {
+    "name": "Double Springs",
+    "total": 14,
+    "lat": 34.1387,
+    "lng": -87.3974,
+    "zips": "35553"
+  },
+  {
+    "name": "Joppa",
+    "total": 14,
+    "lat": 34.2837,
+    "lng": -86.5519,
+    "zips": "35087"
+  },
+  {
+    "name": "Sycamore",
+    "total": 13,
+    "lat": 33.2512,
+    "lng": -86.2025,
+    "zips": "35149"
+  },
+  {
+    "name": "Alton",
+    "total": 11,
+    "lat": 33.5793,
+    "lng": -86.6375,
+    "zips": "35015"
+  },
+  {
+    "name": "Holly Pond",
+    "total": 10,
+    "lat": 34.1901,
+    "lng": -86.6174,
+    "zips": "35083"
+  },
+  {
+    "name": "Brilliant",
+    "total": 10,
+    "lat": 34.0377,
+    "lng": -87.7563,
+    "zips": "35548"
+  },
+  {
+    "name": "Knoxville",
+    "total": 10,
+    "lat": 32.9824,
+    "lng": -87.7919,
+    "zips": "35469"
+  },
+  {
+    "name": "Logan",
+    "total": 9,
+    "lat": 34.1377,
+    "lng": -87.0266,
+    "zips": "35098"
+  },
+  {
+    "name": "Saginaw",
+    "total": 9,
+    "lat": 33.2063,
+    "lng": -86.7812,
+    "zips": "35137"
+  },
+  {
+    "name": "Berry",
+    "total": 9,
+    "lat": 33.6945,
+    "lng": -87.6226,
+    "zips": "35546"
+  },
+  {
+    "name": "Green Pond",
+    "total": 9,
+    "lat": 33.2251,
+    "lng": -87.1264,
+    "zips": "35074"
+  },
+  {
+    "name": "Baileyton",
+    "total": 9,
+    "lat": 34.2683,
+    "lng": -86.6213,
+    "zips": "35019"
+  },
+  {
+    "name": "Belk",
+    "total": 8,
+    "lat": 33.6476,
+    "lng": -87.9314,
+    "zips": "35545"
+  },
+  {
+    "name": "Sawyerville",
+    "total": 8,
+    "lat": 32.7578,
+    "lng": -87.7402,
+    "zips": "36776"
+  },
+  {
+    "name": "Weogufka",
+    "total": 8,
+    "lat": 33.0238,
+    "lng": -86.3042,
+    "zips": "35183"
+  },
+  {
+    "name": "Addison",
+    "total": 7,
+    "lat": 34.2056,
+    "lng": -87.1948,
+    "zips": "35540"
+  },
+  {
+    "name": "Kansas",
+    "total": 7,
+    "lat": 33.9018,
+    "lng": -87.552,
+    "zips": "35573"
+  },
+  {
+    "name": "Altoona",
+    "total": 7,
+    "lat": 34.071,
+    "lng": -86.2096,
+    "zips": "35952"
+  },
+  {
+    "name": "Cook Springs",
+    "total": 6,
+    "lat": 33.5895,
+    "lng": -86.3923,
+    "zips": "35052"
+  },
+  {
+    "name": "Hackleburg",
+    "total": 6,
+    "lat": 34.2678,
+    "lng": -87.8608,
+    "zips": "35564"
+  },
+  {
+    "name": "Ethelsville",
+    "total": 6,
+    "lat": 33.4157,
+    "lng": -88.2167,
+    "zips": "35461"
+  },
+  {
+    "name": "Gallant",
+    "total": 6,
+    "lat": 33.9976,
+    "lng": -86.2346,
+    "zips": "35972"
+  },
+  {
+    "name": "Buhl",
+    "total": 5,
+    "lat": 33.2306,
+    "lng": -87.7547,
+    "zips": "35446"
+  },
+  {
+    "name": "Coaling",
+    "total": 5,
+    "lat": 33.1359,
+    "lng": -87.3384,
+    "zips": "35449"
+  },
+  {
+    "name": "Samantha",
+    "total": 5,
+    "lat": 33.3066,
+    "lng": -87.4532,
+    "zips": "35482"
+  },
+  {
+    "name": "Quinton",
+    "total": 5,
+    "lat": 33.6561,
+    "lng": -87.1007,
+    "zips": "35130"
+  },
+  {
+    "name": "Goodsprings",
+    "total": 4,
+    "lat": 33.6795,
+    "lng": -87.2374,
+    "zips": "35560"
+  },
+  {
+    "name": "Boligee",
+    "total": 4,
+    "lat": 32.7746,
+    "lng": -88.0267,
+    "zips": "35443"
+  },
+  {
+    "name": "Rockford",
+    "total": 3,
+    "lat": 32.878,
+    "lng": -86.24,
+    "zips": "35136"
+  },
+  {
+    "name": "De Armanville",
+    "total": 2,
+    "lat": 33.7622,
+    "lng": -85.8378,
+    "zips": "36257"
+  },
+  {
+    "name": "Newbern",
+    "total": 2,
+    "lat": 32.5515,
+    "lng": -87.5615,
+    "zips": "36765"
+  },
+  {
+    "name": "Houston",
+    "total": 2,
+    "lat": 34.118,
+    "lng": -87.2618,
+    "zips": "35572"
+  },
+  {
+    "name": "Eldridge",
+    "total": 2,
+    "lat": 33.9315,
+    "lng": -87.6194,
+    "zips": "35554"
+  },
+  {
+    "name": "Natural Bridge",
+    "total": 1,
+    "lat": 34.0934,
+    "lng": -87.6008,
+    "zips": "35577"
+  },
+  {
+    "name": "Walnut Grove",
+    "total": 1,
+    "lat": 34.0657,
+    "lng": -86.3064,
+    "zips": "35990"
+  },
+  {
+    "name": "Townley",
+    "total": 1,
+    "lat": 33.847,
+    "lng": -87.4372,
+    "zips": "35587"
+  },
+  {
+    "name": "Lawley",
+    "total": 1,
+    "lat": 32.8646,
+    "lng": -86.9567,
+    "zips": "36793"
+  },
+  {
+    "name": "Detroit",
+    "total": 1,
+    "lat": 34.0282,
+    "lng": -88.17,
+    "zips": "35552"
+  },
+  {
+    "name": "Choccolocco",
+    "total": 1,
+    "lat": 33.6573,
+    "lng": -85.6991,
+    "zips": "36254"
+  },
+  {
+    "name": "Gaylesville",
+    "total": 1,
+    "lat": 34.3573,
+    "lng": -85.5589,
+    "zips": "35973"
+  }
+];
+const mapConfig = {center: [33.4975, -86.8676], zoom: 8};
+const zipData = [
+  {
+    "zip": "35242",
+    "total": 18205,
+    "lat": 33.3813,
+    "lng": -86.7046,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35259",
+    "total": 16831,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35244",
+    "total": 11515,
+    "lat": 33.3538,
+    "lng": -86.8254,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35215",
+    "total": 9674,
+    "lat": 33.6493,
+    "lng": -86.7057,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35216",
+    "total": 9043,
+    "lat": 33.4188,
+    "lng": -86.7867,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35208",
+    "total": 7448,
+    "lat": 33.4977,
+    "lng": -86.8799,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35209",
+    "total": 6464,
+    "lat": 33.4653,
+    "lng": -86.8082,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35243",
+    "total": 5975,
+    "lat": 33.4459,
+    "lng": -86.7502,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35173",
+    "total": 5431,
+    "lat": 33.6339,
+    "lng": -86.5981,
+    "city": "Trussville",
+    "state": "AL"
+  },
+  {
+    "zip": "35124",
+    "total": 5140,
+    "lat": 33.2932,
+    "lng": -86.768,
+    "city": "Pelham",
+    "state": "AL"
+  },
+  {
+    "zip": "35213",
+    "total": 4827,
+    "lat": 33.5066,
+    "lng": -86.7428,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35405",
+    "total": 4179,
+    "lat": 33.1617,
+    "lng": -87.5144,
+    "city": "Tuscaloosa",
+    "state": "AL"
+  },
+  {
+    "zip": "35040",
+    "total": 4007,
+    "lat": 33.1098,
+    "lng": -86.756,
+    "city": "Calera",
+    "state": "AL"
+  },
+  {
+    "zip": "35226",
+    "total": 3739,
+    "lat": 33.3967,
+    "lng": -86.8346,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35022",
+    "total": 3251,
+    "lat": 33.3224,
+    "lng": -86.9657,
+    "city": "Bessemer",
+    "state": "AL"
+  },
+  {
+    "zip": "35120",
+    "total": 3250,
+    "lat": 33.6756,
+    "lng": -86.409,
+    "city": "Odenville",
+    "state": "AL"
+  },
+  {
+    "zip": "35235",
+    "total": 3183,
+    "lat": 33.6328,
+    "lng": -86.6493,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35043",
+    "total": 3056,
+    "lat": 33.2982,
+    "lng": -86.6563,
+    "city": "Chelsea",
+    "state": "AL"
+  },
+  {
+    "zip": "35210",
+    "total": 2768,
+    "lat": 33.5452,
+    "lng": -86.6655,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35007",
+    "total": 2691,
+    "lat": 33.1934,
+    "lng": -86.7944,
+    "city": "Alabaster",
+    "state": "AL"
+  },
+  {
+    "zip": "35401",
+    "total": 2420,
+    "lat": 33.1969,
+    "lng": -87.5627,
+    "city": "Tuscaloosa",
+    "state": "AL"
+  },
+  {
+    "zip": "35406",
+    "total": 2398,
+    "lat": 33.2722,
+    "lng": -87.536,
+    "city": "Tuscaloosa",
+    "state": "AL"
+  },
+  {
+    "zip": "35223",
+    "total": 2188,
+    "lat": 33.4995,
+    "lng": -86.7268,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35260",
+    "total": 2072,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35473",
+    "total": 2004,
+    "lat": 33.2723,
+    "lng": -87.5825,
+    "city": "Northport",
+    "state": "AL"
+  },
+  {
+    "zip": "35205",
+    "total": 1992,
+    "lat": 33.4951,
+    "lng": -86.8059,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35080",
+    "total": 1968,
+    "lat": 33.2663,
+    "lng": -86.902,
+    "city": "Helena",
+    "state": "AL"
+  },
+  {
+    "zip": "35126",
+    "total": 1967,
+    "lat": 33.7299,
+    "lng": -86.6451,
+    "city": "Pinson",
+    "state": "AL"
+  },
+  {
+    "zip": "35233",
+    "total": 1875,
+    "lat": 33.5062,
+    "lng": -86.8003,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35111",
+    "total": 1855,
+    "lat": 33.2845,
+    "lng": -87.1024,
+    "city": "Mc Calla",
+    "state": "AL"
+  },
+  {
+    "zip": "35020",
+    "total": 1834,
+    "lat": 33.409,
+    "lng": -86.9475,
+    "city": "Bessemer",
+    "state": "AL"
+  },
+  {
+    "zip": "35055",
+    "total": 1815,
+    "lat": 34.1761,
+    "lng": -86.8298,
+    "city": "Cullman",
+    "state": "AL"
+  },
+  {
+    "zip": "35404",
+    "total": 1801,
+    "lat": 33.1826,
+    "lng": -87.4827,
+    "city": "Tuscaloosa",
+    "state": "AL"
+  },
+  {
+    "zip": "35160",
+    "total": 1713,
+    "lat": 33.4354,
+    "lng": -86.1134,
+    "city": "Talladega",
+    "state": "AL"
+  },
+  {
+    "zip": "35212",
+    "total": 1690,
+    "lat": 33.5409,
+    "lng": -86.7495,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35180",
+    "total": 1645,
+    "lat": 33.8529,
+    "lng": -86.8198,
+    "city": "Warrior",
+    "state": "AL"
+  },
+  {
+    "zip": "36203",
+    "total": 1615,
+    "lat": 33.5815,
+    "lng": -85.8328,
+    "city": "Oxford",
+    "state": "AL"
+  },
+  {
+    "zip": "35115",
+    "total": 1610,
+    "lat": 33.1248,
+    "lng": -86.8622,
+    "city": "Montevallo",
+    "state": "AL"
+  },
+  {
+    "zip": "35150",
+    "total": 1529,
+    "lat": 33.1717,
+    "lng": -86.2713,
+    "city": "Sylacauga",
+    "state": "AL"
+  },
+  {
+    "zip": "36201",
+    "total": 1437,
+    "lat": 33.6539,
+    "lng": -85.8382,
+    "city": "Anniston",
+    "state": "AL"
+  },
+  {
+    "zip": "35023",
+    "total": 1413,
+    "lat": 33.468,
+    "lng": -87.0924,
+    "city": "Bessemer",
+    "state": "AL"
+  },
+  {
+    "zip": "35475",
+    "total": 1397,
+    "lat": 33.3992,
+    "lng": -87.5599,
+    "city": "Northport",
+    "state": "AL"
+  },
+  {
+    "zip": "35222",
+    "total": 1376,
+    "lat": 33.5219,
+    "lng": -86.7666,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35901",
+    "total": 1314,
+    "lat": 34.048,
+    "lng": -85.9246,
+    "city": "Gadsden",
+    "state": "AL"
+  },
+  {
+    "zip": "35211",
+    "total": 1292,
+    "lat": 33.4816,
+    "lng": -86.859,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35146",
+    "total": 1213,
+    "lat": 33.7386,
+    "lng": -86.4394,
+    "city": "Springville",
+    "state": "AL"
+  },
+  {
+    "zip": "35004",
+    "total": 1187,
+    "lat": 33.6035,
+    "lng": -86.4668,
+    "city": "Moody",
+    "state": "AL"
+  },
+  {
+    "zip": "35204",
+    "total": 1171,
+    "lat": 33.5179,
+    "lng": -86.8372,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "36207",
+    "total": 1152,
+    "lat": 33.6803,
+    "lng": -85.7137,
+    "city": "Anniston",
+    "state": "AL"
+  },
+  {
+    "zip": "35407",
+    "total": 1126,
+    "lat": 33.3066,
+    "lng": -87.4532,
+    "city": "Tuscaloosa",
+    "state": "AL"
+  },
+  {
+    "zip": "35207",
+    "total": 1122,
+    "lat": 33.5594,
+    "lng": -86.8153,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35128",
+    "total": 1075,
+    "lat": 33.5873,
+    "lng": -86.3366,
+    "city": "Pell City",
+    "state": "AL"
+  },
+  {
+    "zip": "36265",
+    "total": 1065,
+    "lat": 33.831,
+    "lng": -85.7752,
+    "city": "Jacksonville",
+    "state": "AL"
+  },
+  {
+    "zip": "35234",
+    "total": 1059,
+    "lat": 33.5378,
+    "lng": -86.8068,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35071",
+    "total": 1057,
+    "lat": 33.7189,
+    "lng": -86.8225,
+    "city": "Gardendale",
+    "state": "AL"
+  },
+  {
+    "zip": "35127",
+    "total": 1014,
+    "lat": 33.4883,
+    "lng": -86.9766,
+    "city": "Pleasant Grove",
+    "state": "AL"
+  },
+  {
+    "zip": "35203",
+    "total": 993,
+    "lat": 33.521,
+    "lng": -86.8066,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35214",
+    "total": 989,
+    "lat": 33.5554,
+    "lng": -86.887,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35094",
+    "total": 945,
+    "lat": 33.5283,
+    "lng": -86.5748,
+    "city": "Leeds",
+    "state": "AL"
+  },
+  {
+    "zip": "35114",
+    "total": 923,
+    "lat": 33.2317,
+    "lng": -86.8727,
+    "city": "Maylene",
+    "state": "AL"
+  },
+  {
+    "zip": "35056",
+    "total": 900,
+    "lat": 34.1748,
+    "lng": -86.8436,
+    "city": "Cullman",
+    "state": "AL"
+  },
+  {
+    "zip": "35486",
+    "total": 896,
+    "lat": 33.2098,
+    "lng": -87.5692,
+    "city": "Tuscaloosa",
+    "state": "AL"
+  },
+  {
+    "zip": "35231",
+    "total": 847,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35045",
+    "total": 841,
+    "lat": 32.8355,
+    "lng": -86.6425,
+    "city": "Clanton",
+    "state": "AL"
+  },
+  {
+    "zip": "35255",
+    "total": 817,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35125",
+    "total": 781,
+    "lat": 33.5979,
+    "lng": -86.3432,
+    "city": "Pell City",
+    "state": "AL"
+  },
+  {
+    "zip": "35261",
+    "total": 730,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35504",
+    "total": 656,
+    "lat": 33.8927,
+    "lng": -87.1667,
+    "city": "Jasper",
+    "state": "AL"
+  },
+  {
+    "zip": "35217",
+    "total": 653,
+    "lat": 33.5887,
+    "lng": -86.765,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35057",
+    "total": 640,
+    "lat": 34.0878,
+    "lng": -86.9447,
+    "city": "Cullman",
+    "state": "AL"
+  },
+  {
+    "zip": "35005",
+    "total": 635,
+    "lat": 33.5884,
+    "lng": -86.9597,
+    "city": "Adamsville",
+    "state": "AL"
+  },
+  {
+    "zip": "35906",
+    "total": 625,
+    "lat": 33.9318,
+    "lng": -86.0898,
+    "city": "Rainbow City",
+    "state": "AL"
+  },
+  {
+    "zip": "35903",
+    "total": 619,
+    "lat": 33.9845,
+    "lng": -85.9077,
+    "city": "Gadsden",
+    "state": "AL"
+  },
+  {
+    "zip": "35294",
+    "total": 616,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35570",
+    "total": 612,
+    "lat": 34.1534,
+    "lng": -88.0085,
+    "city": "Hamilton",
+    "state": "AL"
+  },
+  {
+    "zip": "35144",
+    "total": 610,
+    "lat": 33.2293,
+    "lng": -86.825,
+    "city": "Siluria",
+    "state": "AL"
+  },
+  {
+    "zip": "35091",
+    "total": 604,
+    "lat": 33.7684,
+    "lng": -86.8084,
+    "city": "Kimberly",
+    "state": "AL"
+  },
+  {
+    "zip": "35218",
+    "total": 596,
+    "lat": 33.506,
+    "lng": -86.893,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35206",
+    "total": 594,
+    "lat": 33.5678,
+    "lng": -86.7199,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35044",
+    "total": 590,
+    "lat": 33.2459,
+    "lng": -86.3641,
+    "city": "Childersburg",
+    "state": "AL"
+  },
+  {
+    "zip": "35487",
+    "total": 586,
+    "lat": 33.3072,
+    "lng": -87.5859,
+    "city": "Tuscaloosa",
+    "state": "AL"
+  },
+  {
+    "zip": "36206",
+    "total": 586,
+    "lat": 33.7191,
+    "lng": -85.8389,
+    "city": "Anniston",
+    "state": "AL"
+  },
+  {
+    "zip": "35298",
+    "total": 579,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35161",
+    "total": 577,
+    "lat": 33.4202,
+    "lng": -86.1028,
+    "city": "Talladega",
+    "state": "AL"
+  },
+  {
+    "zip": "35058",
+    "total": 556,
+    "lat": 34.2098,
+    "lng": -86.752,
+    "city": "Cullman",
+    "state": "AL"
+  },
+  {
+    "zip": "35068",
+    "total": 537,
+    "lat": 33.6017,
+    "lng": -86.8265,
+    "city": "Fultondale",
+    "state": "AL"
+  },
+  {
+    "zip": "35594",
+    "total": 533,
+    "lat": 33.9303,
+    "lng": -87.7972,
+    "city": "Winfield",
+    "state": "AL"
+  },
+  {
+    "zip": "35907",
+    "total": 513,
+    "lat": 33.8979,
+    "lng": -86.0245,
+    "city": "Gadsden",
+    "state": "AL"
+  },
+  {
+    "zip": "35014",
+    "total": 501,
+    "lat": 33.404,
+    "lng": -86.2339,
+    "city": "Alpine",
+    "state": "AL"
+  },
+  {
+    "zip": "35062",
+    "total": 472,
+    "lat": 33.7357,
+    "lng": -87.0546,
+    "city": "Dora",
+    "state": "AL"
+  },
+  {
+    "zip": "35096",
+    "total": 445,
+    "lat": 33.6059,
+    "lng": -86.1112,
+    "city": "Lincoln",
+    "state": "AL"
+  },
+  {
+    "zip": "35228",
+    "total": 442,
+    "lat": 33.4558,
+    "lng": -86.9118,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35121",
+    "total": 411,
+    "lat": 33.9259,
+    "lng": -86.4741,
+    "city": "Oneonta",
+    "state": "AL"
+  },
+  {
+    "zip": "35186",
+    "total": 399,
+    "lat": 33.2293,
+    "lng": -86.5299,
+    "city": "Wilsonville",
+    "state": "AL"
+  },
+  {
+    "zip": "35051",
+    "total": 378,
+    "lat": 33.177,
+    "lng": -86.6161,
+    "city": "Columbiana",
+    "state": "AL"
+  },
+  {
+    "zip": "35054",
+    "total": 363,
+    "lat": 33.5296,
+    "lng": -86.3007,
+    "city": "Cropwell",
+    "state": "AL"
+  },
+  {
+    "zip": "35444",
+    "total": 348,
+    "lat": 33.2775,
+    "lng": -87.309,
+    "city": "Brookwood",
+    "state": "AL"
+  },
+  {
+    "zip": "35079",
+    "total": 341,
+    "lat": 33.9534,
+    "lng": -86.7455,
+    "city": "Hayden",
+    "state": "AL"
+  },
+  {
+    "zip": "35476",
+    "total": 319,
+    "lat": 33.2273,
+    "lng": -87.5943,
+    "city": "Northport",
+    "state": "AL"
+  },
+  {
+    "zip": "35453",
+    "total": 318,
+    "lat": 33.1767,
+    "lng": -87.3871,
+    "city": "Cottondale",
+    "state": "AL"
+  },
+  {
+    "zip": "35501",
+    "total": 318,
+    "lat": 33.8312,
+    "lng": -87.2775,
+    "city": "Jasper",
+    "state": "AL"
+  },
+  {
+    "zip": "35201",
+    "total": 309,
+    "lat": 33.5207,
+    "lng": -86.8025,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35224",
+    "total": 295,
+    "lat": 33.5191,
+    "lng": -86.9342,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35905",
+    "total": 292,
+    "lat": 33.9352,
+    "lng": -85.9576,
+    "city": "Gadsden",
+    "state": "AL"
+  },
+  {
+    "zip": "35078",
+    "total": 288,
+    "lat": 33.3234,
+    "lng": -86.4424,
+    "city": "Harpersville",
+    "state": "AL"
+  },
+  {
+    "zip": "35904",
+    "total": 275,
+    "lat": 34.0217,
+    "lng": -86.0495,
+    "city": "Gadsden",
+    "state": "AL"
+  },
+  {
+    "zip": "35960",
+    "total": 270,
+    "lat": 34.1116,
+    "lng": -85.6092,
+    "city": "Centre",
+    "state": "AL"
+  },
+  {
+    "zip": "35502",
+    "total": 269,
+    "lat": 33.8312,
+    "lng": -87.2775,
+    "city": "Jasper",
+    "state": "AL"
+  },
+  {
+    "zip": "35187",
+    "total": 264,
+    "lat": 33.081,
+    "lng": -86.8793,
+    "city": "Wilton",
+    "state": "AL"
+  },
+  {
+    "zip": "35221",
+    "total": 254,
+    "lat": 33.4523,
+    "lng": -86.8935,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35077",
+    "total": 247,
+    "lat": 34.0516,
+    "lng": -86.7848,
+    "city": "Hanceville",
+    "state": "AL"
+  },
+  {
+    "zip": "35954",
+    "total": 244,
+    "lat": 34.0296,
+    "lng": -86.0967,
+    "city": "Attalla",
+    "state": "AL"
+  },
+  {
+    "zip": "35285",
+    "total": 237,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35236",
+    "total": 235,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35119",
+    "total": 233,
+    "lat": 33.649,
+    "lng": -86.7686,
+    "city": "New Castle",
+    "state": "AL"
+  },
+  {
+    "zip": "35148",
+    "total": 233,
+    "lat": 33.768,
+    "lng": -87.0445,
+    "city": "Sumiton",
+    "state": "AL"
+  },
+  {
+    "zip": "35490",
+    "total": 230,
+    "lat": 33.175,
+    "lng": -87.2574,
+    "city": "Vance",
+    "state": "AL"
+  },
+  {
+    "zip": "36272",
+    "total": 228,
+    "lat": 33.8389,
+    "lng": -85.646,
+    "city": "Piedmont",
+    "state": "AL"
+  },
+  {
+    "zip": "35266",
+    "total": 209,
+    "lat": 33.3729,
+    "lng": -86.8531,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35064",
+    "total": 207,
+    "lat": 33.4735,
+    "lng": -86.9183,
+    "city": "Fairfield",
+    "state": "AL"
+  },
+  {
+    "zip": "35117",
+    "total": 201,
+    "lat": 33.6768,
+    "lng": -86.8717,
+    "city": "Mount Olive",
+    "state": "AL"
+  },
+  {
+    "zip": "35403",
+    "total": 199,
+    "lat": 33.2045,
+    "lng": -87.527,
+    "city": "Tuscaloosa",
+    "state": "AL"
+  },
+  {
+    "zip": "35474",
+    "total": 192,
+    "lat": 32.9108,
+    "lng": -87.5935,
+    "city": "Moundville",
+    "state": "AL"
+  },
+  {
+    "zip": "35555",
+    "total": 176,
+    "lat": 33.6974,
+    "lng": -87.8346,
+    "city": "Fayette",
+    "state": "AL"
+  },
+  {
+    "zip": "35953",
+    "total": 174,
+    "lat": 33.8374,
+    "lng": -86.2552,
+    "city": "Ashville",
+    "state": "AL"
+  },
+  {
+    "zip": "35237",
+    "total": 170,
+    "lat": 33.5207,
+    "lng": -86.8025,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "36268",
+    "total": 164,
+    "lat": 33.541,
+    "lng": -85.9363,
+    "city": "Munford",
+    "state": "AL"
+  },
+  {
+    "zip": "35171",
+    "total": 160,
+    "lat": 32.9157,
+    "lng": -86.7158,
+    "city": "Thorsby",
+    "state": "AL"
+  },
+  {
+    "zip": "35296",
+    "total": 153,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35253",
+    "total": 150,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35085",
+    "total": 148,
+    "lat": 32.9805,
+    "lng": -86.7181,
+    "city": "Jemison",
+    "state": "AL"
+  },
+  {
+    "zip": "35565",
+    "total": 144,
+    "lat": 34.2314,
+    "lng": -87.5938,
+    "city": "Haleyville",
+    "state": "AL"
+  },
+  {
+    "zip": "35135",
+    "total": 140,
+    "lat": 33.6166,
+    "lng": -86.1996,
+    "city": "Riverside",
+    "state": "AL"
+  },
+  {
+    "zip": "36251",
+    "total": 140,
+    "lat": 33.2474,
+    "lng": -85.829,
+    "city": "Ashland",
+    "state": "AL"
+  },
+  {
+    "zip": "36271",
+    "total": 135,
+    "lat": 33.7788,
+    "lng": -86.0254,
+    "city": "Ohatchee",
+    "state": "AL"
+  },
+  {
+    "zip": "35503",
+    "total": 134,
+    "lat": 33.9152,
+    "lng": -87.3074,
+    "city": "Jasper",
+    "state": "AL"
+  },
+  {
+    "zip": "35053",
+    "total": 128,
+    "lat": 34.0821,
+    "lng": -87.0484,
+    "city": "Crane Hill",
+    "state": "AL"
+  },
+  {
+    "zip": "35956",
+    "total": 127,
+    "lat": 34.1437,
+    "lng": -86.148,
+    "city": "Boaz",
+    "state": "AL"
+  },
+  {
+    "zip": "35116",
+    "total": 125,
+    "lat": 33.7392,
+    "lng": -86.7726,
+    "city": "Morris",
+    "state": "AL"
+  },
+  {
+    "zip": "35147",
+    "total": 124,
+    "lat": 33.4461,
+    "lng": -86.4917,
+    "city": "Sterrett",
+    "state": "AL"
+  },
+  {
+    "zip": "35456",
+    "total": 123,
+    "lat": 33.0618,
+    "lng": -87.4422,
+    "city": "Duncanville",
+    "state": "AL"
+  },
+  {
+    "zip": "36279",
+    "total": 123,
+    "lat": 33.8226,
+    "lng": -85.8927,
+    "city": "Wellington",
+    "state": "AL"
+  },
+  {
+    "zip": "35541",
+    "total": 121,
+    "lat": 34.0632,
+    "lng": -87.1828,
+    "city": "Arley",
+    "state": "AL"
+  },
+  {
+    "zip": "36250",
+    "total": 119,
+    "lat": 33.7808,
+    "lng": -85.8924,
+    "city": "Alexandria",
+    "state": "AL"
+  },
+  {
+    "zip": "35184",
+    "total": 112,
+    "lat": 33.1424,
+    "lng": -87.1369,
+    "city": "West Blocton",
+    "state": "AL"
+  },
+  {
+    "zip": "36277",
+    "total": 112,
+    "lat": 33.7563,
+    "lng": -85.8107,
+    "city": "Weaver",
+    "state": "AL"
+  },
+  {
+    "zip": "35131",
+    "total": 109,
+    "lat": 33.7367,
+    "lng": -86.1619,
+    "city": "Ragland",
+    "state": "AL"
+  },
+  {
+    "zip": "35151",
+    "total": 109,
+    "lat": 33.1756,
+    "lng": -86.3574,
+    "city": "Sylacauga",
+    "state": "AL"
+  },
+  {
+    "zip": "35038",
+    "total": 108,
+    "lat": 33.7079,
+    "lng": -87.0875,
+    "city": "Burnwell",
+    "state": "AL"
+  },
+  {
+    "zip": "35902",
+    "total": 106,
+    "lat": 34.0143,
+    "lng": -86.0066,
+    "city": "Gadsden",
+    "state": "AL"
+  },
+  {
+    "zip": "35481",
+    "total": 105,
+    "lat": 33.3959,
+    "lng": -88.0203,
+    "city": "Reform",
+    "state": "AL"
+  },
+  {
+    "zip": "35178",
+    "total": 100,
+    "lat": 33.401,
+    "lng": -86.3994,
+    "city": "Vincent",
+    "state": "AL"
+  },
+  {
+    "zip": "36204",
+    "total": 99,
+    "lat": 33.7622,
+    "lng": -85.8378,
+    "city": "Anniston",
+    "state": "AL"
+  },
+  {
+    "zip": "36253",
+    "total": 98,
+    "lat": 33.7622,
+    "lng": -85.8378,
+    "city": "Bynum",
+    "state": "AL"
+  },
+  {
+    "zip": "35550",
+    "total": 95,
+    "lat": 33.768,
+    "lng": -87.1841,
+    "city": "Cordova",
+    "state": "AL"
+  },
+  {
+    "zip": "35270",
+    "total": 91,
+    "lat": 33.5206,
+    "lng": -86.8025,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35033",
+    "total": 90,
+    "lat": 33.9737,
+    "lng": -87.0043,
+    "city": "Bremen",
+    "state": "AL"
+  },
+  {
+    "zip": "35061",
+    "total": 89,
+    "lat": 33.4654,
+    "lng": -86.9564,
+    "city": "Dolomite",
+    "state": "AL"
+  },
+  {
+    "zip": "35049",
+    "total": 84,
+    "lat": 33.9778,
+    "lng": -86.5598,
+    "city": "Cleveland",
+    "state": "AL"
+  },
+  {
+    "zip": "35172",
+    "total": 81,
+    "lat": 33.819,
+    "lng": -86.7434,
+    "city": "Trafford",
+    "state": "AL"
+  },
+  {
+    "zip": "35188",
+    "total": 80,
+    "lat": 33.2068,
+    "lng": -87.15,
+    "city": "Woodstock",
+    "state": "AL"
+  },
+  {
+    "zip": "35442",
+    "total": 80,
+    "lat": 33.1228,
+    "lng": -88.1667,
+    "city": "Aliceville",
+    "state": "AL"
+  },
+  {
+    "zip": "35580",
+    "total": 80,
+    "lat": 33.7213,
+    "lng": -87.2658,
+    "city": "Parrish",
+    "state": "AL"
+  },
+  {
+    "zip": "35179",
+    "total": 74,
+    "lat": 34.2621,
+    "lng": -86.9125,
+    "city": "Vinemont",
+    "state": "AL"
+  },
+  {
+    "zip": "36740",
+    "total": 73,
+    "lat": 32.6108,
+    "lng": -87.8441,
+    "city": "Forkland",
+    "state": "AL"
+  },
+  {
+    "zip": "36205",
+    "total": 72,
+    "lat": 33.7358,
+    "lng": -85.7933,
+    "city": "Anniston",
+    "state": "AL"
+  },
+  {
+    "zip": "35031",
+    "total": 71,
+    "lat": 34.0929,
+    "lng": -86.5686,
+    "city": "Blountsville",
+    "state": "AL"
+  },
+  {
+    "zip": "35452",
+    "total": 71,
+    "lat": 33.2934,
+    "lng": -87.6888,
+    "city": "Coker",
+    "state": "AL"
+  },
+  {
+    "zip": "35143",
+    "total": 70,
+    "lat": 33.0785,
+    "lng": -86.5536,
+    "city": "Shelby",
+    "state": "AL"
+  },
+  {
+    "zip": "35983",
+    "total": 69,
+    "lat": 34.1911,
+    "lng": -85.7705,
+    "city": "Leesburg",
+    "state": "AL"
+  },
+  {
+    "zip": "36026",
+    "total": 68,
+    "lat": 32.8139,
+    "lng": -86.1051,
+    "city": "Equality",
+    "state": "AL"
+  },
+  {
+    "zip": "36266",
+    "total": 66,
+    "lat": 33.3286,
+    "lng": -85.7346,
+    "city": "Lineville",
+    "state": "AL"
+  },
+  {
+    "zip": "36091",
+    "total": 64,
+    "lat": 32.7499,
+    "lng": -86.5114,
+    "city": "Verbena",
+    "state": "AL"
+  },
+  {
+    "zip": "35466",
+    "total": 61,
+    "lat": 33.3469,
+    "lng": -87.9005,
+    "city": "Gordo",
+    "state": "AL"
+  },
+  {
+    "zip": "35118",
+    "total": 58,
+    "lat": 33.5363,
+    "lng": -87.051,
+    "city": "Mulga",
+    "state": "AL"
+  },
+  {
+    "zip": "35462",
+    "total": 56,
+    "lat": 32.8889,
+    "lng": -87.9303,
+    "city": "Eutaw",
+    "state": "AL"
+  },
+  {
+    "zip": "35073",
+    "total": 52,
+    "lat": 33.6539,
+    "lng": -86.9803,
+    "city": "Graysville",
+    "state": "AL"
+  },
+  {
+    "zip": "35006",
+    "total": 50,
+    "lat": 33.4343,
+    "lng": -87.1675,
+    "city": "Adger",
+    "state": "AL"
+  },
+  {
+    "zip": "35551",
+    "total": 50,
+    "lat": 34.1701,
+    "lng": -87.6059,
+    "city": "Delmar",
+    "state": "AL"
+  },
+  {
+    "zip": "35987",
+    "total": 50,
+    "lat": 33.9417,
+    "lng": -86.2289,
+    "city": "Steele",
+    "state": "AL"
+  },
+  {
+    "zip": "36744",
+    "total": 49,
+    "lat": 32.7167,
+    "lng": -87.5905,
+    "city": "Greensboro",
+    "state": "AL"
+  },
+  {
+    "zip": "35447",
+    "total": 47,
+    "lat": 33.2485,
+    "lng": -88.1321,
+    "city": "Carrollton",
+    "state": "AL"
+  },
+  {
+    "zip": "35112",
+    "total": 44,
+    "lat": 33.6862,
+    "lng": -86.475,
+    "city": "Margaret",
+    "state": "AL"
+  },
+  {
+    "zip": "36260",
+    "total": 44,
+    "lat": 33.6031,
+    "lng": -85.9608,
+    "city": "Eastaboga",
+    "state": "AL"
+  },
+  {
+    "zip": "35142",
+    "total": 43,
+    "lat": 33.4069,
+    "lng": -86.8735,
+    "city": "Shannon",
+    "state": "AL"
+  },
+  {
+    "zip": "35176",
+    "total": 43,
+    "lat": 33.4807,
+    "lng": -86.5013,
+    "city": "Vandiver",
+    "state": "AL"
+  },
+  {
+    "zip": "35042",
+    "total": 42,
+    "lat": 32.9503,
+    "lng": -87.1192,
+    "city": "Centreville",
+    "state": "AL"
+  },
+  {
+    "zip": "35185",
+    "total": 41,
+    "lat": 33.3356,
+    "lng": -86.5437,
+    "city": "Westover",
+    "state": "AL"
+  },
+  {
+    "zip": "35032",
+    "total": 40,
+    "lat": 33.2649,
+    "lng": -86.3364,
+    "city": "Bon Air",
+    "state": "AL"
+  },
+  {
+    "zip": "35082",
+    "total": 40,
+    "lat": 33.1162,
+    "lng": -86.1386,
+    "city": "Hollins",
+    "state": "AL"
+  },
+  {
+    "zip": "35070",
+    "total": 39,
+    "lat": 34.0058,
+    "lng": -86.7499,
+    "city": "Garden City",
+    "state": "AL"
+  },
+  {
+    "zip": "35543",
+    "total": 38,
+    "lat": 34.1649,
+    "lng": -87.7396,
+    "city": "Bear Creek",
+    "state": "AL"
+  },
+  {
+    "zip": "35046",
+    "total": 37,
+    "lat": 32.9229,
+    "lng": -86.545,
+    "city": "Clanton",
+    "state": "AL"
+  },
+  {
+    "zip": "36275",
+    "total": 37,
+    "lat": 33.9778,
+    "lng": -85.5521,
+    "city": "Spring Garden",
+    "state": "AL"
+  },
+  {
+    "zip": "36750",
+    "total": 37,
+    "lat": 32.8045,
+    "lng": -86.8717,
+    "city": "Maplesville",
+    "state": "AL"
+  },
+  {
+    "zip": "36792",
+    "total": 37,
+    "lat": 32.8888,
+    "lng": -86.907,
+    "city": "Randolph",
+    "state": "AL"
+  },
+  {
+    "zip": "35202",
+    "total": 33,
+    "lat": 33.5207,
+    "lng": -86.8025,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35232",
+    "total": 33,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35463",
+    "total": 30,
+    "lat": 33.0843,
+    "lng": -87.6975,
+    "city": "Fosters",
+    "state": "AL"
+  },
+  {
+    "zip": "35579",
+    "total": 30,
+    "lat": 33.7002,
+    "lng": -87.3686,
+    "city": "Oakman",
+    "state": "AL"
+  },
+  {
+    "zip": "35013",
+    "total": 28,
+    "lat": 33.9222,
+    "lng": -86.4493,
+    "city": "Allgood",
+    "state": "AL"
+  },
+  {
+    "zip": "35133",
+    "total": 27,
+    "lat": 33.8168,
+    "lng": -86.6008,
+    "city": "Remlap",
+    "state": "AL"
+  },
+  {
+    "zip": "35229",
+    "total": 27,
+    "lat": 33.4629,
+    "lng": -86.7904,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35072",
+    "total": 26,
+    "lat": 33.0746,
+    "lng": -86.0781,
+    "city": "Goodwater",
+    "state": "AL"
+  },
+  {
+    "zip": "35089",
+    "total": 25,
+    "lat": 32.9791,
+    "lng": -86.0484,
+    "city": "Kellyton",
+    "state": "AL"
+  },
+  {
+    "zip": "35254",
+    "total": 25,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35480",
+    "total": 24,
+    "lat": 33.1274,
+    "lng": -87.7624,
+    "city": "Ralph",
+    "state": "AL"
+  },
+  {
+    "zip": "35097",
+    "total": 23,
+    "lat": 33.905,
+    "lng": -86.6261,
+    "city": "Locust Fork",
+    "state": "AL"
+  },
+  {
+    "zip": "35048",
+    "total": 22,
+    "lat": 33.7026,
+    "lng": -86.5997,
+    "city": "Clay",
+    "state": "AL"
+  },
+  {
+    "zip": "35959",
+    "total": 22,
+    "lat": 34.2417,
+    "lng": -85.6026,
+    "city": "Cedar Bluff",
+    "state": "AL"
+  },
+  {
+    "zip": "35021",
+    "total": 21,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Bessemer",
+    "state": "AL"
+  },
+  {
+    "zip": "35060",
+    "total": 21,
+    "lat": 33.5589,
+    "lng": -86.9294,
+    "city": "Docena",
+    "state": "AL"
+  },
+  {
+    "zip": "35458",
+    "total": 20,
+    "lat": 33.2562,
+    "lng": -87.7922,
+    "city": "Elrod",
+    "state": "AL"
+  },
+  {
+    "zip": "35575",
+    "total": 20,
+    "lat": 34.053,
+    "lng": -87.5398,
+    "city": "Lynn",
+    "state": "AL"
+  },
+  {
+    "zip": "35035",
+    "total": 19,
+    "lat": 33.0427,
+    "lng": -86.9517,
+    "city": "Brierfield",
+    "state": "AL"
+  },
+  {
+    "zip": "35549",
+    "total": 18,
+    "lat": 33.9093,
+    "lng": -87.5403,
+    "city": "Carbon Hill",
+    "state": "AL"
+  },
+  {
+    "zip": "35402",
+    "total": 17,
+    "lat": 33.3066,
+    "lng": -87.4532,
+    "city": "Tuscaloosa",
+    "state": "AL"
+  },
+  {
+    "zip": "35181",
+    "total": 16,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Watson",
+    "state": "AL"
+  },
+  {
+    "zip": "35293",
+    "total": 16,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35063",
+    "total": 15,
+    "lat": 33.8256,
+    "lng": -87.0161,
+    "city": "Empire",
+    "state": "AL"
+  },
+  {
+    "zip": "35297",
+    "total": 15,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35563",
+    "total": 15,
+    "lat": 33.9676,
+    "lng": -87.9024,
+    "city": "Guin",
+    "state": "AL"
+  },
+  {
+    "zip": "35578",
+    "total": 15,
+    "lat": 33.9299,
+    "lng": -87.4324,
+    "city": "Nauvoo",
+    "state": "AL"
+  },
+  {
+    "zip": "35087",
+    "total": 14,
+    "lat": 34.2837,
+    "lng": -86.5519,
+    "city": "Joppa",
+    "state": "AL"
+  },
+  {
+    "zip": "35553",
+    "total": 14,
+    "lat": 34.1387,
+    "lng": -87.3974,
+    "city": "Double Springs",
+    "state": "AL"
+  },
+  {
+    "zip": "35149",
+    "total": 13,
+    "lat": 33.2512,
+    "lng": -86.2025,
+    "city": "Sycamore",
+    "state": "AL"
+  },
+  {
+    "zip": "35291",
+    "total": 12,
+    "lat": 33.5207,
+    "lng": -86.8025,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "36202",
+    "total": 12,
+    "lat": 33.7622,
+    "lng": -85.8378,
+    "city": "Anniston",
+    "state": "AL"
+  },
+  {
+    "zip": "35015",
+    "total": 11,
+    "lat": 33.5793,
+    "lng": -86.6375,
+    "city": "Alton",
+    "state": "AL"
+  },
+  {
+    "zip": "35083",
+    "total": 10,
+    "lat": 34.1901,
+    "lng": -86.6174,
+    "city": "Holly Pond",
+    "state": "AL"
+  },
+  {
+    "zip": "35469",
+    "total": 10,
+    "lat": 32.9824,
+    "lng": -87.7919,
+    "city": "Knoxville",
+    "state": "AL"
+  },
+  {
+    "zip": "35548",
+    "total": 10,
+    "lat": 34.0377,
+    "lng": -87.7563,
+    "city": "Brilliant",
+    "state": "AL"
+  },
+  {
+    "zip": "35019",
+    "total": 9,
+    "lat": 34.2683,
+    "lng": -86.6213,
+    "city": "Baileyton",
+    "state": "AL"
+  },
+  {
+    "zip": "35074",
+    "total": 9,
+    "lat": 33.2251,
+    "lng": -87.1264,
+    "city": "Green Pond",
+    "state": "AL"
+  },
+  {
+    "zip": "35098",
+    "total": 9,
+    "lat": 34.1377,
+    "lng": -87.0266,
+    "city": "Logan",
+    "state": "AL"
+  },
+  {
+    "zip": "35137",
+    "total": 9,
+    "lat": 33.2063,
+    "lng": -86.7812,
+    "city": "Saginaw",
+    "state": "AL"
+  },
+  {
+    "zip": "35219",
+    "total": 9,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35546",
+    "total": 9,
+    "lat": 33.6945,
+    "lng": -87.6226,
+    "city": "Berry",
+    "state": "AL"
+  },
+  {
+    "zip": "35183",
+    "total": 8,
+    "lat": 33.0238,
+    "lng": -86.3042,
+    "city": "Weogufka",
+    "state": "AL"
+  },
+  {
+    "zip": "35545",
+    "total": 8,
+    "lat": 33.6476,
+    "lng": -87.9314,
+    "city": "Belk",
+    "state": "AL"
+  },
+  {
+    "zip": "36776",
+    "total": 8,
+    "lat": 32.7578,
+    "lng": -87.7402,
+    "city": "Sawyerville",
+    "state": "AL"
+  },
+  {
+    "zip": "35249",
+    "total": 7,
+    "lat": 33.5207,
+    "lng": -86.8025,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35540",
+    "total": 7,
+    "lat": 34.2056,
+    "lng": -87.1948,
+    "city": "Addison",
+    "state": "AL"
+  },
+  {
+    "zip": "35573",
+    "total": 7,
+    "lat": 33.9018,
+    "lng": -87.552,
+    "city": "Kansas",
+    "state": "AL"
+  },
+  {
+    "zip": "35952",
+    "total": 7,
+    "lat": 34.071,
+    "lng": -86.2096,
+    "city": "Altoona",
+    "state": "AL"
+  },
+  {
+    "zip": "35052",
+    "total": 6,
+    "lat": 33.5895,
+    "lng": -86.3923,
+    "city": "Cook Springs",
+    "state": "AL"
+  },
+  {
+    "zip": "35461",
+    "total": 6,
+    "lat": 33.4157,
+    "lng": -88.2167,
+    "city": "Ethelsville",
+    "state": "AL"
+  },
+  {
+    "zip": "35564",
+    "total": 6,
+    "lat": 34.2678,
+    "lng": -87.8608,
+    "city": "Hackleburg",
+    "state": "AL"
+  },
+  {
+    "zip": "35972",
+    "total": 6,
+    "lat": 33.9976,
+    "lng": -86.2346,
+    "city": "Gallant",
+    "state": "AL"
+  },
+  {
+    "zip": "35130",
+    "total": 5,
+    "lat": 33.6561,
+    "lng": -87.1007,
+    "city": "Quinton",
+    "state": "AL"
+  },
+  {
+    "zip": "35283",
+    "total": 5,
+    "lat": 33.5207,
+    "lng": -86.8025,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35290",
+    "total": 5,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35446",
+    "total": 5,
+    "lat": 33.2306,
+    "lng": -87.7547,
+    "city": "Buhl",
+    "state": "AL"
+  },
+  {
+    "zip": "35449",
+    "total": 5,
+    "lat": 33.1359,
+    "lng": -87.3384,
+    "city": "Coaling",
+    "state": "AL"
+  },
+  {
+    "zip": "35482",
+    "total": 5,
+    "lat": 33.3066,
+    "lng": -87.4532,
+    "city": "Samantha",
+    "state": "AL"
+  },
+  {
+    "zip": "35443",
+    "total": 4,
+    "lat": 32.7746,
+    "lng": -88.0267,
+    "city": "Boligee",
+    "state": "AL"
+  },
+  {
+    "zip": "35560",
+    "total": 4,
+    "lat": 33.6795,
+    "lng": -87.2374,
+    "city": "Goodsprings",
+    "state": "AL"
+  },
+  {
+    "zip": "35136",
+    "total": 3,
+    "lat": 32.878,
+    "lng": -86.24,
+    "city": "Rockford",
+    "state": "AL"
+  },
+  {
+    "zip": "35282",
+    "total": 3,
+    "lat": 33.5446,
+    "lng": -86.9292,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35554",
+    "total": 2,
+    "lat": 33.9315,
+    "lng": -87.6194,
+    "city": "Eldridge",
+    "state": "AL"
+  },
+  {
+    "zip": "35572",
+    "total": 2,
+    "lat": 34.118,
+    "lng": -87.2618,
+    "city": "Houston",
+    "state": "AL"
+  },
+  {
+    "zip": "36257",
+    "total": 2,
+    "lat": 33.7622,
+    "lng": -85.8378,
+    "city": "De Armanville",
+    "state": "AL"
+  },
+  {
+    "zip": "36765",
+    "total": 2,
+    "lat": 32.5515,
+    "lng": -87.5615,
+    "city": "Newbern",
+    "state": "AL"
+  },
+  {
+    "zip": "35246",
+    "total": 1,
+    "lat": 33.5207,
+    "lng": -86.8025,
+    "city": "Birmingham",
+    "state": "AL"
+  },
+  {
+    "zip": "35552",
+    "total": 1,
+    "lat": 34.0282,
+    "lng": -88.17,
+    "city": "Detroit",
+    "state": "AL"
+  },
+  {
+    "zip": "35577",
+    "total": 1,
+    "lat": 34.0934,
+    "lng": -87.6008,
+    "city": "Natural Bridge",
+    "state": "AL"
+  },
+  {
+    "zip": "35587",
+    "total": 1,
+    "lat": 33.847,
+    "lng": -87.4372,
+    "city": "Townley",
+    "state": "AL"
+  },
+  {
+    "zip": "35973",
+    "total": 1,
+    "lat": 34.3573,
+    "lng": -85.5589,
+    "city": "Gaylesville",
+    "state": "AL"
+  },
+  {
+    "zip": "35990",
+    "total": 1,
+    "lat": 34.0657,
+    "lng": -86.3064,
+    "city": "Walnut Grove",
+    "state": "AL"
+  },
+  {
+    "zip": "36254",
+    "total": 1,
+    "lat": 33.6573,
+    "lng": -85.6991,
+    "city": "Choccolocco",
+    "state": "AL"
+  },
+  {
+    "zip": "36793",
+    "total": 1,
+    "lat": 32.8646,
+    "lng": -86.9567,
+    "city": "Lawley",
+    "state": "AL"
+  }
+];
+const hitlistZips = [];
+const dealerPin = {"name": "BMW of Tuscaloosa", "address": "4101 Greensboro Ave, Tuscaloosa, AL 35401", "lat": 0, "lng": 0};
+
+const maxTotal = Math.max(...cities.map(c=>c.total));
+const grandTotal = cities.reduce((s,c)=>s+c.total,0);
+document.getElementById('total-num').textContent = grandTotal.toLocaleString();
+
+// Render Top 8 Cities sidebar dynamically
+(function(){
+  const top8 = [...cities].sort((a,b)=>b.total-a.total).slice(0,8);
+  const topMax = top8[0].total;
+  const body = document.getElementById('stats-body');
+  body.innerHTML = top8.map(c=>{
+    const pct = Math.round((c.total/topMax)*100);
+    return `<div class="stat-row"><span class="stat-city">${c.name}</span><span class="stat-num">${c.total.toLocaleString()}</span></div>
+<div class="stat-bar-wrap"><div class="stat-bar" style="width:${pct}%"></div></div>`;
+  }).join('');
+})();
+
+function fmtZips(zips) {
+  if (!zips) return '';
+  const z = zips.split(', ');
+  return 'ZIP: ' + (z.length <= 4 ? zips : z.slice(0,4).join(', ') + ` \u2026 +${z.length-4} more`);
+}
+
+function getRadius(t){
+  const mn=4,mx=52;
+  return mn+(Math.sqrt(t)/Math.sqrt(maxTotal))*(mx-mn);
+}
+
+function getTierStyle(t){
+  if(t>=50000) return {fill:'rgba(55,11,85,0.72)',   stroke:'#370B55'};
+  if(t>=10000) return {fill:'rgba(100,30,150,0.65)', stroke:'#6A1E96'};
+  if(t>= 3000) return {fill:'rgba(129,54,178,0.60)', stroke:'#8136B2'};
+  if(t>= 1000) return {fill:'rgba(171,116,207,0.55)',stroke:'#AB74CF'};
+  if(t>=  300) return {fill:'rgba(217,186,238,0.65)',stroke:'#C8A0E4'};
+  return              {fill:'rgba(240,230,250,0.75)',stroke:'#D9BAEE'};
+}
+
+const map = L.map('map',{center:mapConfig.center,zoom:mapConfig.zoom,zoomControl:false,attributionControl:false});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; <a href="https://carto.com/">CARTO</a>'}).addTo(map);
+L.control.zoom({position:'topright'}).addTo(map);
+
+// City markers are now rendered via renderCityMarkers() into cityLayerGroup
+
+// ── City/ZIP view toggle ────────────────────────────────────────────────────
+let cityLayerGroup = L.layerGroup();
+let zipLayerGroup = L.layerGroup();
+let hitlistLayerGroup = L.layerGroup();
+let dealerLayerGroup = L.layerGroup();
+let currentView = 'city';
+
+// Move city markers into a layer group (re-render)
+function renderCityMarkers() {
+  cityLayerGroup.clearLayers();
+  cities.forEach(c => {
+    const r  = getRadius(c.total);
+    const st = getTierStyle(c.total);
+    const circle = L.circleMarker([c.lat,c.lng],{
+      radius:r, fillColor:st.fill, fillOpacity:1,
+      color:st.stroke, weight:1.5,
+    });
+    circle.bindTooltip(
+      `<div class="tt-city">${c.name}</div>
+       <div class="tt-count">${c.total.toLocaleString()} searches</div>
+       <div class="tt-zips">${fmtZips(c.zips)}</div>`,
+      {className:'cars-tooltip',sticky:true,offset:[10,0]}
+    );
+    cityLayerGroup.addLayer(circle);
+    if(c.total>=2000){
+      const lbl=L.divIcon({
+        html:`<div style="color:#370B55;font-family:Inter,sans-serif;font-size:10px;font-weight:600;white-space:nowrap;text-shadow:0 1px 3px rgba(255,255,255,.95);pointer-events:none;margin-top:${r+3}px;text-align:center;transform:translateX(-50%);">${c.name}</div>`,
+        className:'',iconAnchor:[0,0]
+      });
+      cityLayerGroup.addLayer(L.marker([c.lat,c.lng],{icon:lbl,interactive:false}));
+    }
+  });
+}
+
+function renderZipMarkers() {
+  zipLayerGroup.clearLayers();
+  if (typeof zipData === 'undefined' || !zipData.length) return;
+  const maxZip = Math.max(...zipData.map(z=>z.total));
+  zipData.forEach(z => {
+    const r = 3 + (Math.sqrt(z.total)/Math.sqrt(maxZip)) * 28;
+    const st = getTierStyle(z.total);
+    const isHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.includes(z.zip);
+    const opts = isHitlist
+      ? { radius:r, fillColor:'rgba(232,168,23,0.75)', fillOpacity:1, color:'#B8860B', weight:2.5 }
+      : { radius:r, fillColor:st.fill, fillOpacity:1, color:st.stroke, weight:1.5 };
+    const circle = L.circleMarker([z.lat,z.lng], opts);
+    circle.bindTooltip(
+      `<div class="tt-city">${z.zip}${isHitlist ? ' <span style="color:#B8860B;font-weight:700;">★ HITLIST</span>' : ''}</div>
+       <div class="tt-count">${z.total.toLocaleString()} searches</div>
+       <div class="tt-zips">${z.city}, ${z.state}</div>`,
+      {className:'cars-tooltip',sticky:true,offset:[10,0]}
+    );
+    zipLayerGroup.addLayer(circle);
+    if(z.total >= 1500) {
+      const lbl=L.divIcon({
+        html:`<div style="color:${isHitlist?'#B8860B':'#370B55'};font-family:Inter,sans-serif;font-size:9px;font-weight:600;white-space:nowrap;text-shadow:0 1px 3px rgba(255,255,255,.95);pointer-events:none;margin-top:${r+2}px;text-align:center;transform:translateX(-50%);">${z.zip}</div>`,
+        className:'',iconAnchor:[0,0]
+      });
+      zipLayerGroup.addLayer(L.marker([z.lat,z.lng],{icon:lbl,interactive:false}));
+    }
+  });
+}
+
+function renderDealerPin() {
+  dealerLayerGroup.clearLayers();
+  if (typeof dealerPin === 'undefined' || !dealerPin.lat) return;
+  const star = L.divIcon({
+    html:'<div class="dealer-star">★</div>',
+    className:'',iconSize:[20,20],iconAnchor:[10,10]
+  });
+  const marker = L.marker([dealerPin.lat, dealerPin.lng], {icon:star, zIndexOffset:1000, interactive:true});
+  marker.bindTooltip(
+    `<div class="tt-city">${dealerPin.name || 'Dealer'}</div><div class="tt-zips">${dealerPin.address || ''}</div>`,
+    {className:'cars-tooltip',offset:[12,0]}
+  );
+  dealerLayerGroup.addLayer(marker);
+  document.getElementById('dealer-legend').style.display = 'flex';
+}
+
+function setView(view) {
+  currentView = view;
+  document.getElementById('btn-city').classList.toggle('active', view==='city');
+  document.getElementById('btn-zip').classList.toggle('active', view==='zip');
+  if (view === 'city') {
+    map.removeLayer(zipLayerGroup);
+    map.addLayer(cityLayerGroup);
+  } else {
+    map.removeLayer(cityLayerGroup);
+    if (zipLayerGroup.getLayers().length === 0) renderZipMarkers();
+    map.addLayer(zipLayerGroup);
+  }
+  // Show hitlist legend in ZIP view if hitlist data exists
+  const hl = document.getElementById('hitlist-legend');
+  if (hl) hl.style.display = (view==='zip' && typeof hitlistZips !== 'undefined' && hitlistZips.length) ? 'flex' : 'none';
+}
+
+// Initialize
+renderCityMarkers();
+cityLayerGroup.addTo(map);
+renderDealerPin();
+dealerLayerGroup.addTo(map);
+
+// Tier legend
+const tl=L.control({position:'bottomright'});
+tl.onAdd=function(){
+  const d=L.DomUtil.create('div','panel tier-legend');
+  d.innerHTML=`
+    <h3 style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#8136B2;margin-bottom:10px;border-bottom:2px solid #D9BAEE;padding-bottom:6px;">Volume Tiers</h3>
+    ${[
+      ['rgba(55,11,85,0.72)','#370B55','50,000+'],
+      ['rgba(100,30,150,0.65)','#6A1E96','10,000 – 50,000'],
+      ['rgba(129,54,178,0.60)','#8136B2','3,000 – 10,000'],
+      ['rgba(171,116,207,0.55)','#AB74CF','1,000 – 3,000'],
+      ['rgba(217,186,238,0.65)','#C8A0E4','300 – 1,000'],
+      ['rgba(240,230,250,0.75)','#D9BAEE','< 300'],
+    ].map(([f,s,l])=>`
+      <div class="tier-item">
+        <div class="tier-dot" style="background:${f};border:2px solid ${s};"></div>
+        <span>${l}</span>
+      </div>`).join('')}`;
+  return d;
+};
+tl.addTo(map);
+
+// ── 30-Mile Radius Tool ────────────────────────────────────────────────────────
+const RADIUS_M = 48280; // 30 miles in meters
+const RADIUS_MI = 30;
+let radiusLayers = [];
+let clickModeActive = false;
+
+// Haversine distance in miles between two lat/lng points
+function haversineMi(lat1, lng1, lat2, lng2) {
+  const R = 3958.8;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
+    * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Sum searches and count cities whose centroid falls within RADIUS_MI of (lat, lng)
+function searchesInRadius(lat, lng) {
+  let searches = 0, count = 0;
+  cities.forEach(c => {
+    if (haversineMi(lat, lng, c.lat, c.lng) <= RADIUS_MI) { searches += c.total; count++; }
+  });
+  return { searches, count };
+}
+
+// ZIP-level radius capture — returns detailed list
+function zipsInRadius(lat, lng) {
+  if (typeof zipData === 'undefined' || !zipData.length) return [];
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  return zipData
+    .filter(z => haversineMi(lat, lng, z.lat, z.lng) <= RADIUS_MI)
+    .map(z => ({
+      zip: z.zip, city: z.city, state: z.state, total: z.total,
+      hitlist: hasHitlist && hitlistZips.includes(z.zip),
+      dist: Math.round(haversineMi(lat, lng, z.lat, z.lng) * 10) / 10,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+let lastRadiusCapture = [];
+
+function updateRadiusResults(lat, lng) {
+  const panel = document.getElementById('radius-results');
+  const list = document.getElementById('radius-zip-list');
+  const captured = zipsInRadius(lat, lng);
+  lastRadiusCapture = captured;
+
+  if (!captured.length) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+  const totalSearches = captured.reduce((s, z) => s + z.total, 0);
+  const hitlistCount = captured.filter(z => z.hitlist).length;
+
+  document.getElementById('radius-zip-count').textContent = captured.length + ' ZIPs';
+  document.getElementById('radius-total-searches').textContent = totalSearches.toLocaleString();
+  document.getElementById('radius-hitlist-count').textContent = hitlistCount + ' of ' + captured.length;
+
+  // Header row + data rows
+  list.innerHTML =
+    `<div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
+      <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
+    </div>` +
+    captured.map(z =>
+      `<div class="rz-row${z.hitlist ? ' rz-hitlist' : ''}">
+        <span class="rz-zip">${z.zip}</span>
+        <span class="rz-city">${z.city}, ${z.state}</span>
+        <span class="rz-vol">${z.total.toLocaleString()}</span>
+        <span class="rz-hl">${z.hitlist ? '★' : ''}</span>
+      </div>`
+    ).join('');
+}
+
+function copyRadiusTable() {
+  if (!lastRadiusCapture.length) return;
+  const header = 'ZIP\tCity\tState\tSearches\tHitlist';
+  const rows = lastRadiusCapture.map(z =>
+    `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}`
+  );
+  const tsv = [header, ...rows].join('\n');
+  navigator.clipboard.writeText(tsv).then(() => {
+    setStatus('✓ Copied ' + lastRadiusCapture.length + ' ZIPs — paste into Sheets', 3000);
+  });
+}
+
+function downloadRadiusCsv() {
+  if (!lastRadiusCapture.length) return;
+  const header = 'ZIP,City,State,Searches,Hitlist';
+  const rows = lastRadiusCapture.map(z =>
+    `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''}`
+  );
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'radius_zips_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('✓ Downloaded ' + lastRadiusCapture.length + ' ZIPs', 3000);
+}
+
+function makeBadgeIcon(searches, count) {
+  return L.divIcon({
+    html: `<div style="
+      background:rgba(55,11,85,0.88);color:#fff;
+      font-family:Inter,sans-serif;font-size:10px;font-weight:600;
+      padding:3px 8px;border-radius:10px;white-space:nowrap;
+      transform:translate(-50%, 14px);pointer-events:none;
+      box-shadow:0 2px 8px rgba(55,11,85,.35);letter-spacing:.2px;
+    ">${searches.toLocaleString()} searches · ${count} ${count === 1 ? 'city' : 'cities'}</div>`,
+    className: '',
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+}
+
+function makePinIcon() {
+  return L.divIcon({
+    html: `<div style="
+      width:12px;height:12px;background:#fff;
+      border:2.5px solid #8136B2;border-radius:50%;
+      cursor:grab;box-shadow:0 1px 5px rgba(55,11,85,.4);
+    "></div>`,
+    className: '',
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
+  });
+}
+
+function placeRadius(lat, lng, label) {
+  const ring = L.circle([lat, lng], {
+    radius: RADIUS_M,
+    color: '#8136B2',
+    weight: 2,
+    dashArray: '10 7',
+    fillColor: '#8136B2',
+    fillOpacity: 0.05,
+    interactive: false,
+  }).addTo(map);
+
+  const initial = searchesInRadius(lat, lng);
+
+  const badge = L.marker([lat, lng], {
+    icon: makeBadgeIcon(initial.searches, initial.count),
+    interactive: false,
+    zIndexOffset: -200,
+  }).addTo(map);
+
+  const pin = L.marker([lat, lng], {
+    draggable: true,
+    icon: makePinIcon(),
+    zIndexOffset: 500,
+  }).addTo(map);
+
+  const hintLine = `<div style="font-size:10px;color:#999;margin-top:2px;">30-mile radius · drag to reposition</div>`;
+  pin.bindTooltip(
+    `${label ? `<div class="tt-city">${label}</div>` : ''}${hintLine}`,
+    { className: 'cars-tooltip', sticky: false, offset: [12, 0] }
+  );
+
+  // Show ZIP breakdown on initial place
+  updateRadiusResults(lat, lng);
+
+  pin.on('dragstart', function() {
+    map.getContainer().style.cursor = 'grabbing';
+    pin.closeTooltip();
+  });
+
+  pin.on('drag', function(e) {
+    const { lat: la, lng: ln } = e.latlng;
+    ring.setLatLng([la, ln]);
+    badge.setLatLng([la, ln]);
+    const r = searchesInRadius(la, ln);
+    badge.setIcon(makeBadgeIcon(r.searches, r.count));
+  });
+
+  pin.on('dragend', function() {
+    map.getContainer().style.cursor = clickModeActive ? 'crosshair' : '';
+    const { lat: la, lng: ln } = pin.getLatLng();
+    const r = searchesInRadius(la, ln);
+    setStatus(`✓ ${r.searches.toLocaleString()} searches · ${r.count} cities in radius`, 4000);
+    // Update ZIP breakdown after drag
+    updateRadiusResults(la, ln);
+  });
+
+  radiusLayers.push(ring, badge, pin);
+}
+
+function geocodeAndPlace() {
+  const addr = document.getElementById('radius-address').value.trim();
+  if (!addr) return;
+  setStatus('Searching…');
+
+  fetch(
+    'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(addr),
+    { headers: { 'Accept-Language': 'en' } }
+  )
+    .then(r => r.json())
+    .then(data => {
+      if (!data.length) { setStatus('Address not found.'); return; }
+      const lat = parseFloat(data[0].lat);
+      const lng = parseFloat(data[0].lon);
+      const label = data[0].display_name.split(',')[0];
+      placeRadius(lat, lng, label);
+      map.panTo([lat, lng]);
+      const count = searchesInRadius(lat, lng);
+      setStatus('✓ ' + count.toLocaleString() + ' searches captured', 4000);
+    })
+    .catch(() => setStatus('Geocoding failed — check connection.'));
+}
+
+function toggleClickMode() {
+  clickModeActive = !clickModeActive;
+  const btn = document.getElementById('click-toggle');
+  if (clickModeActive) {
+    btn.classList.add('active');
+    map.getContainer().style.cursor = 'crosshair';
+    setStatus('Click anywhere on the map.');
+  } else {
+    btn.classList.remove('active');
+    map.getContainer().style.cursor = '';
+    setStatus('');
+  }
+}
+
+function clearRadii() {
+  radiusLayers.forEach(l => map.removeLayer(l));
+  radiusLayers = [];
+  setStatus('');
+  document.getElementById('radius-results').style.display = 'none';
+}
+
+function setStatus(msg, clearAfterMs) {
+  const el = document.getElementById('radius-status');
+  el.textContent = msg;
+  if (clearAfterMs) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, clearAfterMs);
+}
+
+map.on('click', function(e) {
+  if (!clickModeActive) return;
+  placeRadius(e.latlng.lat, e.latlng.lng, null);
+  const count = searchesInRadius(e.latlng.lat, e.latlng.lng);
+  setStatus(count.toLocaleString() + ' searches · drag to reposition');
+});
+
+document.getElementById('radius-address').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') geocodeAndPlace();
+});
+</script>
+</body>
+</html>
