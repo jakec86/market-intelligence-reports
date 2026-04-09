@@ -473,6 +473,8 @@ function renderRadiusPanel() {
   const panel = document.getElementById('radius-results');
   const list = document.getElementById('radius-zip-list');
   const display = getDisplayCapture();
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  const hitlistCount = lastRadiusCapture.filter(z => z.hitlist).length;
 
   if (!lastRadiusCapture.length) {
     panel.style.display = 'none';
@@ -481,22 +483,28 @@ function renderRadiusPanel() {
 
   panel.style.display = 'block';
   const totalSearches = display.reduce((s, z) => s + z.total, 0);
-  const hitlistCount = lastRadiusCapture.filter(z => z.hitlist).length;
 
   document.getElementById('radius-zip-count').textContent = display.length + ' ZIPs';
   document.getElementById('radius-total-searches').textContent = totalSearches.toLocaleString();
-  document.getElementById('radius-hitlist-count').textContent = hitlistCount + ' of ' + lastRadiusCapture.length;
+  document.getElementById('radius-hitlist-count').textContent =
+    hitlistFilterActive
+      ? hitlistCount + ' of ' + hitlistCount
+      : hitlistCount + ' of ' + lastRadiusCapture.length;
 
   // Show hitlist filter toggle when hitlist data exists
   const filterRow = document.getElementById('hitlist-filter-row');
-  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
   if (filterRow) filterRow.style.display = hasHitlist ? 'block' : 'none';
+
+  // Sort: hitlist ZIPs first when filter is off and hitlist exists
+  const sorted = hasHitlist && !hitlistFilterActive
+    ? [...display].sort((a, b) => (b.hitlist ? 1 : 0) - (a.hitlist ? 1 : 0) || b.total - a.total)
+    : display;
 
   list.innerHTML =
     `<div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
       <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
     </div>` +
-    display.map(z =>
+    sorted.map(z =>
       `<div class="rz-row${z.hitlist ? ' rz-hitlist' : ''}">
         <span class="rz-zip">${z.zip}</span>
         <span class="rz-city">${z.city}, ${z.state}</span>
