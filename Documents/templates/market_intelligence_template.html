@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>%%PAGE_TITLE%%</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  :root {
+    --jagger:#370B55; --violet:#8136B2; --vixen:#AB74CF;
+    --lavender:#D9BAEE; --gray:#4D4D4D; --white:#FFFFFF;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Inter',sans-serif;background:#f0ecf5;color:var(--gray);height:100vh;overflow:hidden;}
+
+  #topbar{
+    position:absolute;top:0;left:0;right:0;z-index:1100;height:62px;
+    background:var(--jagger);display:flex;align-items:center;
+    justify-content:space-between;padding:0 20px;
+    box-shadow:0 2px 12px rgba(55,11,85,.45);
+  }
+  #logo{display:flex;align-items:center;gap:10px;}
+  #logo svg{height:28px;}
+  #logo-divider{width:1px;height:28px;background:rgba(255,255,255,.25);}
+  #logo-subtitle{color:var(--lavender);font-size:12px;font-weight:500;letter-spacing:.8px;text-transform:uppercase;}
+  #data-date{color:rgba(217,186,238,.65);font-size:10px;font-weight:400;letter-spacing:.5px;margin-left:4px;}
+  #total-badge{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px 16px;text-align:right;}
+  #total-badge .num{font-size:18px;font-weight:700;color:var(--white);letter-spacing:-.5px;}
+  #total-badge .lbl{font-size:10px;color:var(--lavender);text-transform:uppercase;letter-spacing:1px;}
+
+  #map{width:100%;height:100vh;padding-top:62px;}
+  .leaflet-container{background:#ede8f2!important;}
+
+  .panel{background:var(--white);border:1px solid #ddd;border-radius:10px;padding:14px 16px;
+    box-shadow:0 2px 10px rgba(55,11,85,.12);font-family:'Inter',sans-serif;}
+  .panel h3{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
+    color:var(--violet);margin-bottom:10px;border-bottom:2px solid var(--lavender);padding-bottom:6px;}
+
+  #legend{position:absolute;bottom:24px;left:16px;z-index:1000;}
+  .legend-item{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:11px;color:var(--gray);}
+  .legend-circle{border-radius:50%;background:rgba(129,54,178,.18);border:2px solid rgba(129,54,178,.65);flex-shrink:0;}
+
+  #stats{position:absolute;bottom:24px;right:16px;z-index:1000;min-width:200px;}
+  .stat-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:11px;}
+  .stat-city{color:var(--gray);}
+  .stat-num{color:var(--violet);font-weight:600;}
+  .stat-bar-wrap{width:100%;height:4px;background:#f0ecf5;border-radius:2px;margin-bottom:8px;}
+  .stat-bar{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--jagger),var(--vixen));}
+
+  .cars-tooltip{background:var(--white)!important;border:1.5px solid var(--vixen)!important;
+    border-radius:10px!important;color:var(--gray)!important;font-family:'Inter',sans-serif!important;
+    font-size:12px!important;padding:10px 14px!important;box-shadow:0 6px 18px rgba(55,11,85,.18)!important;}
+  .tt-city{font-size:14px;font-weight:700;color:var(--jagger);margin-bottom:3px;}
+  .tt-count{font-size:13px;font-weight:600;color:var(--violet);}
+  .tt-zips{font-size:10px;color:#888;margin-top:4px;max-width:240px;line-height:1.6;}
+
+  .tier-legend{min-width:170px;}
+  .tier-item{display:flex;align-items:center;gap:9px;margin-bottom:6px;font-size:11px;color:var(--gray);}
+  .tier-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;}
+
+  /* ── Radius Panel ── */
+  #radius-panel{position:absolute;top:74px;left:16px;z-index:1000;width:228px;}
+  #radius-panel h3{margin-bottom:8px;}
+  #radius-input-row{display:flex;gap:6px;margin-bottom:7px;}
+  #radius-address{
+    flex:1;padding:6px 8px;border:1px solid #ddd;border-radius:6px;
+    font-size:11px;font-family:'Inter',sans-serif;color:var(--gray);outline:none;
+  }
+  #radius-address:focus{border-color:var(--vixen);}
+  #radius-go{
+    padding:6px 10px;background:var(--violet);color:#fff;border:none;
+    border-radius:6px;font-size:11px;font-family:'Inter',sans-serif;cursor:pointer;
+    white-space:nowrap;
+  }
+  #radius-go:hover{background:var(--jagger);}
+  #radius-btn-row{display:flex;gap:6px;}
+  .radius-btn{
+    flex:1;padding:5px 0;background:#f0ecf5;color:var(--violet);
+    border:1px solid var(--lavender);border-radius:6px;font-size:10px;
+    font-family:'Inter',sans-serif;cursor:pointer;text-align:center;
+  }
+  .radius-btn:hover{background:var(--lavender);}
+  .radius-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+  #radius-clear{color:var(--gray);border-color:#ddd;}
+  #radius-clear:hover{background:#f5f0f8;}
+  #radius-status{font-size:10px;color:#999;margin-top:6px;min-height:13px;line-height:1.3;}
+
+  /* ── View Toggle ── */
+  #view-toggle{position:absolute;top:74px;right:16px;z-index:1000;}
+  .toggle-row{display:flex;gap:4px;margin-bottom:6px;}
+  .view-btn{
+    flex:1;padding:5px 10px;background:#f0ecf5;color:var(--violet);
+    border:1px solid var(--lavender);border-radius:6px;font-size:10px;
+    font-family:'Inter',sans-serif;cursor:pointer;text-align:center;
+  }
+  .view-btn:hover{background:var(--lavender);}
+  .view-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+
+  /* ── Hitlist marker ── */
+  .hitlist-pin{
+    background:#E8A817;border:2px solid #B8860B;border-radius:50%;
+    box-shadow:0 1px 5px rgba(184,134,11,.5);
+  }
+  .dealer-star{font-size:20px;text-shadow:0 1px 5px rgba(55,11,85,.5);pointer-events:none;}
+
+  /* ── Radius ZIP results ── */
+  .rz-row{display:flex;align-items:center;padding:3px 0;border-bottom:1px solid #f8f5fb;}
+  .rz-row:last-child{border-bottom:none;}
+  .rz-row.rz-hitlist{background:#f0f8e8;border-radius:3px;padding:3px 4px;margin:1px 0;}
+  .rz-zip{width:48px;font-weight:600;color:#370B55;}
+  .rz-city{flex:1;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-vol{width:50px;text-align:right;font-weight:600;color:#8136B2;}
+  .rz-hl{width:14px;text-align:center;margin-left:4px;}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div id="logo">
+    <svg viewBox="0 0 120 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <text x="0" y="23" font-family="Inter,sans-serif" font-weight="800" font-size="22" fill="#FFFFFF" letter-spacing="-0.5">Cars</text>
+      <text x="51" y="23" font-family="Inter,sans-serif" font-weight="800" font-size="22" fill="#AB74CF" letter-spacing="-0.5">.com</text>
+    </svg>
+    <div id="logo-divider"></div>
+    <span id="logo-subtitle">%%REPORT_TITLE%%</span><span id="data-date">· Data as of %%DATA_DATE%%</span>
+  </div>
+  <div id="total-badge">
+    <div class="num" id="total-num">—</div>
+    <div class="lbl">Total Searches</div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<!-- Radius Tool Panel -->
+<div id="radius-panel" class="panel">
+  <h3>30-Mile Radius</h3>
+  <div id="radius-input-row">
+    <input id="radius-address" type="text" placeholder="Address, city, or ZIP…" autocomplete="off">
+    <button id="radius-go" onclick="geocodeAndPlace()">Place</button>
+  </div>
+  <div id="radius-btn-row">
+    <button id="click-toggle" class="radius-btn" onclick="toggleClickMode()">Click to Place</button>
+    <button id="radius-clear" class="radius-btn" onclick="clearRadii()">Clear All</button>
+  </div>
+  <div id="radius-status"></div>
+  <div id="radius-results" style="display:none;margin-top:8px;border-top:1px solid #f0ecf5;padding-top:8px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span id="radius-title" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#8136B2;">ZIPs in Radius</span>
+      <span id="radius-zip-count" style="font-size:10px;color:#999;"></span>
+    </div>
+    <div id="hitlist-filter-row" style="display:none;margin-bottom:6px;">
+      <button id="hitlist-filter-btn" onclick="toggleHitlistFilter()" class="radius-btn" style="width:100%;font-size:9px;padding:4px 0;">Show Hitlist Only</button>
+    </div>
+    <div style="display:flex;gap:4px;margin-bottom:6px;">
+      <button onclick="copyRadiusTable()" class="radius-btn" style="flex:1;font-size:9px;padding:4px 0;">Copy to Clipboard</button>
+      <button onclick="downloadRadiusCsv()" class="radius-btn" style="flex:1;font-size:9px;padding:4px 0;">Download CSV</button>
+    </div>
+    <div id="radius-zip-list" style="max-height:280px;overflow-y:auto;font-size:10px;">
+      <div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
+        <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
+      </div>
+    </div>
+    <div id="radius-totals" style="display:flex;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid #f0ecf5;">
+      <div style="flex:1;font-size:10px;"><span style="color:#999;">Total:</span> <strong id="radius-total-searches" style="color:#370B55;">0</strong></div>
+      <div style="flex:1;font-size:10px;"><span style="color:#999;">Hitlist:</span> <strong id="radius-hitlist-count" style="color:#38761D;">0</strong></div>
+    </div>
+  </div>
+  <div id="radius-note" style="font-size:9.5px;color:#aaa;margin-top:8px;line-height:1.5;border-top:1px solid #f0ecf5;padding-top:8px;">
+    ZIP-level breakdown available when ZIP data is loaded. City view uses city-center approximation.
+  </div>
+</div>
+
+<div id="view-toggle" class="panel">
+  <h3>Map View</h3>
+  <div class="toggle-row">
+    <button id="btn-city" class="view-btn active" onclick="setView('city')">Cities</button>
+    <button id="btn-zip" class="view-btn" onclick="setView('zip')">ZIP Codes</button>
+  </div>
+</div>
+
+<div id="legend" class="panel">
+  <h3>Search Volume</h3>
+  <div class="legend-item"><div class="legend-circle" style="width:44px;height:44px;"></div><span>50,000+</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:30px;height:30px;"></div><span>10,000 – 50,000</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:18px;height:18px;"></div><span>1,000 – 10,000</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:10px;height:10px;"></div><span>&lt; 1,000</span></div>
+  <div class="legend-item" id="hitlist-legend" style="display:none;margin-top:8px;padding-top:6px;border-top:1px solid #f0ecf5;">
+    <div class="hitlist-pin" style="width:14px;height:14px;"></div><span>Hitlist ZIP</span>
+  </div>
+  <div class="legend-item" id="dealer-legend" style="display:none;">
+    <span class="dealer-star" style="font-size:14px;">★</span><span>Dealer Location</span>
+  </div>
+</div>
+
+<div id="stats" class="panel">
+  <h3>Top 8 Cities</h3>
+  <div id="stats-body"></div>
+</div>
+
+<script>
+// %%CITY_DATA%%
+// %%ZIP_DATA%%
+// %%HITLIST_ZIPS%%
+// %%DEALER_PIN%%
+
+const maxTotal = Math.max(...cities.map(c=>c.total));
+const grandTotal = cities.reduce((s,c)=>s+c.total,0);
+document.getElementById('total-num').textContent = grandTotal.toLocaleString();
+
+// Render Top 8 Cities sidebar dynamically
+(function(){
+  const top8 = [...cities].sort((a,b)=>b.total-a.total).slice(0,8);
+  const topMax = top8[0].total;
+  const body = document.getElementById('stats-body');
+  body.innerHTML = top8.map(c=>{
+    const pct = Math.round((c.total/topMax)*100);
+    return `<div class="stat-row"><span class="stat-city">${c.name}</span><span class="stat-num">${c.total.toLocaleString()}</span></div>
+<div class="stat-bar-wrap"><div class="stat-bar" style="width:${pct}%"></div></div>`;
+  }).join('');
+})();
+
+function fmtZips(zips) {
+  if (!zips) return '';
+  const z = zips.split(', ');
+  return 'ZIP: ' + (z.length <= 4 ? zips : z.slice(0,4).join(', ') + ` \u2026 +${z.length-4} more`);
+}
+
+function getRadius(t){
+  const mn=4,mx=52;
+  return mn+(Math.sqrt(t)/Math.sqrt(maxTotal))*(mx-mn);
+}
+
+function getTierStyle(t){
+  if(t>=50000) return {fill:'rgba(55,11,85,0.72)',   stroke:'#370B55'};
+  if(t>=10000) return {fill:'rgba(100,30,150,0.65)', stroke:'#6A1E96'};
+  if(t>= 3000) return {fill:'rgba(129,54,178,0.60)', stroke:'#8136B2'};
+  if(t>= 1000) return {fill:'rgba(171,116,207,0.55)',stroke:'#AB74CF'};
+  if(t>=  300) return {fill:'rgba(217,186,238,0.65)',stroke:'#C8A0E4'};
+  return              {fill:'rgba(240,230,250,0.75)',stroke:'#D9BAEE'};
+}
+
+const map = L.map('map',{center:mapConfig.center,zoom:mapConfig.zoom,zoomControl:false,attributionControl:false});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; <a href="https://carto.com/">CARTO</a>'}).addTo(map);
+L.control.zoom({position:'topright'}).addTo(map);
+
+// City markers are now rendered via renderCityMarkers() into cityLayerGroup
+
+// ── City/ZIP view toggle ────────────────────────────────────────────────────
+let cityLayerGroup = L.layerGroup();
+let zipLayerGroup = L.layerGroup();
+let hitlistLayerGroup = L.layerGroup();
+let dealerLayerGroup = L.layerGroup();
+let currentView = 'city';
+
+// Move city markers into a layer group (re-render)
+function renderCityMarkers() {
+  cityLayerGroup.clearLayers();
+  cities.forEach(c => {
+    const r  = getRadius(c.total);
+    const st = getTierStyle(c.total);
+    const circle = L.circleMarker([c.lat,c.lng],{
+      radius:r, fillColor:st.fill, fillOpacity:1,
+      color:st.stroke, weight:1.5,
+    });
+    circle.bindTooltip(
+      `<div class="tt-city">${c.name}</div>
+       <div class="tt-count">${c.total.toLocaleString()} searches</div>
+       <div class="tt-zips">${fmtZips(c.zips)}</div>`,
+      {className:'cars-tooltip',sticky:true,offset:[10,0]}
+    );
+    cityLayerGroup.addLayer(circle);
+    if(c.total>=2000){
+      const lbl=L.divIcon({
+        html:`<div style="color:#370B55;font-family:Inter,sans-serif;font-size:10px;font-weight:600;white-space:nowrap;text-shadow:0 1px 3px rgba(255,255,255,.95);pointer-events:none;margin-top:${r+3}px;text-align:center;transform:translateX(-50%);">${c.name}</div>`,
+        className:'',iconAnchor:[0,0]
+      });
+      cityLayerGroup.addLayer(L.marker([c.lat,c.lng],{icon:lbl,interactive:false}));
+    }
+  });
+}
+
+function renderZipMarkers() {
+  zipLayerGroup.clearLayers();
+  if (typeof zipData === 'undefined' || !zipData.length) return;
+  const maxZip = Math.max(...zipData.map(z=>z.total));
+  zipData.forEach(z => {
+    const r = 3 + (Math.sqrt(z.total)/Math.sqrt(maxZip)) * 28;
+    const st = getTierStyle(z.total);
+    const isHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.includes(z.zip);
+    const opts = isHitlist
+      ? { radius:r, fillColor:'rgba(232,168,23,0.75)', fillOpacity:1, color:'#B8860B', weight:2.5 }
+      : { radius:r, fillColor:st.fill, fillOpacity:1, color:st.stroke, weight:1.5 };
+    const circle = L.circleMarker([z.lat,z.lng], opts);
+    circle.bindTooltip(
+      `<div class="tt-city">${z.zip}${isHitlist ? ' <span style="color:#B8860B;font-weight:700;">★ HITLIST</span>' : ''}</div>
+       <div class="tt-count">${z.total.toLocaleString()} searches</div>
+       <div class="tt-zips">${z.city}, ${z.state}</div>`,
+      {className:'cars-tooltip',sticky:true,offset:[10,0]}
+    );
+    zipLayerGroup.addLayer(circle);
+    if(z.total >= 1500) {
+      const lbl=L.divIcon({
+        html:`<div style="color:${isHitlist?'#B8860B':'#370B55'};font-family:Inter,sans-serif;font-size:9px;font-weight:600;white-space:nowrap;text-shadow:0 1px 3px rgba(255,255,255,.95);pointer-events:none;margin-top:${r+2}px;text-align:center;transform:translateX(-50%);">${z.zip}</div>`,
+        className:'',iconAnchor:[0,0]
+      });
+      zipLayerGroup.addLayer(L.marker([z.lat,z.lng],{icon:lbl,interactive:false}));
+    }
+  });
+}
+
+function renderDealerPin() {
+  dealerLayerGroup.clearLayers();
+  if (typeof dealerPin === 'undefined' || !dealerPin.lat) return;
+  const star = L.divIcon({
+    html:'<div class="dealer-star">★</div>',
+    className:'',iconSize:[20,20],iconAnchor:[10,10]
+  });
+  const marker = L.marker([dealerPin.lat, dealerPin.lng], {icon:star, zIndexOffset:1000, interactive:true});
+  marker.bindTooltip(
+    `<div class="tt-city">${dealerPin.name || 'Dealer'}</div><div class="tt-zips">${dealerPin.address || ''}</div>`,
+    {className:'cars-tooltip',offset:[12,0]}
+  );
+  dealerLayerGroup.addLayer(marker);
+  document.getElementById('dealer-legend').style.display = 'flex';
+}
+
+function setView(view) {
+  currentView = view;
+  document.getElementById('btn-city').classList.toggle('active', view==='city');
+  document.getElementById('btn-zip').classList.toggle('active', view==='zip');
+  if (view === 'city') {
+    map.removeLayer(zipLayerGroup);
+    map.addLayer(cityLayerGroup);
+  } else {
+    map.removeLayer(cityLayerGroup);
+    if (zipLayerGroup.getLayers().length === 0) renderZipMarkers();
+    map.addLayer(zipLayerGroup);
+  }
+  // Show hitlist legend in ZIP view if hitlist data exists
+  const hl = document.getElementById('hitlist-legend');
+  if (hl) hl.style.display = (view==='zip' && typeof hitlistZips !== 'undefined' && hitlistZips.length) ? 'flex' : 'none';
+}
+
+// Initialize
+renderCityMarkers();
+cityLayerGroup.addTo(map);
+renderDealerPin();
+dealerLayerGroup.addTo(map);
+
+// Tier legend
+const tl=L.control({position:'bottomright'});
+tl.onAdd=function(){
+  const d=L.DomUtil.create('div','panel tier-legend');
+  d.innerHTML=`
+    <h3 style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#8136B2;margin-bottom:10px;border-bottom:2px solid #D9BAEE;padding-bottom:6px;">Volume Tiers</h3>
+    ${[
+      ['rgba(55,11,85,0.72)','#370B55','50,000+'],
+      ['rgba(100,30,150,0.65)','#6A1E96','10,000 – 50,000'],
+      ['rgba(129,54,178,0.60)','#8136B2','3,000 – 10,000'],
+      ['rgba(171,116,207,0.55)','#AB74CF','1,000 – 3,000'],
+      ['rgba(217,186,238,0.65)','#C8A0E4','300 – 1,000'],
+      ['rgba(240,230,250,0.75)','#D9BAEE','< 300'],
+    ].map(([f,s,l])=>`
+      <div class="tier-item">
+        <div class="tier-dot" style="background:${f};border:2px solid ${s};"></div>
+        <span>${l}</span>
+      </div>`).join('')}`;
+  return d;
+};
+tl.addTo(map);
+
+// ── 30-Mile Radius Tool ────────────────────────────────────────────────────────
+const RADIUS_M = 48280; // 30 miles in meters
+const RADIUS_MI = 30;
+let placedRadii = []; // [{ring, badge, pin, lat, lng, label}]
+let clickModeActive = false;
+
+// Haversine distance in miles between two lat/lng points
+function haversineMi(lat1, lng1, lat2, lng2) {
+  const R = 3958.8;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
+    * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Sum searches and count cities whose centroid falls within RADIUS_MI of (lat, lng)
+function searchesInRadius(lat, lng) {
+  let searches = 0, count = 0;
+  cities.forEach(c => {
+    if (haversineMi(lat, lng, c.lat, c.lng) <= RADIUS_MI) { searches += c.total; count++; }
+  });
+  return { searches, count };
+}
+
+// ZIP-level radius capture — returns detailed list
+function zipsInRadius(lat, lng) {
+  if (typeof zipData === 'undefined' || !zipData.length) return [];
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  return zipData
+    .filter(z => haversineMi(lat, lng, z.lat, z.lng) <= RADIUS_MI)
+    .map(z => ({
+      zip: z.zip, city: z.city, state: z.state, total: z.total,
+      hitlist: hasHitlist && hitlistZips.includes(z.zip),
+      dist: Math.round(haversineMi(lat, lng, z.lat, z.lng) * 10) / 10,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+// Combined ZIPs across all placed radii (deduplicated), plus any hitlist ZIPs outside radii
+function getAllRadiusZips() {
+  if (!placedRadii.length) return [];
+  const zipMap = new Map();
+  placedRadii.forEach((r, idx) => {
+    const label = r.label || ('Radius ' + (idx + 1));
+    zipsInRadius(r.lat, r.lng).forEach(z => {
+      if (zipMap.has(z.zip)) {
+        const existing = zipMap.get(z.zip);
+        if (!existing.radii.includes(label)) existing.radii.push(label);
+        existing.dist = Math.min(existing.dist, z.dist);
+      } else {
+        zipMap.set(z.zip, Object.assign({}, z, { radii: [label] }));
+      }
+    });
+  });
+
+  // Ensure ALL hitlist ZIPs appear even if outside every radius
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  if (hasHitlist && typeof zipData !== 'undefined') {
+    hitlistZips.forEach(hlZip => {
+      if (!zipMap.has(hlZip)) {
+        const zd = zipData.find(z => z.zip === hlZip);
+        if (zd) {
+          zipMap.set(hlZip, {
+            zip: zd.zip, city: zd.city, state: zd.state, total: zd.total,
+            hitlist: true, dist: -1, radii: ['Outside Radii'],
+          });
+        }
+      }
+    });
+  }
+
+  return Array.from(zipMap.values()).sort((a, b) => b.total - a.total);
+}
+
+let lastRadiusCapture = [];
+let hitlistFilterActive = false;
+
+function toggleHitlistFilter() {
+  hitlistFilterActive = !hitlistFilterActive;
+  const btn = document.getElementById('hitlist-filter-btn');
+  if (hitlistFilterActive) {
+    btn.classList.add('active');
+    btn.textContent = 'Show All ZIPs';
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = 'Show Hitlist Only';
+  }
+  renderRadiusPanel();
+}
+
+function getDisplayCapture() {
+  return hitlistFilterActive ? lastRadiusCapture.filter(z => z.hitlist) : lastRadiusCapture;
+}
+
+function renderRadiusPanel() {
+  const panel = document.getElementById('radius-results');
+  const list = document.getElementById('radius-zip-list');
+  const display = getDisplayCapture();
+
+  if (!lastRadiusCapture.length) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+  const totalSearches = display.reduce((s, z) => s + z.total, 0);
+  const hitlistCount = lastRadiusCapture.filter(z => z.hitlist).length;
+
+  document.getElementById('radius-zip-count').textContent = display.length + ' ZIPs';
+  document.getElementById('radius-total-searches').textContent = totalSearches.toLocaleString();
+  document.getElementById('radius-hitlist-count').textContent = hitlistCount + ' of ' + lastRadiusCapture.length;
+
+  // Show hitlist filter toggle when hitlist data exists
+  const filterRow = document.getElementById('hitlist-filter-row');
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  if (filterRow) filterRow.style.display = hasHitlist ? 'block' : 'none';
+
+  list.innerHTML =
+    `<div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
+      <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
+    </div>` +
+    display.map(z =>
+      `<div class="rz-row${z.hitlist ? ' rz-hitlist' : ''}">
+        <span class="rz-zip">${z.zip}</span>
+        <span class="rz-city">${z.city}, ${z.state}</span>
+        <span class="rz-vol">${z.total.toLocaleString()}</span>
+        <span class="rz-hl">${z.hitlist ? '★' : ''}</span>
+      </div>`
+    ).join('');
+}
+
+function updateAllRadiusResults() {
+  lastRadiusCapture = getAllRadiusZips();
+
+  // Update panel title for multi-radius
+  const titleEl = document.getElementById('radius-title');
+  if (titleEl) titleEl.textContent = placedRadii.length > 1 ? 'ZIPs in ' + placedRadii.length + ' Radii' : 'ZIPs in Radius';
+
+  renderRadiusPanel();
+}
+
+function copyRadiusTable() {
+  const data = getDisplayCapture();
+  if (!data.length) return;
+  const multi = placedRadii.length > 1;
+  const header = multi ? 'ZIP\tCity\tState\tSearches\tHitlist\tRadius' : 'ZIP\tCity\tState\tSearches\tHitlist';
+  const rows = data.map(z =>
+    multi
+      ? `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}\t${z.radii.join('; ')}`
+      : `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}`
+  );
+  const tsv = [header, ...rows].join('\n');
+  navigator.clipboard.writeText(tsv).then(() => {
+    setStatus('✓ Copied ' + data.length + ' ZIPs — paste into Sheets', 3000);
+  });
+}
+
+function downloadRadiusCsv() {
+  const data = getDisplayCapture();
+  if (!data.length) return;
+  const multi = placedRadii.length > 1;
+  const header = multi ? 'ZIP,City,State,Searches,Hitlist,Radius' : 'ZIP,City,State,Searches,Hitlist';
+  const rows = data.map(z =>
+    multi
+      ? `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''},"${z.radii.join('; ')}"`
+      : `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''}`
+  );
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'radius_zips_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('✓ Downloaded ' + data.length + ' ZIPs', 3000);
+}
+
+function makeBadgeIcon(searches, count) {
+  return L.divIcon({
+    html: `<div style="
+      background:rgba(55,11,85,0.88);color:#fff;
+      font-family:Inter,sans-serif;font-size:10px;font-weight:600;
+      padding:3px 8px;border-radius:10px;white-space:nowrap;
+      transform:translate(-50%, 14px);pointer-events:none;
+      box-shadow:0 2px 8px rgba(55,11,85,.35);letter-spacing:.2px;
+    ">${searches.toLocaleString()} searches · ${count} ${count === 1 ? 'city' : 'cities'}</div>`,
+    className: '',
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+}
+
+function makePinIcon() {
+  return L.divIcon({
+    html: `<div style="
+      width:12px;height:12px;background:#fff;
+      border:2.5px solid #8136B2;border-radius:50%;
+      cursor:grab;box-shadow:0 1px 5px rgba(55,11,85,.4);
+    "></div>`,
+    className: '',
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
+  });
+}
+
+function placeRadius(lat, lng, label) {
+  const ring = L.circle([lat, lng], {
+    radius: RADIUS_M,
+    color: '#8136B2',
+    weight: 2,
+    dashArray: '10 7',
+    fillColor: '#8136B2',
+    fillOpacity: 0.05,
+    interactive: false,
+  }).addTo(map);
+
+  const initial = searchesInRadius(lat, lng);
+
+  const badge = L.marker([lat, lng], {
+    icon: makeBadgeIcon(initial.searches, initial.count),
+    interactive: false,
+    zIndexOffset: -200,
+  }).addTo(map);
+
+  const pin = L.marker([lat, lng], {
+    draggable: true,
+    icon: makePinIcon(),
+    zIndexOffset: 500,
+  }).addTo(map);
+
+  const hintLine = `<div style="font-size:10px;color:#999;margin-top:2px;">30-mile radius · drag to reposition</div>`;
+  pin.bindTooltip(
+    `${label ? `<div class="tt-city">${label}</div>` : ''}${hintLine}`,
+    { className: 'cars-tooltip', sticky: false, offset: [12, 0] }
+  );
+
+  const radiusObj = { ring, badge, pin, lat, lng, label };
+  placedRadii.push(radiusObj);
+
+  // Show combined ZIP breakdown across all radii
+  updateAllRadiusResults();
+
+  pin.on('dragstart', function() {
+    map.getContainer().style.cursor = 'grabbing';
+    pin.closeTooltip();
+  });
+
+  pin.on('drag', function(e) {
+    const { lat: la, lng: ln } = e.latlng;
+    ring.setLatLng([la, ln]);
+    badge.setLatLng([la, ln]);
+    radiusObj.lat = la;
+    radiusObj.lng = ln;
+    const r = searchesInRadius(la, ln);
+    badge.setIcon(makeBadgeIcon(r.searches, r.count));
+  });
+
+  pin.on('dragend', function() {
+    map.getContainer().style.cursor = clickModeActive ? 'crosshair' : '';
+    const { lat: la, lng: ln } = pin.getLatLng();
+    radiusObj.lat = la;
+    radiusObj.lng = ln;
+    const r = searchesInRadius(la, ln);
+    setStatus(`✓ ${r.searches.toLocaleString()} searches · ${r.count} cities in radius`, 4000);
+    // Update combined ZIP breakdown after drag
+    updateAllRadiusResults();
+  });
+}
+
+function geocodeAndPlace() {
+  const addr = document.getElementById('radius-address').value.trim();
+  if (!addr) return;
+  setStatus('Searching…');
+
+  fetch(
+    'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(addr),
+    { headers: { 'Accept-Language': 'en' } }
+  )
+    .then(r => r.json())
+    .then(data => {
+      if (!data.length) { setStatus('Address not found.'); return; }
+      const lat = parseFloat(data[0].lat);
+      const lng = parseFloat(data[0].lon);
+      const label = data[0].display_name.split(',')[0];
+      placeRadius(lat, lng, label);
+      map.panTo([lat, lng]);
+      const result = searchesInRadius(lat, lng);
+      setStatus('✓ ' + result.searches.toLocaleString() + ' searches captured', 4000);
+    })
+    .catch(() => setStatus('Geocoding failed — check connection.'));
+}
+
+function toggleClickMode() {
+  clickModeActive = !clickModeActive;
+  const btn = document.getElementById('click-toggle');
+  if (clickModeActive) {
+    btn.classList.add('active');
+    map.getContainer().style.cursor = 'crosshair';
+    setStatus('Click anywhere on the map.');
+  } else {
+    btn.classList.remove('active');
+    map.getContainer().style.cursor = '';
+    setStatus('');
+  }
+}
+
+function clearRadii() {
+  placedRadii.forEach(r => { map.removeLayer(r.ring); map.removeLayer(r.badge); map.removeLayer(r.pin); });
+  placedRadii = [];
+  setStatus('');
+  document.getElementById('radius-results').style.display = 'none';
+}
+
+function setStatus(msg, clearAfterMs) {
+  const el = document.getElementById('radius-status');
+  el.textContent = msg;
+  if (clearAfterMs) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, clearAfterMs);
+}
+
+map.on('click', function(e) {
+  if (!clickModeActive) return;
+  placeRadius(e.latlng.lat, e.latlng.lng, null);
+  const result = searchesInRadius(e.latlng.lat, e.latlng.lng);
+  setStatus(result.searches.toLocaleString() + ' searches · drag to reposition');
+});
+
+document.getElementById('radius-address').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') geocodeAndPlace();
+});
+</script>
+</body>
+</html>
