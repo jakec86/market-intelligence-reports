@@ -19,6 +19,7 @@ import os
 import re
 import json
 import sys
+import shutil
 import argparse
 import requests
 import pandas as pd
@@ -293,6 +294,7 @@ def main():
     parser.add_argument("--quarters", type=int, default=None,
                         help="Use only the most recent N quarters (e.g. --quarters 4 for trailing year)")
     parser.add_argument("--config", help="YAML config file for batch runs (overrides --dma/--makes)")
+    parser.add_argument("--csv", help="Path to a specific CSV file (overrides auto-lookup)")
     parser.add_argument("--hitlist", help="Comma-separated hitlist ZIP codes (e.g. '32514,32563,32533')")
     parser.add_argument("--dealer-name", help="Dealer name for map pin")
     parser.add_argument("--dealer-address", help="Dealer address for map pin geocoding")
@@ -320,12 +322,31 @@ def main():
     print(f"  Output: {output_path}\n")
 
     # ── Step 1: Get CSV data ──────────────────────────────────────────────────
+    # Lookup order: --csv flag > SearchVolume_{DMA}_{Make}.csv > generic > Tableau API
     csv_text = None
-    manual_csv = TABLEAU_DIR / "SearchVolumeByZipCode.csv"
+    csv_source = None
+    specific_csv = TABLEAU_DIR / f"SearchVolume_{dma_slug}{makes_slug}.csv"
+    generic_csv  = TABLEAU_DIR / "SearchVolumeByZipCode.csv"
 
-    if manual_csv.exists() and not args.force_tableau:
-        print(f"Reading manually-downloaded CSV: {manual_csv}")
-        csv_text = manual_csv.read_bytes()
+    if args.csv:
+        csv_path = Path(args.csv).expanduser()
+        if not csv_path.exists():
+            print(f"⚠  CSV not found: {csv_path}")
+            sys.exit(1)
+        print(f"Reading CSV (explicit): {csv_path}")
+        csv_text = csv_path.read_bytes()
+        csv_source = csv_path
+    elif specific_csv.exists() and not args.force_tableau:
+        print(f"Reading CSV (DMA/make-specific): {specific_csv}")
+        csv_text = specific_csv.read_bytes()
+        csv_source = specific_csv
+    elif generic_csv.exists() and not args.force_tableau:
+        print(f"Reading CSV (generic): {generic_csv}")
+        csv_text = generic_csv.read_bytes()
+        csv_source = generic_csv
+        # Preserve a copy with the specific name so it's not overwritten
+        shutil.copy2(generic_csv, specific_csv)
+        print(f"  → Saved as: {specific_csv.name}")
     else:
         print("Authenticating to Tableau...")
         try:
@@ -497,10 +518,17 @@ def run_config(config_path, args):
         print(f"  Output: {output_path}\n")
 
         csv_text = None
-        manual_csv = TABLEAU_DIR / "SearchVolumeByZipCode.csv"
+        specific_csv = TABLEAU_DIR / f"SearchVolume_{dma_slug}{makes_slug}.csv"
+        generic_csv  = TABLEAU_DIR / "SearchVolumeByZipCode.csv"
 
-        if manual_csv.exists() and not args.force_tableau:
-            csv_text = manual_csv.read_bytes()
+        if specific_csv.exists() and not args.force_tableau:
+            print(f"  Reading CSV (DMA/make-specific): {specific_csv.name}")
+            csv_text = specific_csv.read_bytes()
+        elif generic_csv.exists() and not args.force_tableau:
+            print(f"  Reading CSV (generic): {generic_csv.name}")
+            csv_text = generic_csv.read_bytes()
+            shutil.copy2(generic_csv, specific_csv)
+            print(f"  → Saved as: {specific_csv.name}")
         else:
             try:
                 token, site_id = tableau_signin()

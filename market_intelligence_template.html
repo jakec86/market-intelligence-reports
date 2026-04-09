@@ -148,8 +148,11 @@
   <div id="radius-status"></div>
   <div id="radius-results" style="display:none;margin-top:8px;border-top:1px solid #f0ecf5;padding-top:8px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-      <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#8136B2;">ZIPs in Radius</span>
+      <span id="radius-title" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#8136B2;">ZIPs in Radius</span>
       <span id="radius-zip-count" style="font-size:10px;color:#999;"></span>
+    </div>
+    <div id="hitlist-filter-row" style="display:none;margin-bottom:6px;">
+      <button id="hitlist-filter-btn" onclick="toggleHitlistFilter()" class="radius-btn" style="width:100%;font-size:9px;padding:4px 0;">Show Hitlist Only</button>
     </div>
     <div style="display:flex;gap:4px;margin-bottom:6px;">
       <button onclick="copyRadiusTable()" class="radius-btn" style="flex:1;font-size:9px;padding:4px 0;">Copy to Clipboard</button>
@@ -373,7 +376,7 @@ tl.addTo(map);
 // ── 30-Mile Radius Tool ────────────────────────────────────────────────────────
 const RADIUS_M = 48280; // 30 miles in meters
 const RADIUS_MI = 30;
-let radiusLayers = [];
+let placedRadii = []; // [{ring, badge, pin, lat, lng, label}]
 let clickModeActive = false;
 
 // Haversine distance in miles between two lat/lng points
@@ -410,33 +413,90 @@ function zipsInRadius(lat, lng) {
     .sort((a, b) => b.total - a.total);
 }
 
-let lastRadiusCapture = [];
+// Combined ZIPs across all placed radii (deduplicated), plus any hitlist ZIPs outside radii
+function getAllRadiusZips() {
+  if (!placedRadii.length) return [];
+  const zipMap = new Map();
+  placedRadii.forEach((r, idx) => {
+    const label = r.label || ('Radius ' + (idx + 1));
+    zipsInRadius(r.lat, r.lng).forEach(z => {
+      if (zipMap.has(z.zip)) {
+        const existing = zipMap.get(z.zip);
+        if (!existing.radii.includes(label)) existing.radii.push(label);
+        existing.dist = Math.min(existing.dist, z.dist);
+      } else {
+        zipMap.set(z.zip, Object.assign({}, z, { radii: [label] }));
+      }
+    });
+  });
 
-function updateRadiusResults(lat, lng) {
+  // Ensure ALL hitlist ZIPs appear even if outside every radius
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  if (hasHitlist && typeof zipData !== 'undefined') {
+    hitlistZips.forEach(hlZip => {
+      if (!zipMap.has(hlZip)) {
+        const zd = zipData.find(z => z.zip === hlZip);
+        if (zd) {
+          zipMap.set(hlZip, {
+            zip: zd.zip, city: zd.city, state: zd.state, total: zd.total,
+            hitlist: true, dist: -1, radii: ['Outside Radii'],
+          });
+        }
+      }
+    });
+  }
+
+  return Array.from(zipMap.values()).sort((a, b) => b.total - a.total);
+}
+
+let lastRadiusCapture = [];
+let hitlistFilterActive = false;
+
+function toggleHitlistFilter() {
+  hitlistFilterActive = !hitlistFilterActive;
+  const btn = document.getElementById('hitlist-filter-btn');
+  if (hitlistFilterActive) {
+    btn.classList.add('active');
+    btn.textContent = 'Show All ZIPs';
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = 'Show Hitlist Only';
+  }
+  renderRadiusPanel();
+}
+
+function getDisplayCapture() {
+  return hitlistFilterActive ? lastRadiusCapture.filter(z => z.hitlist) : lastRadiusCapture;
+}
+
+function renderRadiusPanel() {
   const panel = document.getElementById('radius-results');
   const list = document.getElementById('radius-zip-list');
-  const captured = zipsInRadius(lat, lng);
-  lastRadiusCapture = captured;
+  const display = getDisplayCapture();
 
-  if (!captured.length) {
+  if (!lastRadiusCapture.length) {
     panel.style.display = 'none';
     return;
   }
 
   panel.style.display = 'block';
-  const totalSearches = captured.reduce((s, z) => s + z.total, 0);
-  const hitlistCount = captured.filter(z => z.hitlist).length;
+  const totalSearches = display.reduce((s, z) => s + z.total, 0);
+  const hitlistCount = lastRadiusCapture.filter(z => z.hitlist).length;
 
-  document.getElementById('radius-zip-count').textContent = captured.length + ' ZIPs';
+  document.getElementById('radius-zip-count').textContent = display.length + ' ZIPs';
   document.getElementById('radius-total-searches').textContent = totalSearches.toLocaleString();
-  document.getElementById('radius-hitlist-count').textContent = hitlistCount + ' of ' + captured.length;
+  document.getElementById('radius-hitlist-count').textContent = hitlistCount + ' of ' + lastRadiusCapture.length;
 
-  // Header row + data rows
+  // Show hitlist filter toggle when hitlist data exists
+  const filterRow = document.getElementById('hitlist-filter-row');
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  if (filterRow) filterRow.style.display = hasHitlist ? 'block' : 'none';
+
   list.innerHTML =
     `<div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
       <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
     </div>` +
-    captured.map(z =>
+    display.map(z =>
       `<div class="rz-row${z.hitlist ? ' rz-hitlist' : ''}">
         <span class="rz-zip">${z.zip}</span>
         <span class="rz-city">${z.city}, ${z.state}</span>
@@ -446,23 +506,41 @@ function updateRadiusResults(lat, lng) {
     ).join('');
 }
 
+function updateAllRadiusResults() {
+  lastRadiusCapture = getAllRadiusZips();
+
+  // Update panel title for multi-radius
+  const titleEl = document.getElementById('radius-title');
+  if (titleEl) titleEl.textContent = placedRadii.length > 1 ? 'ZIPs in ' + placedRadii.length + ' Radii' : 'ZIPs in Radius';
+
+  renderRadiusPanel();
+}
+
 function copyRadiusTable() {
-  if (!lastRadiusCapture.length) return;
-  const header = 'ZIP\tCity\tState\tSearches\tHitlist';
-  const rows = lastRadiusCapture.map(z =>
-    `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}`
+  const data = getDisplayCapture();
+  if (!data.length) return;
+  const multi = placedRadii.length > 1;
+  const header = multi ? 'ZIP\tCity\tState\tSearches\tHitlist\tRadius' : 'ZIP\tCity\tState\tSearches\tHitlist';
+  const rows = data.map(z =>
+    multi
+      ? `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}\t${z.radii.join('; ')}`
+      : `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}`
   );
   const tsv = [header, ...rows].join('\n');
   navigator.clipboard.writeText(tsv).then(() => {
-    setStatus('✓ Copied ' + lastRadiusCapture.length + ' ZIPs — paste into Sheets', 3000);
+    setStatus('✓ Copied ' + data.length + ' ZIPs — paste into Sheets', 3000);
   });
 }
 
 function downloadRadiusCsv() {
-  if (!lastRadiusCapture.length) return;
-  const header = 'ZIP,City,State,Searches,Hitlist';
-  const rows = lastRadiusCapture.map(z =>
-    `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''}`
+  const data = getDisplayCapture();
+  if (!data.length) return;
+  const multi = placedRadii.length > 1;
+  const header = multi ? 'ZIP,City,State,Searches,Hitlist,Radius' : 'ZIP,City,State,Searches,Hitlist';
+  const rows = data.map(z =>
+    multi
+      ? `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''},"${z.radii.join('; ')}"`
+      : `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''}`
   );
   const csv = [header, ...rows].join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
@@ -472,7 +550,7 @@ function downloadRadiusCsv() {
   a.download = 'radius_zips_' + new Date().toISOString().slice(0,10) + '.csv';
   a.click();
   URL.revokeObjectURL(url);
-  setStatus('✓ Downloaded ' + lastRadiusCapture.length + ' ZIPs', 3000);
+  setStatus('✓ Downloaded ' + data.length + ' ZIPs', 3000);
 }
 
 function makeBadgeIcon(searches, count) {
@@ -534,8 +612,11 @@ function placeRadius(lat, lng, label) {
     { className: 'cars-tooltip', sticky: false, offset: [12, 0] }
   );
 
-  // Show ZIP breakdown on initial place
-  updateRadiusResults(lat, lng);
+  const radiusObj = { ring, badge, pin, lat, lng, label };
+  placedRadii.push(radiusObj);
+
+  // Show combined ZIP breakdown across all radii
+  updateAllRadiusResults();
 
   pin.on('dragstart', function() {
     map.getContainer().style.cursor = 'grabbing';
@@ -546,6 +627,8 @@ function placeRadius(lat, lng, label) {
     const { lat: la, lng: ln } = e.latlng;
     ring.setLatLng([la, ln]);
     badge.setLatLng([la, ln]);
+    radiusObj.lat = la;
+    radiusObj.lng = ln;
     const r = searchesInRadius(la, ln);
     badge.setIcon(makeBadgeIcon(r.searches, r.count));
   });
@@ -553,13 +636,13 @@ function placeRadius(lat, lng, label) {
   pin.on('dragend', function() {
     map.getContainer().style.cursor = clickModeActive ? 'crosshair' : '';
     const { lat: la, lng: ln } = pin.getLatLng();
+    radiusObj.lat = la;
+    radiusObj.lng = ln;
     const r = searchesInRadius(la, ln);
     setStatus(`✓ ${r.searches.toLocaleString()} searches · ${r.count} cities in radius`, 4000);
-    // Update ZIP breakdown after drag
-    updateRadiusResults(la, ln);
+    // Update combined ZIP breakdown after drag
+    updateAllRadiusResults();
   });
-
-  radiusLayers.push(ring, badge, pin);
 }
 
 function geocodeAndPlace() {
@@ -579,8 +662,8 @@ function geocodeAndPlace() {
       const label = data[0].display_name.split(',')[0];
       placeRadius(lat, lng, label);
       map.panTo([lat, lng]);
-      const count = searchesInRadius(lat, lng);
-      setStatus('✓ ' + count.toLocaleString() + ' searches captured', 4000);
+      const result = searchesInRadius(lat, lng);
+      setStatus('✓ ' + result.searches.toLocaleString() + ' searches captured', 4000);
     })
     .catch(() => setStatus('Geocoding failed — check connection.'));
 }
@@ -600,8 +683,8 @@ function toggleClickMode() {
 }
 
 function clearRadii() {
-  radiusLayers.forEach(l => map.removeLayer(l));
-  radiusLayers = [];
+  placedRadii.forEach(r => { map.removeLayer(r.ring); map.removeLayer(r.badge); map.removeLayer(r.pin); });
+  placedRadii = [];
   setStatus('');
   document.getElementById('radius-results').style.display = 'none';
 }
@@ -615,8 +698,8 @@ function setStatus(msg, clearAfterMs) {
 map.on('click', function(e) {
   if (!clickModeActive) return;
   placeRadius(e.latlng.lat, e.latlng.lng, null);
-  const count = searchesInRadius(e.latlng.lat, e.latlng.lng);
-  setStatus(count.toLocaleString() + ' searches · drag to reposition');
+  const result = searchesInRadius(e.latlng.lat, e.latlng.lng);
+  setStatus(result.searches.toLocaleString() + ' searches · drag to reposition');
 });
 
 document.getElementById('radius-address').addEventListener('keydown', function(e) {
