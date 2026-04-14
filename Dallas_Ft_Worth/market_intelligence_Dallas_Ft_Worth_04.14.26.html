@@ -1,0 +1,7365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dallas-Ft. Worth Search Volume — Cars.com</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  :root {
+    --jagger:#370B55; --violet:#8136B2; --vixen:#AB74CF;
+    --lavender:#D9BAEE; --gray:#4D4D4D; --white:#FFFFFF;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Inter',sans-serif;background:#f0ecf5;color:var(--gray);height:100vh;overflow:hidden;}
+
+  #topbar{
+    position:absolute;top:0;left:0;right:0;z-index:1100;height:62px;
+    background:var(--jagger);display:flex;align-items:center;
+    justify-content:space-between;padding:0 20px;
+    box-shadow:0 2px 12px rgba(55,11,85,.45);
+  }
+  #logo{display:flex;align-items:center;gap:10px;}
+  #logo svg{height:28px;}
+  #logo-divider{width:1px;height:28px;background:rgba(255,255,255,.25);}
+  #logo-subtitle{color:var(--lavender);font-size:12px;font-weight:500;letter-spacing:.8px;text-transform:uppercase;}
+  #data-date{color:rgba(217,186,238,.65);font-size:10px;font-weight:400;letter-spacing:.5px;margin-left:4px;}
+  #total-badge{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px 16px;text-align:right;}
+  #total-badge .num{font-size:18px;font-weight:700;color:var(--white);letter-spacing:-.5px;}
+  #total-badge .lbl{font-size:10px;color:var(--lavender);text-transform:uppercase;letter-spacing:1px;}
+
+  #view-switcher{display:flex;align-items:center;gap:0;margin:0 auto;}
+  .view-btn{padding:7px 16px;font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;
+    border:1px solid rgba(255,255,255,.25);text-decoration:none;transition:all .2s;cursor:pointer;font-family:'Inter',sans-serif;}
+  .view-btn:first-child{border-radius:6px 0 0 6px;}
+  .view-btn:last-child{border-radius:0 6px 6px 0;border-left:none;}
+  .view-btn.active{background:var(--violet);color:var(--white);border-color:var(--violet);}
+  .view-btn:not(.active){background:rgba(255,255,255,.08);color:var(--lavender);}
+  .view-btn:not(.active):hover{background:rgba(255,255,255,.15);color:var(--white);}
+
+  #map{width:100%;height:100vh;padding-top:62px;}
+  .leaflet-container{background:#ede8f2!important;}
+
+  .panel{background:var(--white);border:1px solid #ddd;border-radius:10px;padding:14px 16px;
+    box-shadow:0 2px 10px rgba(55,11,85,.12);font-family:'Inter',sans-serif;}
+  .panel h3{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
+    color:var(--violet);margin-bottom:10px;border-bottom:2px solid var(--lavender);padding-bottom:6px;}
+
+  #legend{position:absolute;bottom:24px;left:16px;z-index:1000;}
+  .legend-item{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:11px;color:var(--gray);}
+  .legend-circle{border-radius:50%;background:rgba(129,54,178,.18);border:2px solid rgba(129,54,178,.65);flex-shrink:0;}
+
+  #stats{position:absolute;bottom:24px;right:16px;z-index:1000;min-width:200px;}
+  .stat-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:11px;}
+  .stat-city{color:var(--gray);}
+  .stat-num{color:var(--violet);font-weight:600;}
+  .stat-bar-wrap{width:100%;height:4px;background:#f0ecf5;border-radius:2px;margin-bottom:8px;}
+  .stat-bar{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--jagger),var(--vixen));}
+
+  .cars-tooltip{background:var(--white)!important;border:1.5px solid var(--vixen)!important;
+    border-radius:10px!important;color:var(--gray)!important;font-family:'Inter',sans-serif!important;
+    font-size:12px!important;padding:10px 14px!important;box-shadow:0 6px 18px rgba(55,11,85,.18)!important;}
+  .tt-city{font-size:14px;font-weight:700;color:var(--jagger);margin-bottom:3px;}
+  .tt-count{font-size:13px;font-weight:600;color:var(--violet);}
+  .tt-zips{font-size:10px;color:#888;margin-top:4px;max-width:240px;line-height:1.6;}
+
+  .tier-legend{min-width:170px;}
+  .tier-item{display:flex;align-items:center;gap:9px;margin-bottom:6px;font-size:11px;color:var(--gray);}
+  .tier-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;}
+
+  /* ── Radius Panel ── */
+  #radius-panel{position:absolute;top:74px;left:16px;z-index:1000;width:228px;}
+  #radius-panel h3{margin-bottom:8px;}
+  #radius-input-row{display:flex;gap:6px;margin-bottom:7px;}
+  #radius-address{
+    flex:1;padding:6px 8px;border:1px solid #ddd;border-radius:6px;
+    font-size:11px;font-family:'Inter',sans-serif;color:var(--gray);outline:none;
+  }
+  #radius-address:focus{border-color:var(--vixen);}
+  #radius-go{
+    padding:6px 10px;background:var(--violet);color:#fff;border:none;
+    border-radius:6px;font-size:11px;font-family:'Inter',sans-serif;cursor:pointer;
+    white-space:nowrap;
+  }
+  #radius-go:hover{background:var(--jagger);}
+  #radius-btn-row{display:flex;gap:6px;}
+  .radius-btn{
+    flex:1;padding:5px 0;background:#f0ecf5;color:var(--violet);
+    border:1px solid var(--lavender);border-radius:6px;font-size:10px;
+    font-family:'Inter',sans-serif;cursor:pointer;text-align:center;
+  }
+  .radius-btn:hover{background:var(--lavender);}
+  .radius-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+  #radius-clear{color:var(--gray);border-color:#ddd;}
+  #radius-clear:hover{background:#f5f0f8;}
+  #radius-status{font-size:10px;color:#999;margin-top:6px;min-height:13px;line-height:1.3;}
+
+  /* ── View Toggle ── */
+  #view-toggle{position:absolute;top:74px;right:16px;z-index:1000;}
+  .toggle-row{display:flex;gap:4px;margin-bottom:6px;}
+  .view-btn{
+    flex:1;padding:5px 10px;background:#f0ecf5;color:var(--violet);
+    border:1px solid var(--lavender);border-radius:6px;font-size:10px;
+    font-family:'Inter',sans-serif;cursor:pointer;text-align:center;
+  }
+  .view-btn:hover{background:var(--lavender);}
+  .view-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+
+  /* ── Hitlist marker ── */
+  .hitlist-pin{
+    background:#E8A817;border:2px solid #B8860B;border-radius:50%;
+    box-shadow:0 1px 5px rgba(184,134,11,.5);
+  }
+  .dealer-star{font-size:20px;text-shadow:0 1px 5px rgba(55,11,85,.5);pointer-events:none;}
+
+  /* ── Radius ZIP results ── */
+  .rz-row{display:flex;align-items:center;padding:3px 0;border-bottom:1px solid #f8f5fb;}
+  .rz-row:last-child{border-bottom:none;}
+  .rz-row.rz-hitlist{background:#f0f8e8;border-radius:3px;padding:3px 4px;margin:1px 0;}
+  .rz-zip{width:48px;font-weight:600;color:#370B55;}
+  .rz-city{flex:1;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-vol{width:50px;text-align:right;font-weight:600;color:#8136B2;}
+  .rz-hl{width:14px;text-align:center;margin-left:4px;}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div id="logo">
+    <svg viewBox="0 0 120 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <text x="0" y="23" font-family="Inter,sans-serif" font-weight="800" font-size="22" fill="#FFFFFF" letter-spacing="-0.5">Cars</text>
+      <text x="51" y="23" font-family="Inter,sans-serif" font-weight="800" font-size="22" fill="#AB74CF" letter-spacing="-0.5">.com</text>
+    </svg>
+    <div id="logo-divider"></div>
+    <span id="logo-subtitle">Dallas-Ft. Worth Market Intelligence</span><span id="data-date">· Data as of Q4 2023 – Q2 2026</span>
+  </div>
+  <div id="view-switcher">
+    <span class="view-btn active">All Makes</span>
+    <a class="view-btn" href="market_intelligence_Dallas_Ft_Worth_RAM 1500_Jeep Gladiator_04.14.26.html">RAM 1500 · Jeep Gladiator</a>
+  </div>
+  <div id="total-badge">
+    <div class="num" id="total-num">—</div>
+    <div class="lbl">Total Searches</div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<!-- Radius Tool Panel -->
+<div id="radius-panel" class="panel">
+  <h3>30-Mile Radius</h3>
+  <div id="radius-input-row">
+    <input id="radius-address" type="text" placeholder="Address, city, or ZIP…" autocomplete="off">
+    <button id="radius-go" onclick="geocodeAndPlace()">Place</button>
+  </div>
+  <div id="radius-btn-row">
+    <button id="click-toggle" class="radius-btn" onclick="toggleClickMode()">Click to Place</button>
+    <button id="radius-clear" class="radius-btn" onclick="clearRadii()">Clear All</button>
+  </div>
+  <div id="radius-status"></div>
+  <div id="radius-results" style="display:none;margin-top:8px;border-top:1px solid #f0ecf5;padding-top:8px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span id="radius-title" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#8136B2;">ZIPs in Radius</span>
+      <span id="radius-zip-count" style="font-size:10px;color:#999;"></span>
+    </div>
+    <div id="hitlist-filter-row" style="display:none;margin-bottom:6px;">
+      <button id="hitlist-filter-btn" onclick="toggleHitlistFilter()" class="radius-btn" style="width:100%;font-size:9px;padding:4px 0;">Show Hitlist Only</button>
+    </div>
+    <div style="display:flex;gap:4px;margin-bottom:6px;">
+      <button onclick="copyRadiusTable()" class="radius-btn" style="flex:1;font-size:9px;padding:4px 0;">Copy to Clipboard</button>
+      <button onclick="downloadRadiusCsv()" class="radius-btn" style="flex:1;font-size:9px;padding:4px 0;">Download CSV</button>
+    </div>
+    <div id="radius-zip-list" style="max-height:280px;overflow-y:auto;font-size:10px;">
+      <div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
+        <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
+      </div>
+    </div>
+    <div id="radius-totals" style="display:flex;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid #f0ecf5;">
+      <div style="flex:1;font-size:10px;"><span style="color:#999;">Total:</span> <strong id="radius-total-searches" style="color:#370B55;">0</strong></div>
+      <div style="flex:1;font-size:10px;"><span style="color:#999;">Hitlist:</span> <strong id="radius-hitlist-count" style="color:#38761D;">0</strong></div>
+    </div>
+  </div>
+  <div id="radius-note" style="font-size:9.5px;color:#aaa;margin-top:8px;line-height:1.5;border-top:1px solid #f0ecf5;padding-top:8px;">
+    ZIP-level breakdown available when ZIP data is loaded. City view uses city-center approximation.
+  </div>
+</div>
+
+<div id="view-toggle" class="panel">
+  <h3>Map View</h3>
+  <div class="toggle-row">
+    <button id="btn-city" class="view-btn active" onclick="setView('city')">Cities</button>
+    <button id="btn-zip" class="view-btn" onclick="setView('zip')">ZIP Codes</button>
+  </div>
+</div>
+
+<div id="legend" class="panel">
+  <h3>Search Volume</h3>
+  <div class="legend-item"><div class="legend-circle" style="width:44px;height:44px;"></div><span>50,000+</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:30px;height:30px;"></div><span>10,000 – 50,000</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:18px;height:18px;"></div><span>1,000 – 10,000</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:10px;height:10px;"></div><span>&lt; 1,000</span></div>
+  <div class="legend-item" id="hitlist-legend" style="display:none;margin-top:8px;padding-top:6px;border-top:1px solid #f0ecf5;">
+    <div class="hitlist-pin" style="width:14px;height:14px;"></div><span>Hitlist ZIP</span>
+  </div>
+  <div class="legend-item" id="dealer-legend" style="display:none;">
+    <span class="dealer-star" style="font-size:14px;">★</span><span>Dealer Location</span>
+  </div>
+</div>
+
+<div id="stats" class="panel">
+  <h3>Top 8 Cities</h3>
+  <div id="stats-body"></div>
+</div>
+
+<script>
+const cities = [
+  {
+    "name": "Dallas",
+    "total": 8889075,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "zips": "75201, 75202, 75203, 75204, 75205, 75206, 75207, 75208, 75209, 75210, 75211, 75212, 75214, 75215, 75216, 75217, 75218, 75219, 75220, 75221, 75222, 75223, 75224, 75225, 75226, 75227, 75228, 75229, 75230, 75231, 75232, 75233, 75234, 75235, 75236, 75237, 75238, 75240, 75241, 75242, 75243, 75244, 75246, 75247, 75248, 75249, 75250, 75251, 75252, 75253, 75254, 75260, 75261, 75262, 75263, 75264, 75265, 75266, 75267, 75270, 75275, 75277, 75283, 75284, 75285, 75287, 75301, 75303, 75312, 75313, 75315, 75320, 75326, 75336, 75339, 75342, 75354, 75355, 75356, 75357, 75358, 75359, 75360, 75367, 75368, 75370, 75371, 75372, 75373, 75374, 75376, 75378, 75379, 75380, 75381, 75382, 75389, 75390, 75391, 75392, 75393, 75394, 75395, 75397, 75398"
+  },
+  {
+    "name": "Fort Worth",
+    "total": 3381878,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "zips": "76101, 76102, 76103, 76104, 76105, 76106, 76107, 76108, 76109, 76110, 76111, 76112, 76113, 76114, 76115, 76116, 76118, 76119, 76120, 76121, 76122, 76123, 76124, 76126, 76129, 76130, 76131, 76132, 76133, 76134, 76135, 76136, 76137, 76140, 76147, 76148, 76150, 76155, 76161, 76162, 76163, 76164, 76166, 76177, 76179, 76181, 76185, 76190, 76191, 76192, 76193, 76195, 76196, 76197, 76198, 76199"
+  },
+  {
+    "name": "Plano",
+    "total": 1705369,
+    "lat": 33.0277,
+    "lng": -96.7291,
+    "zips": "75023, 75024, 75025, 75026, 75074, 75075, 75086, 75093, 75094"
+  },
+  {
+    "name": "Frisco",
+    "total": 1323740,
+    "lat": 33.1499,
+    "lng": -96.8241,
+    "zips": "75033, 75034, 75035, 75036"
+  },
+  {
+    "name": "Arlington",
+    "total": 1270774,
+    "lat": 32.7357,
+    "lng": -97.1348,
+    "zips": "76001, 76002, 76003, 76004, 76005, 76006, 76007, 76010, 76011, 76012, 76013, 76014, 76015, 76016, 76017, 76018, 76019, 76094, 76096"
+  },
+  {
+    "name": "Mckinney",
+    "total": 1081768,
+    "lat": 33.1976,
+    "lng": -96.6153,
+    "zips": "75069, 75070, 75071, 75072"
+  },
+  {
+    "name": "Allen",
+    "total": 742868,
+    "lat": 33.106,
+    "lng": -96.66135,
+    "zips": "75002, 75013"
+  },
+  {
+    "name": "Irving",
+    "total": 732180,
+    "lat": 32.8566,
+    "lng": -96.9598,
+    "zips": "75014, 75015, 75016, 75017, 75038, 75039, 75059, 75060, 75061, 75062, 75063, 75064"
+  },
+  {
+    "name": "Garland",
+    "total": 658624,
+    "lat": 32.9126,
+    "lng": -96.6389,
+    "zips": "75040, 75041, 75042, 75043, 75044, 75045, 75046, 75047, 75049"
+  },
+  {
+    "name": "Keller",
+    "total": 644357,
+    "lat": 32.9293,
+    "lng": -97.2666,
+    "zips": "76244, 76248"
+  },
+  {
+    "name": "Carrollton",
+    "total": 624761,
+    "lat": 32.9845,
+    "lng": -96.88225,
+    "zips": "75006, 75007, 75010, 75011"
+  },
+  {
+    "name": "Grand Prairie",
+    "total": 621836,
+    "lat": 32.7115,
+    "lng": -97.0112,
+    "zips": "75050, 75051, 75052, 75053, 75054"
+  },
+  {
+    "name": "Denton",
+    "total": 609485,
+    "lat": 33.21325,
+    "lng": -97.12225,
+    "zips": "76201, 76202, 76203, 76204, 76205, 76206, 76207, 76208, 76209, 76210"
+  },
+  {
+    "name": "Richardson",
+    "total": 577476,
+    "lat": 32.9462,
+    "lng": -96.7452,
+    "zips": "75080, 75081, 75082, 75083, 75085"
+  },
+  {
+    "name": "Lewisville",
+    "total": 539020,
+    "lat": 33.0497,
+    "lng": -96.99705,
+    "zips": "75029, 75057, 75067, 75077"
+  },
+  {
+    "name": "Rockwall",
+    "total": 498660,
+    "lat": 32.9176,
+    "lng": -96.42565,
+    "zips": "75032, 75087"
+  },
+  {
+    "name": "Prosper",
+    "total": 428386,
+    "lat": 33.2362,
+    "lng": -96.7954,
+    "zips": "75078"
+  },
+  {
+    "name": "Flower Mound",
+    "total": 414116,
+    "lat": 33.0383,
+    "lng": -97.1163,
+    "zips": "75022, 75027, 75028"
+  },
+  {
+    "name": "Mesquite",
+    "total": 379334,
+    "lat": 32.7673,
+    "lng": -96.6082,
+    "zips": "75149, 75150, 75181, 75185, 75187"
+  },
+  {
+    "name": "The Colony",
+    "total": 369744,
+    "lat": 33.094,
+    "lng": -96.8836,
+    "zips": "75056"
+  },
+  {
+    "name": "Mansfield",
+    "total": 366768,
+    "lat": 32.5773,
+    "lng": -97.1416,
+    "zips": "76063"
+  },
+  {
+    "name": "Forney",
+    "total": 357241,
+    "lat": 32.7491,
+    "lng": -96.4598,
+    "zips": "75126"
+  },
+  {
+    "name": "Wylie",
+    "total": 333656,
+    "lat": 33.0041,
+    "lng": -96.5394,
+    "zips": "75098"
+  },
+  {
+    "name": "Grapevine",
+    "total": 326642,
+    "lat": 32.93355,
+    "lng": -97.07945,
+    "zips": "76051, 76099"
+  },
+  {
+    "name": "Little Elm",
+    "total": 324624,
+    "lat": 33.1768,
+    "lng": -96.9583,
+    "zips": "75068"
+  },
+  {
+    "name": "Addison",
+    "total": 324571,
+    "lat": 32.96,
+    "lng": -96.8385,
+    "zips": "75001"
+  },
+  {
+    "name": "Aubrey",
+    "total": 308718,
+    "lat": 33.292,
+    "lng": -96.9879,
+    "zips": "76227"
+  },
+  {
+    "name": "Weatherford",
+    "total": 289458,
+    "lat": 32.76125,
+    "lng": -97.77075,
+    "zips": "76085, 76086, 76087, 76088"
+  },
+  {
+    "name": "Waxahachie",
+    "total": 280982,
+    "lat": 32.3773,
+    "lng": -96.8374,
+    "zips": "75165, 75167, 75168"
+  },
+  {
+    "name": "Burleson",
+    "total": 275756,
+    "lat": 32.53685,
+    "lng": -97.3149,
+    "zips": "76028, 76097"
+  },
+  {
+    "name": "Roanoke",
+    "total": 271475,
+    "lat": 33.0211,
+    "lng": -97.2127,
+    "zips": "76262"
+  },
+  {
+    "name": "Euless",
+    "total": 264240,
+    "lat": 32.8423,
+    "lng": -97.0902,
+    "zips": "76039, 76040"
+  },
+  {
+    "name": "Argyle",
+    "total": 263998,
+    "lat": 33.1062,
+    "lng": -97.16,
+    "zips": "76226"
+  },
+  {
+    "name": "North Richland Hills",
+    "total": 246314,
+    "lat": 32.8614,
+    "lng": -97.2174,
+    "zips": "76180, 76182"
+  },
+  {
+    "name": "Coppell",
+    "total": 245490,
+    "lat": 32.96095,
+    "lng": -96.99775,
+    "zips": "75019, 75099"
+  },
+  {
+    "name": "Southlake",
+    "total": 243946,
+    "lat": 32.9485,
+    "lng": -97.1524,
+    "zips": "76092"
+  },
+  {
+    "name": "Midlothian",
+    "total": 233939,
+    "lat": 32.4757,
+    "lng": -96.9936,
+    "zips": "76065"
+  },
+  {
+    "name": "Rowlett",
+    "total": 210168,
+    "lat": 32.9031,
+    "lng": -96.5544,
+    "zips": "75030, 75088, 75089"
+  },
+  {
+    "name": "Celina",
+    "total": 206645,
+    "lat": 33.3103,
+    "lng": -96.7673,
+    "zips": "75009"
+  },
+  {
+    "name": "Royse City",
+    "total": 200074,
+    "lat": 32.9628,
+    "lng": -96.3648,
+    "zips": "75189"
+  },
+  {
+    "name": "Desoto",
+    "total": 198054,
+    "lat": 32.597,
+    "lng": -96.8611,
+    "zips": "75115, 75123"
+  },
+  {
+    "name": "Bedford",
+    "total": 181505,
+    "lat": 32.844,
+    "lng": -97.1431,
+    "zips": "76021, 76022, 76095"
+  },
+  {
+    "name": "Granbury",
+    "total": 178523,
+    "lat": 32.4369,
+    "lng": -97.75135,
+    "zips": "76048, 76049"
+  },
+  {
+    "name": "Haslet",
+    "total": 178187,
+    "lat": 32.9557,
+    "lng": -97.3372,
+    "zips": "76052"
+  },
+  {
+    "name": "Aledo",
+    "total": 171491,
+    "lat": 32.7004,
+    "lng": -97.6039,
+    "zips": "76008"
+  },
+  {
+    "name": "Cedar Hill",
+    "total": 159538,
+    "lat": 32.5885,
+    "lng": -96.94995,
+    "zips": "75104, 75106"
+  },
+  {
+    "name": "Red Oak",
+    "total": 144490,
+    "lat": 32.5185,
+    "lng": -96.8071,
+    "zips": "75154"
+  },
+  {
+    "name": "Hurst",
+    "total": 144339,
+    "lat": 32.83845,
+    "lng": -97.17555,
+    "zips": "76053, 76054"
+  },
+  {
+    "name": "Justin",
+    "total": 139178,
+    "lat": 33.0734,
+    "lng": -97.3093,
+    "zips": "76247"
+  },
+  {
+    "name": "Princeton",
+    "total": 136027,
+    "lat": 33.1555,
+    "lng": -96.4981,
+    "zips": "75407"
+  },
+  {
+    "name": "Melissa",
+    "total": 133157,
+    "lat": 33.2841,
+    "lng": -96.574,
+    "zips": "75454"
+  },
+  {
+    "name": "Colleyville",
+    "total": 130466,
+    "lat": 32.8872,
+    "lng": -97.146,
+    "zips": "76034"
+  },
+  {
+    "name": "Duncanville",
+    "total": 122437,
+    "lat": 32.6587,
+    "lng": -96.9113,
+    "zips": "75116, 75137, 75138"
+  },
+  {
+    "name": "Anna",
+    "total": 119732,
+    "lat": 33.3445,
+    "lng": -96.5639,
+    "zips": "75409"
+  },
+  {
+    "name": "Sachse",
+    "total": 112055,
+    "lat": 32.9643,
+    "lng": -96.6012,
+    "zips": "75048"
+  },
+  {
+    "name": "Greenville",
+    "total": 107969,
+    "lat": 33.14505,
+    "lng": -96.08685,
+    "zips": "75401, 75402, 75403, 75404"
+  },
+  {
+    "name": "Cleburne",
+    "total": 107677,
+    "lat": 32.3497,
+    "lng": -97.3707,
+    "zips": "76031, 76033"
+  },
+  {
+    "name": "Lancaster",
+    "total": 102129,
+    "lat": 32.60375,
+    "lng": -96.7779,
+    "zips": "75134, 75146"
+  },
+  {
+    "name": "Azle",
+    "total": 94758,
+    "lat": 32.8996,
+    "lng": -97.5524,
+    "zips": "76020, 76098"
+  },
+  {
+    "name": "Crowley",
+    "total": 85889,
+    "lat": 32.5814,
+    "lng": -97.3703,
+    "zips": "76036"
+  },
+  {
+    "name": "Terrell",
+    "total": 79686,
+    "lat": 32.74235,
+    "lng": -96.23905,
+    "zips": "75160, 75161"
+  },
+  {
+    "name": "Decatur",
+    "total": 75093,
+    "lat": 33.2351,
+    "lng": -97.574,
+    "zips": "76234"
+  },
+  {
+    "name": "Lake Dallas",
+    "total": 71591,
+    "lat": 33.1219,
+    "lng": -97.0237,
+    "zips": "75065"
+  },
+  {
+    "name": "Ennis",
+    "total": 70891,
+    "lat": 32.3334,
+    "lng": -96.62795,
+    "zips": "75119, 75120"
+  },
+  {
+    "name": "Sanger",
+    "total": 64456,
+    "lat": 33.3563,
+    "lng": -97.1814,
+    "zips": "76266"
+  },
+  {
+    "name": "Stephenville",
+    "total": 60780,
+    "lat": 32.21835,
+    "lng": -98.2152,
+    "zips": "76401, 76402"
+  },
+  {
+    "name": "Springtown",
+    "total": 60332,
+    "lat": 32.966,
+    "lng": -97.6836,
+    "zips": "76082"
+  },
+  {
+    "name": "Paris",
+    "total": 60118,
+    "lat": 33.6609,
+    "lng": -95.5379,
+    "zips": "75460, 75461, 75462"
+  },
+  {
+    "name": "Corsicana",
+    "total": 58010,
+    "lat": 32.0624,
+    "lng": -96.4735,
+    "zips": "75109, 75110, 75151"
+  },
+  {
+    "name": "Balch Springs",
+    "total": 55355,
+    "lat": 32.7287,
+    "lng": -96.6228,
+    "zips": "75180"
+  },
+  {
+    "name": "Haltom City",
+    "total": 54090,
+    "lat": 32.8087,
+    "lng": -97.2709,
+    "zips": "76117"
+  },
+  {
+    "name": "Alvarado",
+    "total": 50859,
+    "lat": 32.4395,
+    "lng": -97.213,
+    "zips": "76009"
+  },
+  {
+    "name": "Sulphur Springs",
+    "total": 50200,
+    "lat": 33.13645,
+    "lng": -95.59665,
+    "zips": "75482, 75483"
+  },
+  {
+    "name": "Mabank",
+    "total": 47580,
+    "lat": 32.33285,
+    "lng": -96.09345,
+    "zips": "75147, 75156"
+  },
+  {
+    "name": "Kaufman",
+    "total": 44765,
+    "lat": 32.546,
+    "lng": -96.2852,
+    "zips": "75142"
+  },
+  {
+    "name": "Caddo Mills",
+    "total": 44340,
+    "lat": 33.0683,
+    "lng": -96.2391,
+    "zips": "75135"
+  },
+  {
+    "name": "Lavon",
+    "total": 43777,
+    "lat": 33.0139,
+    "lng": -96.4377,
+    "zips": "75166"
+  },
+  {
+    "name": "Seagoville",
+    "total": 43110,
+    "lat": 32.6525,
+    "lng": -96.558,
+    "zips": "75159"
+  },
+  {
+    "name": "Sunnyvale",
+    "total": 42298,
+    "lat": 32.797,
+    "lng": -96.5616,
+    "zips": "75182"
+  },
+  {
+    "name": "Godley",
+    "total": 42133,
+    "lat": 32.4282,
+    "lng": -97.5349,
+    "zips": "76044"
+  },
+  {
+    "name": "Joshua",
+    "total": 42062,
+    "lat": 32.4663,
+    "lng": -97.4011,
+    "zips": "76058"
+  },
+  {
+    "name": "Athens",
+    "total": 40893,
+    "lat": 32.2043,
+    "lng": -95.8166,
+    "zips": "75751, 75752"
+  },
+  {
+    "name": "Canton",
+    "total": 40130,
+    "lat": 32.5143,
+    "lng": -95.9047,
+    "zips": "75103"
+  },
+  {
+    "name": "Crandall",
+    "total": 39094,
+    "lat": 32.6279,
+    "lng": -96.4558,
+    "zips": "75114"
+  },
+  {
+    "name": "Palestine",
+    "total": 38714,
+    "lat": 31.76045,
+    "lng": -95.64435,
+    "zips": "75801, 75802, 75803, 75882"
+  },
+  {
+    "name": "Rhome",
+    "total": 38463,
+    "lat": 33.054,
+    "lng": -97.4817,
+    "zips": "76078"
+  },
+  {
+    "name": "Nevada",
+    "total": 35154,
+    "lat": 33.0593,
+    "lng": -96.3877,
+    "zips": "75173"
+  },
+  {
+    "name": "Kennedale",
+    "total": 34481,
+    "lat": 32.6432,
+    "lng": -97.2139,
+    "zips": "76060"
+  },
+  {
+    "name": "Venus",
+    "total": 32298,
+    "lat": 32.433,
+    "lng": -97.1087,
+    "zips": "76084"
+  },
+  {
+    "name": "Farmersville",
+    "total": 31871,
+    "lat": 33.1659,
+    "lng": -96.3686,
+    "zips": "75442"
+  },
+  {
+    "name": "Gainesville",
+    "total": 31711,
+    "lat": 33.63255,
+    "lng": -97.0976,
+    "zips": "76240, 76241"
+  },
+  {
+    "name": "Krum",
+    "total": 28997,
+    "lat": 33.2734,
+    "lng": -97.2675,
+    "zips": "76249"
+  },
+  {
+    "name": "Mineral Wells",
+    "total": 28973,
+    "lat": 32.8085,
+    "lng": -98.1128,
+    "zips": "76067, 76068"
+  },
+  {
+    "name": "Boyd",
+    "total": 27416,
+    "lat": 33.0594,
+    "lng": -97.5868,
+    "zips": "76023"
+  },
+  {
+    "name": "Wills Point",
+    "total": 25940,
+    "lat": 32.7283,
+    "lng": -96.0079,
+    "zips": "75169"
+  },
+  {
+    "name": "Ponder",
+    "total": 25408,
+    "lat": 33.1774,
+    "lng": -97.2848,
+    "zips": "76259"
+  },
+  {
+    "name": "Fate",
+    "total": 24632,
+    "lat": 32.9415,
+    "lng": -96.3814,
+    "zips": "75132"
+  },
+  {
+    "name": "Paradise",
+    "total": 23782,
+    "lat": 33.0826,
+    "lng": -97.6974,
+    "zips": "76073"
+  },
+  {
+    "name": "Ferris",
+    "total": 23453,
+    "lat": 32.5223,
+    "lng": -96.6643,
+    "zips": "75125"
+  },
+  {
+    "name": "Kemp",
+    "total": 20882,
+    "lat": 32.2486,
+    "lng": -96.2161,
+    "zips": "75143"
+  },
+  {
+    "name": "Bridgeport",
+    "total": 20587,
+    "lat": 33.187,
+    "lng": -97.781,
+    "zips": "76426"
+  },
+  {
+    "name": "Bonham",
+    "total": 20538,
+    "lat": 33.5806,
+    "lng": -96.1836,
+    "zips": "75418"
+  },
+  {
+    "name": "Hutchins",
+    "total": 20267,
+    "lat": 32.6396,
+    "lng": -96.707,
+    "zips": "75141"
+  },
+  {
+    "name": "Whitney",
+    "total": 19191,
+    "lat": 31.9713,
+    "lng": -97.3463,
+    "zips": "76692"
+  },
+  {
+    "name": "Hillsboro",
+    "total": 19103,
+    "lat": 32.0149,
+    "lng": -97.1198,
+    "zips": "76645"
+  },
+  {
+    "name": "Quinlan",
+    "total": 18175,
+    "lat": 32.8983,
+    "lng": -96.1261,
+    "zips": "75474"
+  },
+  {
+    "name": "Newark",
+    "total": 17866,
+    "lat": 33.007,
+    "lng": -97.4923,
+    "zips": "76071"
+  },
+  {
+    "name": "Grandview",
+    "total": 17540,
+    "lat": 32.2704,
+    "lng": -97.1792,
+    "zips": "76050"
+  },
+  {
+    "name": "Glen Rose",
+    "total": 14836,
+    "lat": 32.2298,
+    "lng": -97.7629,
+    "zips": "76043"
+  },
+  {
+    "name": "Chandler",
+    "total": 14178,
+    "lat": 32.2572,
+    "lng": -95.5393,
+    "zips": "75758"
+  },
+  {
+    "name": "Palmer",
+    "total": 14014,
+    "lat": 32.4387,
+    "lng": -96.6794,
+    "zips": "75152"
+  },
+  {
+    "name": "Leonard",
+    "total": 13565,
+    "lat": 33.3796,
+    "lng": -96.2475,
+    "zips": "75452"
+  },
+  {
+    "name": "Fairfield",
+    "total": 13519,
+    "lat": 31.7361,
+    "lng": -96.1572,
+    "zips": "75840"
+  },
+  {
+    "name": "Valley View",
+    "total": 13270,
+    "lat": 33.5022,
+    "lng": -97.2311,
+    "zips": "76272"
+  },
+  {
+    "name": "Commerce",
+    "total": 12451,
+    "lat": 33.2435,
+    "lng": -95.9093,
+    "zips": "75428, 75429"
+  },
+  {
+    "name": "Blue Ridge",
+    "total": 11297,
+    "lat": 33.3061,
+    "lng": -96.3901,
+    "zips": "75424"
+  },
+  {
+    "name": "Ben Wheeler",
+    "total": 11153,
+    "lat": 32.4126,
+    "lng": -95.6371,
+    "zips": "75754"
+  },
+  {
+    "name": "Pilot Point",
+    "total": 10799,
+    "lat": 33.371,
+    "lng": -96.9446,
+    "zips": "76258"
+  },
+  {
+    "name": "Teague",
+    "total": 9603,
+    "lat": 31.6328,
+    "lng": -96.2778,
+    "zips": "75860"
+  },
+  {
+    "name": "Scurry",
+    "total": 8645,
+    "lat": 32.4818,
+    "lng": -96.3925,
+    "zips": "75158"
+  },
+  {
+    "name": "Malakoff",
+    "total": 8636,
+    "lat": 32.1705,
+    "lng": -96.006,
+    "zips": "75148"
+  },
+  {
+    "name": "Wilmer",
+    "total": 8286,
+    "lat": 32.5981,
+    "lng": -96.6838,
+    "zips": "75172"
+  },
+  {
+    "name": "Naval Air Station Jrb",
+    "total": 8222,
+    "lat": 32.7254,
+    "lng": -97.3208,
+    "zips": "76127"
+  },
+  {
+    "name": "Dublin",
+    "total": 8069,
+    "lat": 32.0909,
+    "lng": -98.3455,
+    "zips": "76446"
+  },
+  {
+    "name": "Cresson",
+    "total": 7731,
+    "lat": 32.5343,
+    "lng": -97.6158,
+    "zips": "76035"
+  },
+  {
+    "name": "Tolar",
+    "total": 7695,
+    "lat": 32.3772,
+    "lng": -97.8802,
+    "zips": "76476"
+  },
+  {
+    "name": "Trenton",
+    "total": 7254,
+    "lat": 33.4235,
+    "lng": -96.3398,
+    "zips": "75490"
+  },
+  {
+    "name": "Frankston",
+    "total": 7214,
+    "lat": 32.0535,
+    "lng": -95.5163,
+    "zips": "75763"
+  },
+  {
+    "name": "Poolville",
+    "total": 7209,
+    "lat": 32.968,
+    "lng": -97.8472,
+    "zips": "76487"
+  },
+  {
+    "name": "Edgewood",
+    "total": 6963,
+    "lat": 32.7003,
+    "lng": -95.878,
+    "zips": "75117"
+  },
+  {
+    "name": "Muenster",
+    "total": 6948,
+    "lat": 33.6595,
+    "lng": -97.3624,
+    "zips": "76252"
+  },
+  {
+    "name": "Jacksboro",
+    "total": 6924,
+    "lat": 33.2347,
+    "lng": -98.1681,
+    "zips": "76458"
+  },
+  {
+    "name": "Brownsboro",
+    "total": 6899,
+    "lat": 32.304,
+    "lng": -95.6,
+    "zips": "75756"
+  },
+  {
+    "name": "Comanche",
+    "total": 6868,
+    "lat": 31.9116,
+    "lng": -98.6082,
+    "zips": "76442"
+  },
+  {
+    "name": "Maypearl",
+    "total": 6813,
+    "lat": 32.2993,
+    "lng": -97.0271,
+    "zips": "76064"
+  },
+  {
+    "name": "Peaster",
+    "total": 6790,
+    "lat": 32.8721,
+    "lng": -97.8667,
+    "zips": "76485"
+  },
+  {
+    "name": "Millsap",
+    "total": 6724,
+    "lat": 32.7457,
+    "lng": -97.9561,
+    "zips": "76066"
+  },
+  {
+    "name": "Lipan",
+    "total": 6668,
+    "lat": 32.5072,
+    "lng": -97.9536,
+    "zips": "76462"
+  },
+  {
+    "name": "Hamilton",
+    "total": 6302,
+    "lat": 31.6781,
+    "lng": -98.1131,
+    "zips": "76531"
+  },
+  {
+    "name": "Chico",
+    "total": 5986,
+    "lat": 33.3193,
+    "lng": -97.8031,
+    "zips": "76431"
+  },
+  {
+    "name": "Celeste",
+    "total": 5969,
+    "lat": 33.2649,
+    "lng": -96.2076,
+    "zips": "75423"
+  },
+  {
+    "name": "Eustace",
+    "total": 5885,
+    "lat": 32.2965,
+    "lng": -96.0137,
+    "zips": "75124"
+  },
+  {
+    "name": "Van",
+    "total": 5666,
+    "lat": 32.5283,
+    "lng": -95.6545,
+    "zips": "75790"
+  },
+  {
+    "name": "Lone Oak",
+    "total": 5513,
+    "lat": 32.9916,
+    "lng": -95.9434,
+    "zips": "75453"
+  },
+  {
+    "name": "Emory",
+    "total": 5397,
+    "lat": 32.875,
+    "lng": -95.7418,
+    "zips": "75440"
+  },
+  {
+    "name": "Bluff Dale",
+    "total": 5119,
+    "lat": 32.2884,
+    "lng": -98.0539,
+    "zips": "76433"
+  },
+  {
+    "name": "Grand Saline",
+    "total": 5069,
+    "lat": 32.6635,
+    "lng": -95.7064,
+    "zips": "75140"
+  },
+  {
+    "name": "Fruitvale",
+    "total": 5016,
+    "lat": 32.677,
+    "lng": -95.7899,
+    "zips": "75127"
+  },
+  {
+    "name": "Wolfe City",
+    "total": 4850,
+    "lat": 33.3605,
+    "lng": -96.0691,
+    "zips": "75496"
+  },
+  {
+    "name": "Cumby",
+    "total": 4782,
+    "lat": 33.1118,
+    "lng": -95.7945,
+    "zips": "75433"
+  },
+  {
+    "name": "Graford",
+    "total": 4628,
+    "lat": 32.9242,
+    "lng": -98.337,
+    "zips": "76449"
+  },
+  {
+    "name": "Rio Vista",
+    "total": 4616,
+    "lat": 32.2532,
+    "lng": -97.3678,
+    "zips": "76093"
+  },
+  {
+    "name": "Clifton",
+    "total": 4600,
+    "lat": 31.7918,
+    "lng": -97.5203,
+    "zips": "76634"
+  },
+  {
+    "name": "Hico",
+    "total": 4510,
+    "lat": 31.9597,
+    "lng": -98.0249,
+    "zips": "76457"
+  },
+  {
+    "name": "Itasca",
+    "total": 4466,
+    "lat": 32.1636,
+    "lng": -97.146,
+    "zips": "76055"
+  },
+  {
+    "name": "Elkhart",
+    "total": 4462,
+    "lat": 31.648,
+    "lng": -95.5551,
+    "zips": "75839"
+  },
+  {
+    "name": "Keene",
+    "total": 4443,
+    "lat": 32.3937,
+    "lng": -97.3287,
+    "zips": "76059"
+  },
+  {
+    "name": "Rice",
+    "total": 4425,
+    "lat": 32.2258,
+    "lng": -96.4606,
+    "zips": "75155"
+  },
+  {
+    "name": "Cooper",
+    "total": 4268,
+    "lat": 33.3812,
+    "lng": -95.6623,
+    "zips": "75432"
+  },
+  {
+    "name": "Honey Grove",
+    "total": 4068,
+    "lat": 33.5985,
+    "lng": -95.9109,
+    "zips": "75446"
+  },
+  {
+    "name": "Clarksville",
+    "total": 4054,
+    "lat": 33.6236,
+    "lng": -95.0461,
+    "zips": "75426"
+  },
+  {
+    "name": "Italy",
+    "total": 3972,
+    "lat": 32.1785,
+    "lng": -96.8823,
+    "zips": "76651"
+  },
+  {
+    "name": "De Leon",
+    "total": 3843,
+    "lat": 32.1087,
+    "lng": -98.5489,
+    "zips": "76444"
+  },
+  {
+    "name": "Point",
+    "total": 3770,
+    "lat": 32.9007,
+    "lng": -95.8903,
+    "zips": "75472"
+  },
+  {
+    "name": "Valley Mills",
+    "total": 3571,
+    "lat": 31.6599,
+    "lng": -97.4935,
+    "zips": "76689"
+  },
+  {
+    "name": "Bogata",
+    "total": 3401,
+    "lat": 33.4699,
+    "lng": -95.1937,
+    "zips": "75417"
+  },
+  {
+    "name": "Murchison",
+    "total": 3318,
+    "lat": 32.3257,
+    "lng": -95.7737,
+    "zips": "75778"
+  },
+  {
+    "name": "Blossom",
+    "total": 3315,
+    "lat": 33.6945,
+    "lng": -95.3823,
+    "zips": "75416"
+  },
+  {
+    "name": "Copeville",
+    "total": 3155,
+    "lat": 33.0875,
+    "lng": -96.4186,
+    "zips": "75121"
+  },
+  {
+    "name": "Alvord",
+    "total": 3133,
+    "lat": 33.3698,
+    "lng": -97.6885,
+    "zips": "76225"
+  },
+  {
+    "name": "Milford",
+    "total": 3099,
+    "lat": 32.1482,
+    "lng": -96.9612,
+    "zips": "76670"
+  },
+  {
+    "name": "Streetman",
+    "total": 2844,
+    "lat": 31.8885,
+    "lng": -96.2988,
+    "zips": "75859"
+  },
+  {
+    "name": "Gordon",
+    "total": 2836,
+    "lat": 32.5478,
+    "lng": -98.3632,
+    "zips": "76453"
+  },
+  {
+    "name": "Brashear",
+    "total": 2790,
+    "lat": 33.1155,
+    "lng": -95.7345,
+    "zips": "75420"
+  },
+  {
+    "name": "Kerens",
+    "total": 2762,
+    "lat": 32.1275,
+    "lng": -96.2298,
+    "zips": "75144"
+  },
+  {
+    "name": "Campbell",
+    "total": 2760,
+    "lat": 33.151,
+    "lng": -95.9439,
+    "zips": "75422"
+  },
+  {
+    "name": "Trinidad",
+    "total": 2654,
+    "lat": 32.1383,
+    "lng": -96.0831,
+    "zips": "75163"
+  },
+  {
+    "name": "Frost",
+    "total": 2475,
+    "lat": 32.0275,
+    "lng": -96.7684,
+    "zips": "76641"
+  },
+  {
+    "name": "Larue",
+    "total": 2471,
+    "lat": 32.1608,
+    "lng": -95.5927,
+    "zips": "75770"
+  },
+  {
+    "name": "Meridian",
+    "total": 2432,
+    "lat": 31.929,
+    "lng": -97.6443,
+    "zips": "76665"
+  },
+  {
+    "name": "Weston",
+    "total": 2409,
+    "lat": 33.3512,
+    "lng": -96.6646,
+    "zips": "75097"
+  },
+  {
+    "name": "Tennessee Colony",
+    "total": 2296,
+    "lat": 31.8354,
+    "lng": -95.8389,
+    "zips": "75861, 75880, 75884, 75886"
+  },
+  {
+    "name": "Blooming Grove",
+    "total": 2282,
+    "lat": 32.0758,
+    "lng": -96.701,
+    "zips": "76626"
+  },
+  {
+    "name": "Palo Pinto",
+    "total": 2243,
+    "lat": 32.7673,
+    "lng": -98.2987,
+    "zips": "76484"
+  },
+  {
+    "name": "Josephine",
+    "total": 2020,
+    "lat": 33.0612,
+    "lng": -96.3072,
+    "zips": "75164"
+  },
+  {
+    "name": "Bryson",
+    "total": 1984,
+    "lat": 33.1615,
+    "lng": -98.3874,
+    "zips": "76427"
+  },
+  {
+    "name": "Morgan",
+    "total": 1963,
+    "lat": 32.0195,
+    "lng": -97.5608,
+    "zips": "76671"
+  },
+  {
+    "name": "Dodd City",
+    "total": 1924,
+    "lat": 33.5647,
+    "lng": -96.0619,
+    "zips": "75438"
+  },
+  {
+    "name": "Kopperl",
+    "total": 1864,
+    "lat": 32.1035,
+    "lng": -97.5421,
+    "zips": "76652"
+  },
+  {
+    "name": "Powderly",
+    "total": 1860,
+    "lat": 33.7779,
+    "lng": -95.5307,
+    "zips": "75473"
+  },
+  {
+    "name": "Santo",
+    "total": 1827,
+    "lat": 32.5979,
+    "lng": -98.1797,
+    "zips": "76472"
+  },
+  {
+    "name": "Barry",
+    "total": 1734,
+    "lat": 32.1014,
+    "lng": -96.6251,
+    "zips": "75102"
+  },
+  {
+    "name": "Brookston",
+    "total": 1713,
+    "lat": 33.6246,
+    "lng": -95.6888,
+    "zips": "75421"
+  },
+  {
+    "name": "Covington",
+    "total": 1674,
+    "lat": 32.1595,
+    "lng": -97.2591,
+    "zips": "76636"
+  },
+  {
+    "name": "Montalba",
+    "total": 1670,
+    "lat": 31.8766,
+    "lng": -95.7327,
+    "zips": "75853"
+  },
+  {
+    "name": "Ladonia",
+    "total": 1645,
+    "lat": 33.4245,
+    "lng": -95.9455,
+    "zips": "75449"
+  },
+  {
+    "name": "Ivanhoe",
+    "total": 1612,
+    "lat": 33.7612,
+    "lng": -96.1193,
+    "zips": "75447"
+  },
+  {
+    "name": "Lindsay",
+    "total": 1509,
+    "lat": 33.636,
+    "lng": -97.2214,
+    "zips": "76250"
+  },
+  {
+    "name": "Rainbow",
+    "total": 1455,
+    "lat": 32.2812,
+    "lng": -97.7065,
+    "zips": "76077"
+  },
+  {
+    "name": "Purdon",
+    "total": 1455,
+    "lat": 31.9483,
+    "lng": -96.5856,
+    "zips": "76679"
+  },
+  {
+    "name": "Nemo",
+    "total": 1417,
+    "lat": 32.2713,
+    "lng": -97.6567,
+    "zips": "76070"
+  },
+  {
+    "name": "Perrin",
+    "total": 1412,
+    "lat": 33.034,
+    "lng": -98.0692,
+    "zips": "76486"
+  },
+  {
+    "name": "Saltillo",
+    "total": 1383,
+    "lat": 33.1767,
+    "lng": -95.3433,
+    "zips": "75478"
+  },
+  {
+    "name": "Telephone",
+    "total": 1382,
+    "lat": 33.7979,
+    "lng": -96.0449,
+    "zips": "75488"
+  },
+  {
+    "name": "Bardwell",
+    "total": 1367,
+    "lat": 32.2731,
+    "lng": -96.703,
+    "zips": "75101"
+  },
+  {
+    "name": "Abbott",
+    "total": 1333,
+    "lat": 31.8916,
+    "lng": -97.0671,
+    "zips": "76621"
+  },
+  {
+    "name": "Rising Star",
+    "total": 1310,
+    "lat": 32.128,
+    "lng": -98.9859,
+    "zips": "76471"
+  },
+  {
+    "name": "Ector",
+    "total": 1291,
+    "lat": 33.5819,
+    "lng": -96.2735,
+    "zips": "75439"
+  },
+  {
+    "name": "Detroit",
+    "total": 1275,
+    "lat": 33.6627,
+    "lng": -95.2385,
+    "zips": "75436"
+  },
+  {
+    "name": "Iredell",
+    "total": 1224,
+    "lat": 31.9722,
+    "lng": -97.8793,
+    "zips": "76649"
+  },
+  {
+    "name": "May",
+    "total": 1136,
+    "lat": 31.9571,
+    "lng": -98.9656,
+    "zips": "76857"
+  },
+  {
+    "name": "Blum",
+    "total": 1113,
+    "lat": 32.1052,
+    "lng": -97.3652,
+    "zips": "76627"
+  },
+  {
+    "name": "Ravenna",
+    "total": 1069,
+    "lat": 33.7098,
+    "lng": -96.1452,
+    "zips": "75476"
+  },
+  {
+    "name": "Dawson",
+    "total": 1068,
+    "lat": 31.8974,
+    "lng": -96.7085,
+    "zips": "76639"
+  },
+  {
+    "name": "Hubbard",
+    "total": 1066,
+    "lat": 31.8436,
+    "lng": -96.8,
+    "zips": "76648"
+  },
+  {
+    "name": "Aquilla",
+    "total": 1013,
+    "lat": 31.8589,
+    "lng": -97.2258,
+    "zips": "76622"
+  },
+  {
+    "name": "Chatfield",
+    "total": 994,
+    "lat": 32.2954,
+    "lng": -96.3887,
+    "zips": "75105"
+  },
+  {
+    "name": "Gustine",
+    "total": 991,
+    "lat": 31.8468,
+    "lng": -98.4017,
+    "zips": "76455"
+  },
+  {
+    "name": "Strawn",
+    "total": 989,
+    "lat": 32.5945,
+    "lng": -98.4995,
+    "zips": "76475"
+  },
+  {
+    "name": "Walnut Springs",
+    "total": 924,
+    "lat": 32.0593,
+    "lng": -97.7514,
+    "zips": "76690"
+  },
+  {
+    "name": "Pickton",
+    "total": 919,
+    "lat": 33.0519,
+    "lng": -95.3851,
+    "zips": "75471"
+  },
+  {
+    "name": "Arthur City",
+    "total": 905,
+    "lat": 33.8643,
+    "lng": -95.6111,
+    "zips": "75411"
+  },
+  {
+    "name": "Bynum",
+    "total": 883,
+    "lat": 31.9907,
+    "lng": -96.9837,
+    "zips": "76631"
+  },
+  {
+    "name": "Savoy",
+    "total": 873,
+    "lat": 33.6066,
+    "lng": -96.3502,
+    "zips": "75479"
+  },
+  {
+    "name": "Pattonville",
+    "total": 823,
+    "lat": 33.5702,
+    "lng": -95.3908,
+    "zips": "75468"
+  },
+  {
+    "name": "Cranfills Gap",
+    "total": 779,
+    "lat": 31.7486,
+    "lng": -97.8113,
+    "zips": "76637"
+  },
+  {
+    "name": "Mingus",
+    "total": 773,
+    "lat": 32.5381,
+    "lng": -98.4219,
+    "zips": "76463"
+  },
+  {
+    "name": "Era",
+    "total": 720,
+    "lat": 33.4965,
+    "lng": -97.3859,
+    "zips": "76238"
+  },
+  {
+    "name": "Sumner",
+    "total": 698,
+    "lat": 33.7589,
+    "lng": -95.6807,
+    "zips": "75486"
+  },
+  {
+    "name": "Como",
+    "total": 698,
+    "lat": 33.0107,
+    "lng": -95.4734,
+    "zips": "75431"
+  },
+  {
+    "name": "Lillian",
+    "total": 689,
+    "lat": 32.5065,
+    "lng": -97.1875,
+    "zips": "76061"
+  },
+  {
+    "name": "Gorman",
+    "total": 652,
+    "lat": 32.2234,
+    "lng": -98.6834,
+    "zips": "76454"
+  },
+  {
+    "name": "Wortham",
+    "total": 648,
+    "lat": 31.7865,
+    "lng": -96.4202,
+    "zips": "76693"
+  },
+  {
+    "name": "Blanket",
+    "total": 620,
+    "lat": 31.7882,
+    "lng": -98.8311,
+    "zips": "76432"
+  },
+  {
+    "name": "Dike",
+    "total": 613,
+    "lat": 33.2648,
+    "lng": -95.4423,
+    "zips": "75437"
+  },
+  {
+    "name": "Forreston",
+    "total": 592,
+    "lat": 32.2486,
+    "lng": -96.8232,
+    "zips": "76041"
+  },
+  {
+    "name": "Richland",
+    "total": 584,
+    "lat": 31.9018,
+    "lng": -96.4373,
+    "zips": "76681"
+  },
+  {
+    "name": "Rosser",
+    "total": 552,
+    "lat": 32.4626,
+    "lng": -96.4533,
+    "zips": "75157"
+  },
+  {
+    "name": "Elmo",
+    "total": 522,
+    "lat": 32.5996,
+    "lng": -96.3027,
+    "zips": "75118"
+  },
+  {
+    "name": "Windom",
+    "total": 517,
+    "lat": 33.5633,
+    "lng": -96.002,
+    "zips": "75492"
+  },
+  {
+    "name": "Donie",
+    "total": 477,
+    "lat": 31.4873,
+    "lng": -96.2387,
+    "zips": "75838"
+  },
+  {
+    "name": "Annona",
+    "total": 472,
+    "lat": 33.5535,
+    "lng": -94.8992,
+    "zips": "75550"
+  },
+  {
+    "name": "Klondike",
+    "total": 426,
+    "lat": 33.3034,
+    "lng": -95.8018,
+    "zips": "75448"
+  },
+  {
+    "name": "Mertens",
+    "total": 423,
+    "lat": 32.0275,
+    "lng": -96.8981,
+    "zips": "76666"
+  },
+  {
+    "name": "Lake Creek",
+    "total": 413,
+    "lat": 33.4116,
+    "lng": -95.4551,
+    "zips": "75450"
+  },
+  {
+    "name": "Roxton",
+    "total": 397,
+    "lat": 33.5429,
+    "lng": -95.7416,
+    "zips": "75477"
+  },
+  {
+    "name": "Powell",
+    "total": 387,
+    "lat": 32.1196,
+    "lng": -96.3327,
+    "zips": "75153"
+  },
+  {
+    "name": "Malone",
+    "total": 384,
+    "lat": 31.924,
+    "lng": -96.8907,
+    "zips": "76660"
+  },
+  {
+    "name": "Avery",
+    "total": 384,
+    "lat": 33.5339,
+    "lng": -94.7867,
+    "zips": "75554"
+  },
+  {
+    "name": "Dennis",
+    "total": 361,
+    "lat": 32.6187,
+    "lng": -97.9267,
+    "zips": "76439"
+  },
+  {
+    "name": "Penelope",
+    "total": 325,
+    "lat": 31.8551,
+    "lng": -96.9372,
+    "zips": "76676"
+  },
+  {
+    "name": "Merit",
+    "total": 316,
+    "lat": 33.2427,
+    "lng": -96.2916,
+    "zips": "75458"
+  },
+  {
+    "name": "Rosston",
+    "total": 297,
+    "lat": 33.4674,
+    "lng": -97.4534,
+    "zips": "76263"
+  },
+  {
+    "name": "Bagwell",
+    "total": 285,
+    "lat": 33.8361,
+    "lng": -95.1487,
+    "zips": "75412"
+  },
+  {
+    "name": "Deport",
+    "total": 270,
+    "lat": 33.5221,
+    "lng": -95.3654,
+    "zips": "75435"
+  },
+  {
+    "name": "Desdemona",
+    "total": 235,
+    "lat": 32.2819,
+    "lng": -98.5673,
+    "zips": "76445"
+  },
+  {
+    "name": "Morgan Mill",
+    "total": 234,
+    "lat": 32.3882,
+    "lng": -98.1673,
+    "zips": "76465"
+  },
+  {
+    "name": "Chicota",
+    "total": 232,
+    "lat": 33.869,
+    "lng": -95.5711,
+    "zips": "75425"
+  },
+  {
+    "name": "Bailey",
+    "total": 222,
+    "lat": 33.43,
+    "lng": -96.1662,
+    "zips": "75413"
+  },
+  {
+    "name": "Greenwood",
+    "total": 184,
+    "lat": 33.407,
+    "lng": -97.4716,
+    "zips": "76246"
+  },
+  {
+    "name": "Mount Calm",
+    "total": 183,
+    "lat": 31.7575,
+    "lng": -96.8944,
+    "zips": "76673"
+  },
+  {
+    "name": "Cayuga",
+    "total": 177,
+    "lat": 31.9571,
+    "lng": -95.9747,
+    "zips": "75832"
+  },
+  {
+    "name": "Kirvin",
+    "total": 176,
+    "lat": 31.7666,
+    "lng": -96.3303,
+    "zips": "75848"
+  },
+  {
+    "name": "Myra",
+    "total": 171,
+    "lat": 33.6178,
+    "lng": -97.309,
+    "zips": "76253"
+  },
+  {
+    "name": "Petty",
+    "total": 152,
+    "lat": 33.6098,
+    "lng": -95.7891,
+    "zips": "75470"
+  },
+  {
+    "name": "Sulphur Bluff",
+    "total": 144,
+    "lat": 33.3334,
+    "lng": -95.374,
+    "zips": "75481"
+  },
+  {
+    "name": "Jermyn",
+    "total": 140,
+    "lat": 33.2636,
+    "lng": -98.3931,
+    "zips": "76459"
+  },
+  {
+    "name": "Laguna Park",
+    "total": 130,
+    "lat": 31.8593,
+    "lng": -97.3797,
+    "zips": "76644"
+  },
+  {
+    "name": "Poynor",
+    "total": 130,
+    "lat": 32.0797,
+    "lng": -95.5938,
+    "zips": "75782"
+  },
+  {
+    "name": "Sidney",
+    "total": 121,
+    "lat": 31.932,
+    "lng": -98.768,
+    "zips": "76474"
+  },
+  {
+    "name": "Randolph",
+    "total": 118,
+    "lat": 33.4846,
+    "lng": -96.2541,
+    "zips": "75475"
+  },
+  {
+    "name": "Pecan Gap",
+    "total": 110,
+    "lat": 33.4196,
+    "lng": -95.8262,
+    "zips": "75469"
+  },
+  {
+    "name": "Westminster",
+    "total": 110,
+    "lat": 33.3627,
+    "lng": -96.4635,
+    "zips": "75485"
+  },
+  {
+    "name": "Ben Franklin",
+    "total": 101,
+    "lat": 33.4768,
+    "lng": -95.7689,
+    "zips": "75415"
+  },
+  {
+    "name": "Energy",
+    "total": 94,
+    "lat": 31.7629,
+    "lng": -98.3695,
+    "zips": "76452"
+  },
+  {
+    "name": "Avalon",
+    "total": 78,
+    "lat": 32.2054,
+    "lng": -96.79,
+    "zips": "76623"
+  },
+  {
+    "name": "Paluxy",
+    "total": 76,
+    "lat": 32.2707,
+    "lng": -97.9075,
+    "zips": "76467"
+  },
+  {
+    "name": "Brandon",
+    "total": 61,
+    "lat": 32.0457,
+    "lng": -96.9606,
+    "zips": "76628"
+  },
+  {
+    "name": "Slidell",
+    "total": 56,
+    "lat": 33.378,
+    "lng": -97.3922,
+    "zips": "76267"
+  },
+  {
+    "name": "Irene",
+    "total": 49,
+    "lat": 31.9921,
+    "lng": -96.8714,
+    "zips": "76650"
+  },
+  {
+    "name": "Cunningham",
+    "total": 46,
+    "lat": 33.409,
+    "lng": -95.3711,
+    "zips": "75434"
+  },
+  {
+    "name": "Gober",
+    "total": 46,
+    "lat": 33.4697,
+    "lng": -96.1111,
+    "zips": "75443"
+  },
+  {
+    "name": "Whitt",
+    "total": 41,
+    "lat": 32.9555,
+    "lng": -98.021,
+    "zips": "76490"
+  },
+  {
+    "name": "Enloe",
+    "total": 37,
+    "lat": 33.4291,
+    "lng": -95.6518,
+    "zips": "75441"
+  },
+  {
+    "name": "Proctor",
+    "total": 35,
+    "lat": 31.9874,
+    "lng": -98.4298,
+    "zips": "76468"
+  },
+  {
+    "name": "Neches",
+    "total": 25,
+    "lat": 31.8668,
+    "lng": -95.4958,
+    "zips": "75779"
+  },
+  {
+    "name": "Carlton",
+    "total": 24,
+    "lat": 31.8949,
+    "lng": -98.1842,
+    "zips": "76436"
+  },
+  {
+    "name": "Pottsville",
+    "total": 13,
+    "lat": 31.6732,
+    "lng": -98.3256,
+    "zips": "76565"
+  },
+  {
+    "name": "Lingleville",
+    "total": 7,
+    "lat": 32.2446,
+    "lng": -98.3775,
+    "zips": "76461"
+  }
+];
+const mapConfig = {center: [32.8606, -96.8885], zoom: 8};
+const zipData = [
+  {
+    "zip": "75371",
+    "total": 1881613,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75270",
+    "total": 1346158,
+    "lat": 32.7813,
+    "lng": -96.8019,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75035",
+    "total": 500896,
+    "lat": 33.1377,
+    "lng": -96.7524,
+    "city": "Frisco",
+    "state": "TX"
+  },
+  {
+    "zip": "75078",
+    "total": 428386,
+    "lat": 33.2362,
+    "lng": -96.7954,
+    "city": "Prosper",
+    "state": "TX"
+  },
+  {
+    "zip": "76244",
+    "total": 415232,
+    "lat": 32.931,
+    "lng": -97.2843,
+    "city": "Keller",
+    "state": "TX"
+  },
+  {
+    "zip": "75033",
+    "total": 410858,
+    "lat": 33.2559,
+    "lng": -96.8853,
+    "city": "Frisco",
+    "state": "TX"
+  },
+  {
+    "zip": "75070",
+    "total": 408729,
+    "lat": 33.1976,
+    "lng": -96.6153,
+    "city": "Mckinney",
+    "state": "TX"
+  },
+  {
+    "zip": "75013",
+    "total": 393018,
+    "lat": 33.1186,
+    "lng": -96.6773,
+    "city": "Allen",
+    "state": "TX"
+  },
+  {
+    "zip": "75034",
+    "total": 369763,
+    "lat": 33.1499,
+    "lng": -96.8241,
+    "city": "Frisco",
+    "state": "TX"
+  },
+  {
+    "zip": "75056",
+    "total": 369744,
+    "lat": 33.094,
+    "lng": -96.8836,
+    "city": "The Colony",
+    "state": "TX"
+  },
+  {
+    "zip": "75093",
+    "total": 368116,
+    "lat": 33.0299,
+    "lng": -96.7889,
+    "city": "Plano",
+    "state": "TX"
+  },
+  {
+    "zip": "76063",
+    "total": 366768,
+    "lat": 32.5773,
+    "lng": -97.1416,
+    "city": "Mansfield",
+    "state": "TX"
+  },
+  {
+    "zip": "75126",
+    "total": 357241,
+    "lat": 32.7491,
+    "lng": -96.4598,
+    "city": "Forney",
+    "state": "TX"
+  },
+  {
+    "zip": "75002",
+    "total": 349850,
+    "lat": 33.0934,
+    "lng": -96.6454,
+    "city": "Allen",
+    "state": "TX"
+  },
+  {
+    "zip": "75052",
+    "total": 341212,
+    "lat": 32.6605,
+    "lng": -97.0311,
+    "city": "Grand Prairie",
+    "state": "TX"
+  },
+  {
+    "zip": "75098",
+    "total": 333656,
+    "lat": 33.0041,
+    "lng": -96.5394,
+    "city": "Wylie",
+    "state": "TX"
+  },
+  {
+    "zip": "75071",
+    "total": 328411,
+    "lat": 33.1976,
+    "lng": -96.6153,
+    "city": "Mckinney",
+    "state": "TX"
+  },
+  {
+    "zip": "75068",
+    "total": 324624,
+    "lat": 33.1768,
+    "lng": -96.9583,
+    "city": "Little Elm",
+    "state": "TX"
+  },
+  {
+    "zip": "75001",
+    "total": 324571,
+    "lat": 32.96,
+    "lng": -96.8385,
+    "city": "Addison",
+    "state": "TX"
+  },
+  {
+    "zip": "76227",
+    "total": 308718,
+    "lat": 33.292,
+    "lng": -96.9879,
+    "city": "Aubrey",
+    "state": "TX"
+  },
+  {
+    "zip": "75201",
+    "total": 300208,
+    "lat": 32.7904,
+    "lng": -96.8044,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75087",
+    "total": 298283,
+    "lat": 32.9492,
+    "lng": -96.4418,
+    "city": "Rockwall",
+    "state": "TX"
+  },
+  {
+    "zip": "76179",
+    "total": 291358,
+    "lat": 32.9074,
+    "lng": -97.4257,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75211",
+    "total": 288580,
+    "lat": 32.7319,
+    "lng": -96.9057,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76164",
+    "total": 282799,
+    "lat": 32.7811,
+    "lng": -97.3546,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75024",
+    "total": 275864,
+    "lat": 33.0752,
+    "lng": -96.7843,
+    "city": "Plano",
+    "state": "TX"
+  },
+  {
+    "zip": "75028",
+    "total": 275699,
+    "lat": 33.0383,
+    "lng": -97.0745,
+    "city": "Flower Mound",
+    "state": "TX"
+  },
+  {
+    "zip": "76262",
+    "total": 271475,
+    "lat": 33.0211,
+    "lng": -97.2127,
+    "city": "Roanoke",
+    "state": "TX"
+  },
+  {
+    "zip": "75067",
+    "total": 266594,
+    "lat": 33.0198,
+    "lng": -96.9925,
+    "city": "Lewisville",
+    "state": "TX"
+  },
+  {
+    "zip": "75023",
+    "total": 265618,
+    "lat": 33.055,
+    "lng": -96.7365,
+    "city": "Plano",
+    "state": "TX"
+  },
+  {
+    "zip": "76226",
+    "total": 263998,
+    "lat": 33.1062,
+    "lng": -97.16,
+    "city": "Argyle",
+    "state": "TX"
+  },
+  {
+    "zip": "76028",
+    "total": 261544,
+    "lat": 32.5316,
+    "lng": -97.309,
+    "city": "Burleson",
+    "state": "TX"
+  },
+  {
+    "zip": "76131",
+    "total": 259965,
+    "lat": 32.8632,
+    "lng": -97.3377,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75025",
+    "total": 256894,
+    "lat": 33.0784,
+    "lng": -96.7291,
+    "city": "Plano",
+    "state": "TX"
+  },
+  {
+    "zip": "76051",
+    "total": 254362,
+    "lat": 32.9328,
+    "lng": -97.0808,
+    "city": "Grapevine",
+    "state": "TX"
+  },
+  {
+    "zip": "76092",
+    "total": 243946,
+    "lat": 32.9485,
+    "lng": -97.1524,
+    "city": "Southlake",
+    "state": "TX"
+  },
+  {
+    "zip": "75019",
+    "total": 243734,
+    "lat": 32.9673,
+    "lng": -96.9805,
+    "city": "Coppell",
+    "state": "TX"
+  },
+  {
+    "zip": "75287",
+    "total": 236104,
+    "lat": 33.0005,
+    "lng": -96.8314,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76065",
+    "total": 233939,
+    "lat": 32.4757,
+    "lng": -96.9936,
+    "city": "Midlothian",
+    "state": "TX"
+  },
+  {
+    "zip": "75074",
+    "total": 233145,
+    "lat": 33.0277,
+    "lng": -96.6777,
+    "city": "Plano",
+    "state": "TX"
+  },
+  {
+    "zip": "75007",
+    "total": 230164,
+    "lat": 33.0033,
+    "lng": -96.882,
+    "city": "Carrollton",
+    "state": "TX"
+  },
+  {
+    "zip": "76248",
+    "total": 229125,
+    "lat": 32.9276,
+    "lng": -97.2489,
+    "city": "Keller",
+    "state": "TX"
+  },
+  {
+    "zip": "75165",
+    "total": 224765,
+    "lat": 32.3808,
+    "lng": -96.8374,
+    "city": "Waxahachie",
+    "state": "TX"
+  },
+  {
+    "zip": "75219",
+    "total": 218764,
+    "lat": 32.8132,
+    "lng": -96.8142,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75204",
+    "total": 217281,
+    "lat": 32.8038,
+    "lng": -96.7851,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75080",
+    "total": 216584,
+    "lat": 32.966,
+    "lng": -96.7452,
+    "city": "Richardson",
+    "state": "TX"
+  },
+  {
+    "zip": "76210",
+    "total": 215407,
+    "lat": 33.1428,
+    "lng": -97.0727,
+    "city": "Denton",
+    "state": "TX"
+  },
+  {
+    "zip": "75248",
+    "total": 212575,
+    "lat": 32.9682,
+    "lng": -96.7942,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75072",
+    "total": 210180,
+    "lat": 33.1976,
+    "lng": -96.6153,
+    "city": "Mckinney",
+    "state": "TX"
+  },
+  {
+    "zip": "76137",
+    "total": 207527,
+    "lat": 32.8664,
+    "lng": -97.2891,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75009",
+    "total": 206645,
+    "lat": 33.3103,
+    "lng": -96.7673,
+    "city": "Celina",
+    "state": "TX"
+  },
+  {
+    "zip": "75229",
+    "total": 201804,
+    "lat": 32.8958,
+    "lng": -96.8588,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75032",
+    "total": 200377,
+    "lat": 32.886,
+    "lng": -96.4095,
+    "city": "Rockwall",
+    "state": "TX"
+  },
+  {
+    "zip": "75189",
+    "total": 200074,
+    "lat": 32.9628,
+    "lng": -96.3648,
+    "city": "Royse City",
+    "state": "TX"
+  },
+  {
+    "zip": "75234",
+    "total": 198250,
+    "lat": 32.9245,
+    "lng": -96.8938,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75075",
+    "total": 194396,
+    "lat": 33.025,
+    "lng": -96.7397,
+    "city": "Plano",
+    "state": "TX"
+  },
+  {
+    "zip": "75214",
+    "total": 190139,
+    "lat": 32.8248,
+    "lng": -96.7498,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75115",
+    "total": 190015,
+    "lat": 32.6041,
+    "lng": -96.8653,
+    "city": "Desoto",
+    "state": "TX"
+  },
+  {
+    "zip": "75220",
+    "total": 189090,
+    "lat": 32.8681,
+    "lng": -96.8622,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76123",
+    "total": 178802,
+    "lat": 32.6254,
+    "lng": -97.3658,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76108",
+    "total": 178411,
+    "lat": 32.7822,
+    "lng": -97.4969,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76052",
+    "total": 178187,
+    "lat": 32.9557,
+    "lng": -97.3372,
+    "city": "Haslet",
+    "state": "TX"
+  },
+  {
+    "zip": "75150",
+    "total": 177515,
+    "lat": 32.8154,
+    "lng": -96.6307,
+    "city": "Mesquite",
+    "state": "TX"
+  },
+  {
+    "zip": "75006",
+    "total": 175596,
+    "lat": 32.9657,
+    "lng": -96.8825,
+    "city": "Carrollton",
+    "state": "TX"
+  },
+  {
+    "zip": "75205",
+    "total": 173190,
+    "lat": 32.826,
+    "lng": -96.7843,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75077",
+    "total": 173110,
+    "lat": 33.0775,
+    "lng": -97.0704,
+    "city": "Lewisville",
+    "state": "TX"
+  },
+  {
+    "zip": "76008",
+    "total": 171491,
+    "lat": 32.7004,
+    "lng": -97.6039,
+    "city": "Aledo",
+    "state": "TX"
+  },
+  {
+    "zip": "75230",
+    "total": 167618,
+    "lat": 32.8999,
+    "lng": -96.7897,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75228",
+    "total": 163909,
+    "lat": 32.825,
+    "lng": -96.6784,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75010",
+    "total": 163430,
+    "lat": 33.0304,
+    "lng": -96.8777,
+    "city": "Carrollton",
+    "state": "TX"
+  },
+  {
+    "zip": "76039",
+    "total": 163294,
+    "lat": 32.8582,
+    "lng": -97.0832,
+    "city": "Euless",
+    "state": "TX"
+  },
+  {
+    "zip": "76017",
+    "total": 147725,
+    "lat": 32.6555,
+    "lng": -97.1599,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "75040",
+    "total": 147211,
+    "lat": 32.9227,
+    "lng": -96.6248,
+    "city": "Garland",
+    "state": "TX"
+  },
+  {
+    "zip": "75208",
+    "total": 146549,
+    "lat": 32.7492,
+    "lng": -96.8389,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75154",
+    "total": 144490,
+    "lat": 32.5185,
+    "lng": -96.8071,
+    "city": "Red Oak",
+    "state": "TX"
+  },
+  {
+    "zip": "75206",
+    "total": 144369,
+    "lat": 32.831,
+    "lng": -96.7692,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75225",
+    "total": 139482,
+    "lat": 32.8628,
+    "lng": -96.7918,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76247",
+    "total": 139178,
+    "lat": 33.0734,
+    "lng": -97.3093,
+    "city": "Justin",
+    "state": "TX"
+  },
+  {
+    "zip": "75022",
+    "total": 136652,
+    "lat": 33.0268,
+    "lng": -97.1193,
+    "city": "Flower Mound",
+    "state": "TX"
+  },
+  {
+    "zip": "76015",
+    "total": 136309,
+    "lat": 32.6931,
+    "lng": -97.1347,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "75407",
+    "total": 136027,
+    "lat": 33.1555,
+    "lng": -96.4981,
+    "city": "Princeton",
+    "state": "TX"
+  },
+  {
+    "zip": "76010",
+    "total": 135293,
+    "lat": 32.7204,
+    "lng": -97.0826,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "75069",
+    "total": 134448,
+    "lat": 33.1976,
+    "lng": -96.6153,
+    "city": "Mckinney",
+    "state": "TX"
+  },
+  {
+    "zip": "75212",
+    "total": 133870,
+    "lat": 32.7829,
+    "lng": -96.8714,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76021",
+    "total": 133782,
+    "lat": 32.8536,
+    "lng": -97.1358,
+    "city": "Bedford",
+    "state": "TX"
+  },
+  {
+    "zip": "75454",
+    "total": 133157,
+    "lat": 33.2841,
+    "lng": -96.574,
+    "city": "Melissa",
+    "state": "TX"
+  },
+  {
+    "zip": "76177",
+    "total": 132585,
+    "lat": 32.9448,
+    "lng": -97.3124,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75231",
+    "total": 131770,
+    "lat": 32.8756,
+    "lng": -96.7495,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76034",
+    "total": 130466,
+    "lat": 32.8872,
+    "lng": -97.146,
+    "city": "Colleyville",
+    "state": "TX"
+  },
+  {
+    "zip": "75104",
+    "total": 130360,
+    "lat": 32.5885,
+    "lng": -96.9438,
+    "city": "Cedar Hill",
+    "state": "TX"
+  },
+  {
+    "zip": "76180",
+    "total": 129934,
+    "lat": 32.84,
+    "lng": -97.225,
+    "city": "North Richland Hills",
+    "state": "TX"
+  },
+  {
+    "zip": "75050",
+    "total": 129566,
+    "lat": 32.7649,
+    "lng": -97.0112,
+    "city": "Grand Prairie",
+    "state": "TX"
+  },
+  {
+    "zip": "75252",
+    "total": 129272,
+    "lat": 32.9968,
+    "lng": -96.7921,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75082",
+    "total": 126391,
+    "lat": 32.9865,
+    "lng": -96.686,
+    "city": "Richardson",
+    "state": "TX"
+  },
+  {
+    "zip": "76107",
+    "total": 125739,
+    "lat": 32.7392,
+    "lng": -97.3852,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75039",
+    "total": 125143,
+    "lat": 32.8697,
+    "lng": -96.9389,
+    "city": "Irving",
+    "state": "TX"
+  },
+  {
+    "zip": "76133",
+    "total": 123878,
+    "lat": 32.6526,
+    "lng": -97.3758,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75089",
+    "total": 122216,
+    "lat": 32.9346,
+    "lng": -96.5544,
+    "city": "Rowlett",
+    "state": "TX"
+  },
+  {
+    "zip": "75063",
+    "total": 121437,
+    "lat": 32.9247,
+    "lng": -96.9598,
+    "city": "Irving",
+    "state": "TX"
+  },
+  {
+    "zip": "75409",
+    "total": 119732,
+    "lat": 33.3445,
+    "lng": -96.5639,
+    "city": "Anna",
+    "state": "TX"
+  },
+  {
+    "zip": "75238",
+    "total": 118027,
+    "lat": 32.877,
+    "lng": -96.708,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75060",
+    "total": 117102,
+    "lat": 32.8023,
+    "lng": -96.9597,
+    "city": "Irving",
+    "state": "TX"
+  },
+  {
+    "zip": "75043",
+    "total": 116948,
+    "lat": 32.8565,
+    "lng": -96.5999,
+    "city": "Garland",
+    "state": "TX"
+  },
+  {
+    "zip": "75061",
+    "total": 116507,
+    "lat": 32.8267,
+    "lng": -96.9633,
+    "city": "Irving",
+    "state": "TX"
+  },
+  {
+    "zip": "76182",
+    "total": 116380,
+    "lat": 32.8828,
+    "lng": -97.2098,
+    "city": "North Richland Hills",
+    "state": "TX"
+  },
+  {
+    "zip": "75217",
+    "total": 115712,
+    "lat": 32.7244,
+    "lng": -96.6755,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75044",
+    "total": 115494,
+    "lat": 32.9522,
+    "lng": -96.6654,
+    "city": "Garland",
+    "state": "TX"
+  },
+  {
+    "zip": "75209",
+    "total": 114583,
+    "lat": 32.8456,
+    "lng": -96.826,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76087",
+    "total": 112683,
+    "lat": 32.7495,
+    "lng": -97.6894,
+    "city": "Weatherford",
+    "state": "TX"
+  },
+  {
+    "zip": "76001",
+    "total": 112576,
+    "lat": 32.6289,
+    "lng": -97.1517,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "75048",
+    "total": 112055,
+    "lat": 32.9643,
+    "lng": -96.6012,
+    "city": "Sachse",
+    "state": "TX"
+  },
+  {
+    "zip": "75243",
+    "total": 110129,
+    "lat": 32.9103,
+    "lng": -96.7285,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75216",
+    "total": 109708,
+    "lat": 32.7086,
+    "lng": -96.7955,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76049",
+    "total": 106787,
+    "lat": 32.4488,
+    "lng": -97.7285,
+    "city": "Granbury",
+    "state": "TX"
+  },
+  {
+    "zip": "76002",
+    "total": 104310,
+    "lat": 32.6255,
+    "lng": -97.0784,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "76086",
+    "total": 103693,
+    "lat": 32.7549,
+    "lng": -97.7899,
+    "city": "Weatherford",
+    "state": "TX"
+  },
+  {
+    "zip": "76126",
+    "total": 103545,
+    "lat": 32.64,
+    "lng": -97.5448,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75062",
+    "total": 103136,
+    "lat": 32.8479,
+    "lng": -96.974,
+    "city": "Irving",
+    "state": "TX"
+  },
+  {
+    "zip": "76140",
+    "total": 102789,
+    "lat": 32.6192,
+    "lng": -97.2735,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75081",
+    "total": 101105,
+    "lat": 32.9462,
+    "lng": -96.7058,
+    "city": "Richardson",
+    "state": "TX"
+  },
+  {
+    "zip": "76116",
+    "total": 101065,
+    "lat": 32.723,
+    "lng": -97.4483,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76040",
+    "total": 100946,
+    "lat": 32.8264,
+    "lng": -97.0972,
+    "city": "Euless",
+    "state": "TX"
+  },
+  {
+    "zip": "75094",
+    "total": 100898,
+    "lat": 33.0148,
+    "lng": -96.6189,
+    "city": "Plano",
+    "state": "TX"
+  },
+  {
+    "zip": "76011",
+    "total": 99433,
+    "lat": 32.7582,
+    "lng": -97.1003,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "76016",
+    "total": 99399,
+    "lat": 32.6889,
+    "lng": -97.1905,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "76201",
+    "total": 98021,
+    "lat": 33.2289,
+    "lng": -97.1314,
+    "city": "Denton",
+    "state": "TX"
+  },
+  {
+    "zip": "76053",
+    "total": 96893,
+    "lat": 32.8211,
+    "lng": -97.1756,
+    "city": "Hurst",
+    "state": "TX"
+  },
+  {
+    "zip": "75227",
+    "total": 96323,
+    "lat": 32.7672,
+    "lng": -96.6836,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76109",
+    "total": 96246,
+    "lat": 32.7002,
+    "lng": -97.3789,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76124",
+    "total": 91049,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75057",
+    "total": 88499,
+    "lat": 33.0532,
+    "lng": -96.9999,
+    "city": "Lewisville",
+    "state": "TX"
+  },
+  {
+    "zip": "76208",
+    "total": 88332,
+    "lat": 33.2117,
+    "lng": -97.0612,
+    "city": "Denton",
+    "state": "TX"
+  },
+  {
+    "zip": "76012",
+    "total": 87374,
+    "lat": 32.754,
+    "lng": -97.1348,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "76118",
+    "total": 86278,
+    "lat": 32.8013,
+    "lng": -97.1952,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75088",
+    "total": 86077,
+    "lat": 32.9031,
+    "lng": -96.5472,
+    "city": "Rowlett",
+    "state": "TX"
+  },
+  {
+    "zip": "76036",
+    "total": 85889,
+    "lat": 32.5814,
+    "lng": -97.3703,
+    "city": "Crowley",
+    "state": "TX"
+  },
+  {
+    "zip": "75240",
+    "total": 85606,
+    "lat": 32.9374,
+    "lng": -96.7872,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76119",
+    "total": 82776,
+    "lat": 32.6914,
+    "lng": -97.2675,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75038",
+    "total": 82322,
+    "lat": 32.8653,
+    "lng": -96.9905,
+    "city": "Irving",
+    "state": "TX"
+  },
+  {
+    "zip": "76018",
+    "total": 81784,
+    "lat": 32.6548,
+    "lng": -97.092,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "76006",
+    "total": 80832,
+    "lat": 32.7785,
+    "lng": -97.0834,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "75085",
+    "total": 80724,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Richardson",
+    "state": "TX"
+  },
+  {
+    "zip": "76132",
+    "total": 80574,
+    "lat": 32.6711,
+    "lng": -97.4056,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76120",
+    "total": 80251,
+    "lat": 32.7639,
+    "lng": -97.1781,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75149",
+    "total": 80096,
+    "lat": 32.7678,
+    "lng": -96.6082,
+    "city": "Mesquite",
+    "state": "TX"
+  },
+  {
+    "zip": "75218",
+    "total": 79306,
+    "lat": 32.8463,
+    "lng": -96.6972,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76020",
+    "total": 79305,
+    "lat": 32.9035,
+    "lng": -97.5412,
+    "city": "Azle",
+    "state": "TX"
+  },
+  {
+    "zip": "75374",
+    "total": 78408,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75051",
+    "total": 75414,
+    "lat": 32.7115,
+    "lng": -97.0069,
+    "city": "Grand Prairie",
+    "state": "TX"
+  },
+  {
+    "zip": "76234",
+    "total": 75093,
+    "lat": 33.2351,
+    "lng": -97.574,
+    "city": "Decatur",
+    "state": "TX"
+  },
+  {
+    "zip": "75042",
+    "total": 72291,
+    "lat": 32.9185,
+    "lng": -96.6775,
+    "city": "Garland",
+    "state": "TX"
+  },
+  {
+    "zip": "76099",
+    "total": 72280,
+    "lat": 32.9343,
+    "lng": -97.0781,
+    "city": "Grapevine",
+    "state": "TX"
+  },
+  {
+    "zip": "75054",
+    "total": 72160,
+    "lat": 32.5907,
+    "lng": -97.0405,
+    "city": "Grand Prairie",
+    "state": "TX"
+  },
+  {
+    "zip": "76048",
+    "total": 71736,
+    "lat": 32.425,
+    "lng": -97.7742,
+    "city": "Granbury",
+    "state": "TX"
+  },
+  {
+    "zip": "75065",
+    "total": 71591,
+    "lat": 33.1219,
+    "lng": -97.0237,
+    "city": "Lake Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76013",
+    "total": 69592,
+    "lat": 32.7199,
+    "lng": -97.1442,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "75244",
+    "total": 68529,
+    "lat": 32.9322,
+    "lng": -96.8353,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76207",
+    "total": 66837,
+    "lat": 33.2285,
+    "lng": -97.1813,
+    "city": "Denton",
+    "state": "TX"
+  },
+  {
+    "zip": "76134",
+    "total": 66616,
+    "lat": 32.6469,
+    "lng": -97.3325,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75041",
+    "total": 65144,
+    "lat": 32.8794,
+    "lng": -96.6411,
+    "city": "Garland",
+    "state": "TX"
+  },
+  {
+    "zip": "76266",
+    "total": 64456,
+    "lat": 33.3563,
+    "lng": -97.1814,
+    "city": "Sanger",
+    "state": "TX"
+  },
+  {
+    "zip": "75373",
+    "total": 63696,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75402",
+    "total": 63460,
+    "lat": 33.1047,
+    "lng": -96.0927,
+    "city": "Greenville",
+    "state": "TX"
+  },
+  {
+    "zip": "75146",
+    "total": 63366,
+    "lat": 32.5914,
+    "lng": -96.7728,
+    "city": "Lancaster",
+    "state": "TX"
+  },
+  {
+    "zip": "76112",
+    "total": 63351,
+    "lat": 32.7493,
+    "lng": -97.2181,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75160",
+    "total": 63335,
+    "lat": 32.7515,
+    "lng": -96.2831,
+    "city": "Terrell",
+    "state": "TX"
+  },
+  {
+    "zip": "76209",
+    "total": 63067,
+    "lat": 33.2346,
+    "lng": -97.1131,
+    "city": "Denton",
+    "state": "TX"
+  },
+  {
+    "zip": "75254",
+    "total": 61815,
+    "lat": 32.9503,
+    "lng": -96.819,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75187",
+    "total": 61591,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Mesquite",
+    "state": "TX"
+  },
+  {
+    "zip": "76082",
+    "total": 60332,
+    "lat": 32.966,
+    "lng": -97.6836,
+    "city": "Springtown",
+    "state": "TX"
+  },
+  {
+    "zip": "76148",
+    "total": 59563,
+    "lat": 32.8621,
+    "lng": -97.2508,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76110",
+    "total": 59357,
+    "lat": 32.7065,
+    "lng": -97.3375,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76102",
+    "total": 58718,
+    "lat": 32.7589,
+    "lng": -97.328,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75137",
+    "total": 58633,
+    "lat": 32.6347,
+    "lng": -96.9113,
+    "city": "Duncanville",
+    "state": "TX"
+  },
+  {
+    "zip": "75119",
+    "total": 58611,
+    "lat": 32.3321,
+    "lng": -96.6224,
+    "city": "Ennis",
+    "state": "TX"
+  },
+  {
+    "zip": "75181",
+    "total": 58539,
+    "lat": 32.7272,
+    "lng": -96.5669,
+    "city": "Mesquite",
+    "state": "TX"
+  },
+  {
+    "zip": "75224",
+    "total": 57893,
+    "lat": 32.7114,
+    "lng": -96.8387,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75014",
+    "total": 56923,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Irving",
+    "state": "TX"
+  },
+  {
+    "zip": "75235",
+    "total": 56816,
+    "lat": 32.8252,
+    "lng": -96.8388,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76114",
+    "total": 56414,
+    "lat": 32.7796,
+    "lng": -97.3928,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75046",
+    "total": 56134,
+    "lat": 32.9126,
+    "lng": -96.6389,
+    "city": "Garland",
+    "state": "TX"
+  },
+  {
+    "zip": "75167",
+    "total": 55692,
+    "lat": 32.3773,
+    "lng": -96.9162,
+    "city": "Waxahachie",
+    "state": "TX"
+  },
+  {
+    "zip": "75011",
+    "total": 55571,
+    "lat": 32.9537,
+    "lng": -96.8903,
+    "city": "Carrollton",
+    "state": "TX"
+  },
+  {
+    "zip": "76031",
+    "total": 55556,
+    "lat": 32.3485,
+    "lng": -97.3311,
+    "city": "Cleburne",
+    "state": "TX"
+  },
+  {
+    "zip": "75180",
+    "total": 55355,
+    "lat": 32.7287,
+    "lng": -96.6228,
+    "city": "Balch Springs",
+    "state": "TX"
+  },
+  {
+    "zip": "76117",
+    "total": 54090,
+    "lat": 32.8087,
+    "lng": -97.2709,
+    "city": "Haltom City",
+    "state": "TX"
+  },
+  {
+    "zip": "75083",
+    "total": 52672,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Richardson",
+    "state": "TX"
+  },
+  {
+    "zip": "76033",
+    "total": 52121,
+    "lat": 32.3509,
+    "lng": -97.4103,
+    "city": "Cleburne",
+    "state": "TX"
+  },
+  {
+    "zip": "76014",
+    "total": 52100,
+    "lat": 32.6954,
+    "lng": -97.0876,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "75049",
+    "total": 51207,
+    "lat": 32.9126,
+    "lng": -96.6389,
+    "city": "Garland",
+    "state": "TX"
+  },
+  {
+    "zip": "75110",
+    "total": 51012,
+    "lat": 32.0868,
+    "lng": -96.4762,
+    "city": "Corsicana",
+    "state": "TX"
+  },
+  {
+    "zip": "76135",
+    "total": 50961,
+    "lat": 32.8248,
+    "lng": -97.4519,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76009",
+    "total": 50859,
+    "lat": 32.4395,
+    "lng": -97.213,
+    "city": "Alvarado",
+    "state": "TX"
+  },
+  {
+    "zip": "75326",
+    "total": 50591,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76401",
+    "total": 49660,
+    "lat": 32.2214,
+    "lng": -98.2224,
+    "city": "Stephenville",
+    "state": "TX"
+  },
+  {
+    "zip": "75232",
+    "total": 49111,
+    "lat": 32.6647,
+    "lng": -96.8384,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75372",
+    "total": 48824,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76155",
+    "total": 48614,
+    "lat": 32.8247,
+    "lng": -97.0503,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75368",
+    "total": 47539,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76205",
+    "total": 47458,
+    "lat": 33.1903,
+    "lng": -97.1282,
+    "city": "Denton",
+    "state": "TX"
+  },
+  {
+    "zip": "76054",
+    "total": 47446,
+    "lat": 32.8558,
+    "lng": -97.1755,
+    "city": "Hurst",
+    "state": "TX"
+  },
+  {
+    "zip": "75142",
+    "total": 44765,
+    "lat": 32.546,
+    "lng": -96.2852,
+    "city": "Kaufman",
+    "state": "TX"
+  },
+  {
+    "zip": "75116",
+    "total": 44428,
+    "lat": 32.6587,
+    "lng": -96.9114,
+    "city": "Duncanville",
+    "state": "TX"
+  },
+  {
+    "zip": "75135",
+    "total": 44340,
+    "lat": 33.0683,
+    "lng": -96.2391,
+    "city": "Caddo Mills",
+    "state": "TX"
+  },
+  {
+    "zip": "75166",
+    "total": 43777,
+    "lat": 33.0139,
+    "lng": -96.4377,
+    "city": "Lavon",
+    "state": "TX"
+  },
+  {
+    "zip": "75401",
+    "total": 43705,
+    "lat": 33.1854,
+    "lng": -96.1304,
+    "city": "Greenville",
+    "state": "TX"
+  },
+  {
+    "zip": "75159",
+    "total": 43110,
+    "lat": 32.6525,
+    "lng": -96.558,
+    "city": "Seagoville",
+    "state": "TX"
+  },
+  {
+    "zip": "76111",
+    "total": 43064,
+    "lat": 32.7824,
+    "lng": -97.3003,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75236",
+    "total": 42721,
+    "lat": 32.69,
+    "lng": -96.9177,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75182",
+    "total": 42298,
+    "lat": 32.797,
+    "lng": -96.5616,
+    "city": "Sunnyvale",
+    "state": "TX"
+  },
+  {
+    "zip": "75036",
+    "total": 42223,
+    "lat": 33.1499,
+    "lng": -96.8241,
+    "city": "Frisco",
+    "state": "TX"
+  },
+  {
+    "zip": "76106",
+    "total": 42137,
+    "lat": 32.7968,
+    "lng": -97.356,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76044",
+    "total": 42133,
+    "lat": 32.4282,
+    "lng": -97.5349,
+    "city": "Godley",
+    "state": "TX"
+  },
+  {
+    "zip": "75482",
+    "total": 42109,
+    "lat": 33.1345,
+    "lng": -95.5922,
+    "city": "Sulphur Springs",
+    "state": "TX"
+  },
+  {
+    "zip": "76058",
+    "total": 42062,
+    "lat": 32.4663,
+    "lng": -97.4011,
+    "city": "Joshua",
+    "state": "TX"
+  },
+  {
+    "zip": "75103",
+    "total": 40130,
+    "lat": 32.5143,
+    "lng": -95.9047,
+    "city": "Canton",
+    "state": "TX"
+  },
+  {
+    "zip": "75237",
+    "total": 40017,
+    "lat": 32.659,
+    "lng": -96.8765,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75203",
+    "total": 39388,
+    "lat": 32.746,
+    "lng": -96.807,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75114",
+    "total": 39094,
+    "lat": 32.6279,
+    "lng": -96.4558,
+    "city": "Crandall",
+    "state": "TX"
+  },
+  {
+    "zip": "75134",
+    "total": 38763,
+    "lat": 32.6161,
+    "lng": -96.783,
+    "city": "Lancaster",
+    "state": "TX"
+  },
+  {
+    "zip": "76005",
+    "total": 38714,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "76078",
+    "total": 38463,
+    "lat": 33.054,
+    "lng": -97.4817,
+    "city": "Rhome",
+    "state": "TX"
+  },
+  {
+    "zip": "76088",
+    "total": 37170,
+    "lat": 32.8478,
+    "lng": -97.8606,
+    "city": "Weatherford",
+    "state": "TX"
+  },
+  {
+    "zip": "76121",
+    "total": 37099,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75215",
+    "total": 36120,
+    "lat": 32.7582,
+    "lng": -96.7623,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75390",
+    "total": 35917,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76085",
+    "total": 35912,
+    "lat": 32.7676,
+    "lng": -97.7516,
+    "city": "Weatherford",
+    "state": "TX"
+  },
+  {
+    "zip": "75173",
+    "total": 35154,
+    "lat": 33.0593,
+    "lng": -96.3877,
+    "city": "Nevada",
+    "state": "TX"
+  },
+  {
+    "zip": "76060",
+    "total": 34481,
+    "lat": 32.6432,
+    "lng": -97.2139,
+    "city": "Kennedale",
+    "state": "TX"
+  },
+  {
+    "zip": "76104",
+    "total": 34417,
+    "lat": 32.7256,
+    "lng": -97.3184,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75249",
+    "total": 32796,
+    "lat": 32.636,
+    "lng": -96.9493,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76084",
+    "total": 32298,
+    "lat": 32.433,
+    "lng": -97.1087,
+    "city": "Venus",
+    "state": "TX"
+  },
+  {
+    "zip": "75442",
+    "total": 31871,
+    "lat": 33.1659,
+    "lng": -96.3686,
+    "city": "Farmersville",
+    "state": "TX"
+  },
+  {
+    "zip": "75241",
+    "total": 31851,
+    "lat": 32.6722,
+    "lng": -96.7774,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75460",
+    "total": 31846,
+    "lat": 33.6581,
+    "lng": -95.5379,
+    "city": "Paris",
+    "state": "TX"
+  },
+  {
+    "zip": "75207",
+    "total": 31672,
+    "lat": 32.7939,
+    "lng": -96.8319,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76105",
+    "total": 31109,
+    "lat": 32.7233,
+    "lng": -97.269,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76022",
+    "total": 30993,
+    "lat": 32.8297,
+    "lng": -97.1454,
+    "city": "Bedford",
+    "state": "TX"
+  },
+  {
+    "zip": "76240",
+    "total": 29651,
+    "lat": 33.6547,
+    "lng": -97.1583,
+    "city": "Gainesville",
+    "state": "TX"
+  },
+  {
+    "zip": "75106",
+    "total": 29178,
+    "lat": 32.5885,
+    "lng": -96.9561,
+    "city": "Cedar Hill",
+    "state": "TX"
+  },
+  {
+    "zip": "75202",
+    "total": 29135,
+    "lat": 32.7781,
+    "lng": -96.8054,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75247",
+    "total": 29082,
+    "lat": 32.8152,
+    "lng": -96.8703,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76249",
+    "total": 28997,
+    "lat": 33.2734,
+    "lng": -97.2675,
+    "city": "Krum",
+    "state": "TX"
+  },
+  {
+    "zip": "75156",
+    "total": 27744,
+    "lat": 32.2972,
+    "lng": -96.1184,
+    "city": "Mabank",
+    "state": "TX"
+  },
+  {
+    "zip": "75233",
+    "total": 27693,
+    "lat": 32.7046,
+    "lng": -96.8725,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76023",
+    "total": 27416,
+    "lat": 33.0594,
+    "lng": -97.5868,
+    "city": "Boyd",
+    "state": "TX"
+  },
+  {
+    "zip": "75226",
+    "total": 27212,
+    "lat": 32.7887,
+    "lng": -96.7676,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75169",
+    "total": 25940,
+    "lat": 32.7283,
+    "lng": -96.0079,
+    "city": "Wills Point",
+    "state": "TX"
+  },
+  {
+    "zip": "76259",
+    "total": 25408,
+    "lat": 33.1774,
+    "lng": -97.2848,
+    "city": "Ponder",
+    "state": "TX"
+  },
+  {
+    "zip": "75382",
+    "total": 25383,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76203",
+    "total": 25243,
+    "lat": 33.2148,
+    "lng": -97.1331,
+    "city": "Denton",
+    "state": "TX"
+  },
+  {
+    "zip": "75392",
+    "total": 24799,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75132",
+    "total": 24632,
+    "lat": 32.9415,
+    "lng": -96.3814,
+    "city": "Fate",
+    "state": "TX"
+  },
+  {
+    "zip": "76115",
+    "total": 24292,
+    "lat": 32.6796,
+    "lng": -97.3336,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75391",
+    "total": 24008,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76073",
+    "total": 23782,
+    "lat": 33.0826,
+    "lng": -97.6974,
+    "city": "Paradise",
+    "state": "TX"
+  },
+  {
+    "zip": "76067",
+    "total": 23702,
+    "lat": 32.8085,
+    "lng": -98.1128,
+    "city": "Mineral Wells",
+    "state": "TX"
+  },
+  {
+    "zip": "75125",
+    "total": 23453,
+    "lat": 32.5223,
+    "lng": -96.6643,
+    "city": "Ferris",
+    "state": "TX"
+  },
+  {
+    "zip": "75251",
+    "total": 23292,
+    "lat": 32.9189,
+    "lng": -96.7751,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75223",
+    "total": 22953,
+    "lat": 32.7942,
+    "lng": -96.7475,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75253",
+    "total": 22793,
+    "lat": 32.6833,
+    "lng": -96.5964,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76122",
+    "total": 22452,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75143",
+    "total": 20882,
+    "lat": 32.2486,
+    "lng": -96.2161,
+    "city": "Kemp",
+    "state": "TX"
+  },
+  {
+    "zip": "75751",
+    "total": 20680,
+    "lat": 32.1935,
+    "lng": -95.8432,
+    "city": "Athens",
+    "state": "TX"
+  },
+  {
+    "zip": "76426",
+    "total": 20587,
+    "lat": 33.187,
+    "lng": -97.781,
+    "city": "Bridgeport",
+    "state": "TX"
+  },
+  {
+    "zip": "75418",
+    "total": 20538,
+    "lat": 33.5806,
+    "lng": -96.1836,
+    "city": "Bonham",
+    "state": "TX"
+  },
+  {
+    "zip": "75141",
+    "total": 20267,
+    "lat": 32.6396,
+    "lng": -96.707,
+    "city": "Hutchins",
+    "state": "TX"
+  },
+  {
+    "zip": "75752",
+    "total": 20213,
+    "lat": 32.2151,
+    "lng": -95.79,
+    "city": "Athens",
+    "state": "TX"
+  },
+  {
+    "zip": "75147",
+    "total": 19836,
+    "lat": 32.3685,
+    "lng": -96.0685,
+    "city": "Mabank",
+    "state": "TX"
+  },
+  {
+    "zip": "75138",
+    "total": 19376,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Duncanville",
+    "state": "TX"
+  },
+  {
+    "zip": "76692",
+    "total": 19191,
+    "lat": 31.9713,
+    "lng": -97.3463,
+    "city": "Whitney",
+    "state": "TX"
+  },
+  {
+    "zip": "76645",
+    "total": 19103,
+    "lat": 32.0149,
+    "lng": -97.1198,
+    "city": "Hillsboro",
+    "state": "TX"
+  },
+  {
+    "zip": "76103",
+    "total": 18534,
+    "lat": 32.747,
+    "lng": -97.2604,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75474",
+    "total": 18175,
+    "lat": 32.8983,
+    "lng": -96.1261,
+    "city": "Quinlan",
+    "state": "TX"
+  },
+  {
+    "zip": "76071",
+    "total": 17866,
+    "lat": 33.007,
+    "lng": -97.4923,
+    "city": "Newark",
+    "state": "TX"
+  },
+  {
+    "zip": "75801",
+    "total": 17775,
+    "lat": 31.7588,
+    "lng": -95.6342,
+    "city": "Palestine",
+    "state": "TX"
+  },
+  {
+    "zip": "76050",
+    "total": 17540,
+    "lat": 32.2704,
+    "lng": -97.1792,
+    "city": "Grandview",
+    "state": "TX"
+  },
+  {
+    "zip": "75047",
+    "total": 17138,
+    "lat": 32.9126,
+    "lng": -96.6389,
+    "city": "Garland",
+    "state": "TX"
+  },
+  {
+    "zip": "75045",
+    "total": 17057,
+    "lat": 32.9137,
+    "lng": -96.6271,
+    "city": "Garland",
+    "state": "TX"
+  },
+  {
+    "zip": "75315",
+    "total": 16971,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76095",
+    "total": 16730,
+    "lat": 32.844,
+    "lng": -97.1431,
+    "city": "Bedford",
+    "state": "TX"
+  },
+  {
+    "zip": "75275",
+    "total": 16376,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75161",
+    "total": 16351,
+    "lat": 32.7332,
+    "lng": -96.195,
+    "city": "Terrell",
+    "state": "TX"
+  },
+  {
+    "zip": "76161",
+    "total": 16133,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75462",
+    "total": 15919,
+    "lat": 33.6805,
+    "lng": -95.4905,
+    "city": "Paris",
+    "state": "TX"
+  },
+  {
+    "zip": "76098",
+    "total": 15453,
+    "lat": 32.8957,
+    "lng": -97.5636,
+    "city": "Azle",
+    "state": "TX"
+  },
+  {
+    "zip": "76043",
+    "total": 14836,
+    "lat": 32.2298,
+    "lng": -97.7629,
+    "city": "Glen Rose",
+    "state": "TX"
+  },
+  {
+    "zip": "76097",
+    "total": 14212,
+    "lat": 32.5421,
+    "lng": -97.3208,
+    "city": "Burleson",
+    "state": "TX"
+  },
+  {
+    "zip": "75758",
+    "total": 14178,
+    "lat": 32.2572,
+    "lng": -95.5393,
+    "city": "Chandler",
+    "state": "TX"
+  },
+  {
+    "zip": "75152",
+    "total": 14014,
+    "lat": 32.4387,
+    "lng": -96.6794,
+    "city": "Palmer",
+    "state": "TX"
+  },
+  {
+    "zip": "75452",
+    "total": 13565,
+    "lat": 33.3796,
+    "lng": -96.2475,
+    "city": "Leonard",
+    "state": "TX"
+  },
+  {
+    "zip": "75840",
+    "total": 13519,
+    "lat": 31.7361,
+    "lng": -96.1572,
+    "city": "Fairfield",
+    "state": "TX"
+  },
+  {
+    "zip": "76272",
+    "total": 13270,
+    "lat": 33.5022,
+    "lng": -97.2311,
+    "city": "Valley View",
+    "state": "TX"
+  },
+  {
+    "zip": "76185",
+    "total": 13186,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75261",
+    "total": 12943,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75461",
+    "total": 12353,
+    "lat": 33.6609,
+    "lng": -95.5555,
+    "city": "Paris",
+    "state": "TX"
+  },
+  {
+    "zip": "75356",
+    "total": 12302,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75120",
+    "total": 12280,
+    "lat": 32.3347,
+    "lng": -96.6335,
+    "city": "Ennis",
+    "state": "TX"
+  },
+  {
+    "zip": "76094",
+    "total": 11877,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "75424",
+    "total": 11297,
+    "lat": 33.3061,
+    "lng": -96.3901,
+    "city": "Blue Ridge",
+    "state": "TX"
+  },
+  {
+    "zip": "75754",
+    "total": 11153,
+    "lat": 32.4126,
+    "lng": -95.6371,
+    "city": "Ben Wheeler",
+    "state": "TX"
+  },
+  {
+    "zip": "76402",
+    "total": 11120,
+    "lat": 32.2153,
+    "lng": -98.208,
+    "city": "Stephenville",
+    "state": "TX"
+  },
+  {
+    "zip": "75029",
+    "total": 10817,
+    "lat": 33.0462,
+    "lng": -96.9942,
+    "city": "Lewisville",
+    "state": "TX"
+  },
+  {
+    "zip": "76258",
+    "total": 10799,
+    "lat": 33.371,
+    "lng": -96.9446,
+    "city": "Pilot Point",
+    "state": "TX"
+  },
+  {
+    "zip": "75210",
+    "total": 10670,
+    "lat": 32.7699,
+    "lng": -96.743,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75428",
+    "total": 9683,
+    "lat": 33.2493,
+    "lng": -95.9097,
+    "city": "Commerce",
+    "state": "TX"
+  },
+  {
+    "zip": "75860",
+    "total": 9603,
+    "lat": 31.6328,
+    "lng": -96.2778,
+    "city": "Teague",
+    "state": "TX"
+  },
+  {
+    "zip": "75803",
+    "total": 9086,
+    "lat": 31.7571,
+    "lng": -95.6545,
+    "city": "Palestine",
+    "state": "TX"
+  },
+  {
+    "zip": "75086",
+    "total": 8788,
+    "lat": 33.0198,
+    "lng": -96.6989,
+    "city": "Plano",
+    "state": "TX"
+  },
+  {
+    "zip": "75158",
+    "total": 8645,
+    "lat": 32.4818,
+    "lng": -96.3925,
+    "city": "Scurry",
+    "state": "TX"
+  },
+  {
+    "zip": "75148",
+    "total": 8636,
+    "lat": 32.1705,
+    "lng": -96.006,
+    "city": "Malakoff",
+    "state": "TX"
+  },
+  {
+    "zip": "75172",
+    "total": 8286,
+    "lat": 32.5981,
+    "lng": -96.6838,
+    "city": "Wilmer",
+    "state": "TX"
+  },
+  {
+    "zip": "76127",
+    "total": 8222,
+    "lat": 32.7254,
+    "lng": -97.3208,
+    "city": "Naval Air Station Jrb",
+    "state": "TX"
+  },
+  {
+    "zip": "75483",
+    "total": 8091,
+    "lat": 33.1384,
+    "lng": -95.6011,
+    "city": "Sulphur Springs",
+    "state": "TX"
+  },
+  {
+    "zip": "76446",
+    "total": 8069,
+    "lat": 32.0909,
+    "lng": -98.3455,
+    "city": "Dublin",
+    "state": "TX"
+  },
+  {
+    "zip": "75123",
+    "total": 8039,
+    "lat": 32.5899,
+    "lng": -96.8569,
+    "city": "Desoto",
+    "state": "TX"
+  },
+  {
+    "zip": "75802",
+    "total": 7745,
+    "lat": 31.7621,
+    "lng": -95.6308,
+    "city": "Palestine",
+    "state": "TX"
+  },
+  {
+    "zip": "76035",
+    "total": 7731,
+    "lat": 32.5343,
+    "lng": -97.6158,
+    "city": "Cresson",
+    "state": "TX"
+  },
+  {
+    "zip": "76476",
+    "total": 7695,
+    "lat": 32.3772,
+    "lng": -97.8802,
+    "city": "Tolar",
+    "state": "TX"
+  },
+  {
+    "zip": "75490",
+    "total": 7254,
+    "lat": 33.4235,
+    "lng": -96.3398,
+    "city": "Trenton",
+    "state": "TX"
+  },
+  {
+    "zip": "75763",
+    "total": 7214,
+    "lat": 32.0535,
+    "lng": -95.5163,
+    "city": "Frankston",
+    "state": "TX"
+  },
+  {
+    "zip": "76487",
+    "total": 7209,
+    "lat": 32.968,
+    "lng": -97.8472,
+    "city": "Poolville",
+    "state": "TX"
+  },
+  {
+    "zip": "75246",
+    "total": 7099,
+    "lat": 32.7948,
+    "lng": -96.7697,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75242",
+    "total": 6975,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75117",
+    "total": 6963,
+    "lat": 32.7003,
+    "lng": -95.878,
+    "city": "Edgewood",
+    "state": "TX"
+  },
+  {
+    "zip": "76252",
+    "total": 6948,
+    "lat": 33.6595,
+    "lng": -97.3624,
+    "city": "Muenster",
+    "state": "TX"
+  },
+  {
+    "zip": "76458",
+    "total": 6924,
+    "lat": 33.2347,
+    "lng": -98.1681,
+    "city": "Jacksboro",
+    "state": "TX"
+  },
+  {
+    "zip": "75756",
+    "total": 6899,
+    "lat": 32.304,
+    "lng": -95.6,
+    "city": "Brownsboro",
+    "state": "TX"
+  },
+  {
+    "zip": "76442",
+    "total": 6868,
+    "lat": 31.9116,
+    "lng": -98.6082,
+    "city": "Comanche",
+    "state": "TX"
+  },
+  {
+    "zip": "76064",
+    "total": 6813,
+    "lat": 32.2993,
+    "lng": -97.0271,
+    "city": "Maypearl",
+    "state": "TX"
+  },
+  {
+    "zip": "76485",
+    "total": 6790,
+    "lat": 32.8721,
+    "lng": -97.8667,
+    "city": "Peaster",
+    "state": "TX"
+  },
+  {
+    "zip": "76066",
+    "total": 6724,
+    "lat": 32.7457,
+    "lng": -97.9561,
+    "city": "Millsap",
+    "state": "TX"
+  },
+  {
+    "zip": "76462",
+    "total": 6668,
+    "lat": 32.5072,
+    "lng": -97.9536,
+    "city": "Lipan",
+    "state": "TX"
+  },
+  {
+    "zip": "75109",
+    "total": 6502,
+    "lat": 31.9937,
+    "lng": -96.4199,
+    "city": "Corsicana",
+    "state": "TX"
+  },
+  {
+    "zip": "76531",
+    "total": 6302,
+    "lat": 31.6781,
+    "lng": -98.1131,
+    "city": "Hamilton",
+    "state": "TX"
+  },
+  {
+    "zip": "76431",
+    "total": 5986,
+    "lat": 33.3193,
+    "lng": -97.8031,
+    "city": "Chico",
+    "state": "TX"
+  },
+  {
+    "zip": "75423",
+    "total": 5969,
+    "lat": 33.2649,
+    "lng": -96.2076,
+    "city": "Celeste",
+    "state": "TX"
+  },
+  {
+    "zip": "75124",
+    "total": 5885,
+    "lat": 32.2965,
+    "lng": -96.0137,
+    "city": "Eustace",
+    "state": "TX"
+  },
+  {
+    "zip": "76101",
+    "total": 5700,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75790",
+    "total": 5666,
+    "lat": 32.5283,
+    "lng": -95.6545,
+    "city": "Van",
+    "state": "TX"
+  },
+  {
+    "zip": "75453",
+    "total": 5513,
+    "lat": 32.9916,
+    "lng": -95.9434,
+    "city": "Lone Oak",
+    "state": "TX"
+  },
+  {
+    "zip": "76007",
+    "total": 5507,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "75440",
+    "total": 5397,
+    "lat": 32.875,
+    "lng": -95.7418,
+    "city": "Emory",
+    "state": "TX"
+  },
+  {
+    "zip": "76068",
+    "total": 5271,
+    "lat": 32.8085,
+    "lng": -98.1128,
+    "city": "Mineral Wells",
+    "state": "TX"
+  },
+  {
+    "zip": "76433",
+    "total": 5119,
+    "lat": 32.2884,
+    "lng": -98.0539,
+    "city": "Bluff Dale",
+    "state": "TX"
+  },
+  {
+    "zip": "75140",
+    "total": 5069,
+    "lat": 32.6635,
+    "lng": -95.7064,
+    "city": "Grand Saline",
+    "state": "TX"
+  },
+  {
+    "zip": "75127",
+    "total": 5016,
+    "lat": 32.677,
+    "lng": -95.7899,
+    "city": "Fruitvale",
+    "state": "TX"
+  },
+  {
+    "zip": "75496",
+    "total": 4850,
+    "lat": 33.3605,
+    "lng": -96.0691,
+    "city": "Wolfe City",
+    "state": "TX"
+  },
+  {
+    "zip": "75433",
+    "total": 4782,
+    "lat": 33.1118,
+    "lng": -95.7945,
+    "city": "Cumby",
+    "state": "TX"
+  },
+  {
+    "zip": "76449",
+    "total": 4628,
+    "lat": 32.9242,
+    "lng": -98.337,
+    "city": "Graford",
+    "state": "TX"
+  },
+  {
+    "zip": "76093",
+    "total": 4616,
+    "lat": 32.2532,
+    "lng": -97.3678,
+    "city": "Rio Vista",
+    "state": "TX"
+  },
+  {
+    "zip": "76634",
+    "total": 4600,
+    "lat": 31.7918,
+    "lng": -97.5203,
+    "city": "Clifton",
+    "state": "TX"
+  },
+  {
+    "zip": "76457",
+    "total": 4510,
+    "lat": 31.9597,
+    "lng": -98.0249,
+    "city": "Hico",
+    "state": "TX"
+  },
+  {
+    "zip": "76055",
+    "total": 4466,
+    "lat": 32.1636,
+    "lng": -97.146,
+    "city": "Itasca",
+    "state": "TX"
+  },
+  {
+    "zip": "75839",
+    "total": 4462,
+    "lat": 31.648,
+    "lng": -95.5551,
+    "city": "Elkhart",
+    "state": "TX"
+  },
+  {
+    "zip": "76059",
+    "total": 4443,
+    "lat": 32.3937,
+    "lng": -97.3287,
+    "city": "Keene",
+    "state": "TX"
+  },
+  {
+    "zip": "75155",
+    "total": 4425,
+    "lat": 32.2258,
+    "lng": -96.4606,
+    "city": "Rice",
+    "state": "TX"
+  },
+  {
+    "zip": "76113",
+    "total": 4350,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76181",
+    "total": 4338,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75015",
+    "total": 4330,
+    "lat": 32.8987,
+    "lng": -96.9722,
+    "city": "Irving",
+    "state": "TX"
+  },
+  {
+    "zip": "75432",
+    "total": 4268,
+    "lat": 33.3812,
+    "lng": -95.6623,
+    "city": "Cooper",
+    "state": "TX"
+  },
+  {
+    "zip": "75882",
+    "total": 4108,
+    "lat": 31.7942,
+    "lng": -95.662,
+    "city": "Palestine",
+    "state": "TX"
+  },
+  {
+    "zip": "75265",
+    "total": 4078,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75446",
+    "total": 4068,
+    "lat": 33.5985,
+    "lng": -95.9109,
+    "city": "Honey Grove",
+    "state": "TX"
+  },
+  {
+    "zip": "75426",
+    "total": 4054,
+    "lat": 33.6236,
+    "lng": -95.0461,
+    "city": "Clarksville",
+    "state": "TX"
+  },
+  {
+    "zip": "76195",
+    "total": 3980,
+    "lat": 32.7254,
+    "lng": -97.3208,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76651",
+    "total": 3972,
+    "lat": 32.1785,
+    "lng": -96.8823,
+    "city": "Italy",
+    "state": "TX"
+  },
+  {
+    "zip": "76444",
+    "total": 3843,
+    "lat": 32.1087,
+    "lng": -98.5489,
+    "city": "De Leon",
+    "state": "TX"
+  },
+  {
+    "zip": "75472",
+    "total": 3770,
+    "lat": 32.9007,
+    "lng": -95.8903,
+    "city": "Point",
+    "state": "TX"
+  },
+  {
+    "zip": "75250",
+    "total": 3583,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76689",
+    "total": 3571,
+    "lat": 31.6599,
+    "lng": -97.4935,
+    "city": "Valley Mills",
+    "state": "TX"
+  },
+  {
+    "zip": "75053",
+    "total": 3484,
+    "lat": 32.746,
+    "lng": -96.9978,
+    "city": "Grand Prairie",
+    "state": "TX"
+  },
+  {
+    "zip": "75417",
+    "total": 3401,
+    "lat": 33.4699,
+    "lng": -95.1937,
+    "city": "Bogata",
+    "state": "TX"
+  },
+  {
+    "zip": "75778",
+    "total": 3318,
+    "lat": 32.3257,
+    "lng": -95.7737,
+    "city": "Murchison",
+    "state": "TX"
+  },
+  {
+    "zip": "75416",
+    "total": 3315,
+    "lat": 33.6945,
+    "lng": -95.3823,
+    "city": "Blossom",
+    "state": "TX"
+  },
+  {
+    "zip": "75121",
+    "total": 3155,
+    "lat": 33.0875,
+    "lng": -96.4186,
+    "city": "Copeville",
+    "state": "TX"
+  },
+  {
+    "zip": "76225",
+    "total": 3133,
+    "lat": 33.3698,
+    "lng": -97.6885,
+    "city": "Alvord",
+    "state": "TX"
+  },
+  {
+    "zip": "76670",
+    "total": 3099,
+    "lat": 32.1482,
+    "lng": -96.9612,
+    "city": "Milford",
+    "state": "TX"
+  },
+  {
+    "zip": "75859",
+    "total": 2844,
+    "lat": 31.8885,
+    "lng": -96.2988,
+    "city": "Streetman",
+    "state": "TX"
+  },
+  {
+    "zip": "76453",
+    "total": 2836,
+    "lat": 32.5478,
+    "lng": -98.3632,
+    "city": "Gordon",
+    "state": "TX"
+  },
+  {
+    "zip": "75420",
+    "total": 2790,
+    "lat": 33.1155,
+    "lng": -95.7345,
+    "city": "Brashear",
+    "state": "TX"
+  },
+  {
+    "zip": "75429",
+    "total": 2768,
+    "lat": 33.2377,
+    "lng": -95.9089,
+    "city": "Commerce",
+    "state": "TX"
+  },
+  {
+    "zip": "75144",
+    "total": 2762,
+    "lat": 32.1275,
+    "lng": -96.2298,
+    "city": "Kerens",
+    "state": "TX"
+  },
+  {
+    "zip": "75422",
+    "total": 2760,
+    "lat": 33.151,
+    "lng": -95.9439,
+    "city": "Campbell",
+    "state": "TX"
+  },
+  {
+    "zip": "76204",
+    "total": 2681,
+    "lat": 33.2074,
+    "lng": -97.1163,
+    "city": "Denton",
+    "state": "TX"
+  },
+  {
+    "zip": "75163",
+    "total": 2654,
+    "lat": 32.1383,
+    "lng": -96.0831,
+    "city": "Trinidad",
+    "state": "TX"
+  },
+  {
+    "zip": "76019",
+    "total": 2577,
+    "lat": 32.7357,
+    "lng": -97.1081,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "76641",
+    "total": 2475,
+    "lat": 32.0275,
+    "lng": -96.7684,
+    "city": "Frost",
+    "state": "TX"
+  },
+  {
+    "zip": "75770",
+    "total": 2471,
+    "lat": 32.1608,
+    "lng": -95.5927,
+    "city": "Larue",
+    "state": "TX"
+  },
+  {
+    "zip": "76665",
+    "total": 2432,
+    "lat": 31.929,
+    "lng": -97.6443,
+    "city": "Meridian",
+    "state": "TX"
+  },
+  {
+    "zip": "75097",
+    "total": 2409,
+    "lat": 33.3512,
+    "lng": -96.6646,
+    "city": "Weston",
+    "state": "TX"
+  },
+  {
+    "zip": "76626",
+    "total": 2282,
+    "lat": 32.0758,
+    "lng": -96.701,
+    "city": "Blooming Grove",
+    "state": "TX"
+  },
+  {
+    "zip": "76096",
+    "total": 2250,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "76484",
+    "total": 2243,
+    "lat": 32.7673,
+    "lng": -98.2987,
+    "city": "Palo Pinto",
+    "state": "TX"
+  },
+  {
+    "zip": "75861",
+    "total": 2179,
+    "lat": 31.7929,
+    "lng": -95.8998,
+    "city": "Tennessee Colony",
+    "state": "TX"
+  },
+  {
+    "zip": "75393",
+    "total": 2149,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75059",
+    "total": 2114,
+    "lat": 32.8023,
+    "lng": -96.9597,
+    "city": "Irving",
+    "state": "TX"
+  },
+  {
+    "zip": "76241",
+    "total": 2060,
+    "lat": 33.6104,
+    "lng": -97.0369,
+    "city": "Gainesville",
+    "state": "TX"
+  },
+  {
+    "zip": "75164",
+    "total": 2020,
+    "lat": 33.0612,
+    "lng": -96.3072,
+    "city": "Josephine",
+    "state": "TX"
+  },
+  {
+    "zip": "76004",
+    "total": 2015,
+    "lat": 32.7357,
+    "lng": -97.1081,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "75262",
+    "total": 1988,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76427",
+    "total": 1984,
+    "lat": 33.1615,
+    "lng": -98.3874,
+    "city": "Bryson",
+    "state": "TX"
+  },
+  {
+    "zip": "76671",
+    "total": 1963,
+    "lat": 32.0195,
+    "lng": -97.5608,
+    "city": "Morgan",
+    "state": "TX"
+  },
+  {
+    "zip": "75438",
+    "total": 1924,
+    "lat": 33.5647,
+    "lng": -96.0619,
+    "city": "Dodd City",
+    "state": "TX"
+  },
+  {
+    "zip": "75030",
+    "total": 1875,
+    "lat": 32.9029,
+    "lng": -96.5639,
+    "city": "Rowlett",
+    "state": "TX"
+  },
+  {
+    "zip": "76652",
+    "total": 1864,
+    "lat": 32.1035,
+    "lng": -97.5421,
+    "city": "Kopperl",
+    "state": "TX"
+  },
+  {
+    "zip": "75473",
+    "total": 1860,
+    "lat": 33.7779,
+    "lng": -95.5307,
+    "city": "Powderly",
+    "state": "TX"
+  },
+  {
+    "zip": "76472",
+    "total": 1827,
+    "lat": 32.5979,
+    "lng": -98.1797,
+    "city": "Santo",
+    "state": "TX"
+  },
+  {
+    "zip": "75378",
+    "total": 1774,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75027",
+    "total": 1765,
+    "lat": 33.2074,
+    "lng": -97.1163,
+    "city": "Flower Mound",
+    "state": "TX"
+  },
+  {
+    "zip": "75099",
+    "total": 1756,
+    "lat": 32.9546,
+    "lng": -97.015,
+    "city": "Coppell",
+    "state": "TX"
+  },
+  {
+    "zip": "75102",
+    "total": 1734,
+    "lat": 32.1014,
+    "lng": -96.6251,
+    "city": "Barry",
+    "state": "TX"
+  },
+  {
+    "zip": "75016",
+    "total": 1726,
+    "lat": 32.8987,
+    "lng": -96.9722,
+    "city": "Irving",
+    "state": "TX"
+  },
+  {
+    "zip": "75421",
+    "total": 1713,
+    "lat": 33.6246,
+    "lng": -95.6888,
+    "city": "Brookston",
+    "state": "TX"
+  },
+  {
+    "zip": "76636",
+    "total": 1674,
+    "lat": 32.1595,
+    "lng": -97.2591,
+    "city": "Covington",
+    "state": "TX"
+  },
+  {
+    "zip": "75853",
+    "total": 1670,
+    "lat": 31.8766,
+    "lng": -95.7327,
+    "city": "Montalba",
+    "state": "TX"
+  },
+  {
+    "zip": "75026",
+    "total": 1650,
+    "lat": 33.0198,
+    "lng": -96.6989,
+    "city": "Plano",
+    "state": "TX"
+  },
+  {
+    "zip": "75449",
+    "total": 1645,
+    "lat": 33.4245,
+    "lng": -95.9455,
+    "city": "Ladonia",
+    "state": "TX"
+  },
+  {
+    "zip": "75380",
+    "total": 1622,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75447",
+    "total": 1612,
+    "lat": 33.7612,
+    "lng": -96.1193,
+    "city": "Ivanhoe",
+    "state": "TX"
+  },
+  {
+    "zip": "75260",
+    "total": 1604,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75185",
+    "total": 1593,
+    "lat": 32.7403,
+    "lng": -96.5618,
+    "city": "Mesquite",
+    "state": "TX"
+  },
+  {
+    "zip": "76206",
+    "total": 1590,
+    "lat": 33.1694,
+    "lng": -97.1506,
+    "city": "Denton",
+    "state": "TX"
+  },
+  {
+    "zip": "75266",
+    "total": 1584,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76197",
+    "total": 1556,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76129",
+    "total": 1555,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76250",
+    "total": 1509,
+    "lat": 33.636,
+    "lng": -97.2214,
+    "city": "Lindsay",
+    "state": "TX"
+  },
+  {
+    "zip": "76077",
+    "total": 1455,
+    "lat": 32.2812,
+    "lng": -97.7065,
+    "city": "Rainbow",
+    "state": "TX"
+  },
+  {
+    "zip": "76679",
+    "total": 1455,
+    "lat": 31.9483,
+    "lng": -96.5856,
+    "city": "Purdon",
+    "state": "TX"
+  },
+  {
+    "zip": "75221",
+    "total": 1442,
+    "lat": 32.8147,
+    "lng": -96.7877,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76070",
+    "total": 1417,
+    "lat": 32.2713,
+    "lng": -97.6567,
+    "city": "Nemo",
+    "state": "TX"
+  },
+  {
+    "zip": "76486",
+    "total": 1412,
+    "lat": 33.034,
+    "lng": -98.0692,
+    "city": "Perrin",
+    "state": "TX"
+  },
+  {
+    "zip": "76193",
+    "total": 1400,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75478",
+    "total": 1383,
+    "lat": 33.1767,
+    "lng": -95.3433,
+    "city": "Saltillo",
+    "state": "TX"
+  },
+  {
+    "zip": "75488",
+    "total": 1382,
+    "lat": 33.7979,
+    "lng": -96.0449,
+    "city": "Telephone",
+    "state": "TX"
+  },
+  {
+    "zip": "75101",
+    "total": 1367,
+    "lat": 32.2731,
+    "lng": -96.703,
+    "city": "Bardwell",
+    "state": "TX"
+  },
+  {
+    "zip": "76162",
+    "total": 1367,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76136",
+    "total": 1365,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76621",
+    "total": 1333,
+    "lat": 31.8916,
+    "lng": -97.0671,
+    "city": "Abbott",
+    "state": "TX"
+  },
+  {
+    "zip": "76471",
+    "total": 1310,
+    "lat": 32.128,
+    "lng": -98.9859,
+    "city": "Rising Star",
+    "state": "TX"
+  },
+  {
+    "zip": "75439",
+    "total": 1291,
+    "lat": 33.5819,
+    "lng": -96.2735,
+    "city": "Ector",
+    "state": "TX"
+  },
+  {
+    "zip": "75436",
+    "total": 1275,
+    "lat": 33.6627,
+    "lng": -95.2385,
+    "city": "Detroit",
+    "state": "TX"
+  },
+  {
+    "zip": "75376",
+    "total": 1242,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76649",
+    "total": 1224,
+    "lat": 31.9722,
+    "lng": -97.8793,
+    "city": "Iredell",
+    "state": "TX"
+  },
+  {
+    "zip": "76857",
+    "total": 1136,
+    "lat": 31.9571,
+    "lng": -98.9656,
+    "city": "May",
+    "state": "TX"
+  },
+  {
+    "zip": "75370",
+    "total": 1119,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76627",
+    "total": 1113,
+    "lat": 32.1052,
+    "lng": -97.3652,
+    "city": "Blum",
+    "state": "TX"
+  },
+  {
+    "zip": "76003",
+    "total": 1107,
+    "lat": 32.7417,
+    "lng": -97.2253,
+    "city": "Arlington",
+    "state": "TX"
+  },
+  {
+    "zip": "75476",
+    "total": 1069,
+    "lat": 33.7098,
+    "lng": -96.1452,
+    "city": "Ravenna",
+    "state": "TX"
+  },
+  {
+    "zip": "76639",
+    "total": 1068,
+    "lat": 31.8974,
+    "lng": -96.7085,
+    "city": "Dawson",
+    "state": "TX"
+  },
+  {
+    "zip": "76648",
+    "total": 1066,
+    "lat": 31.8436,
+    "lng": -96.8,
+    "city": "Hubbard",
+    "state": "TX"
+  },
+  {
+    "zip": "75320",
+    "total": 1059,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76622",
+    "total": 1013,
+    "lat": 31.8589,
+    "lng": -97.2258,
+    "city": "Aquilla",
+    "state": "TX"
+  },
+  {
+    "zip": "75389",
+    "total": 999,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75105",
+    "total": 994,
+    "lat": 32.2954,
+    "lng": -96.3887,
+    "city": "Chatfield",
+    "state": "TX"
+  },
+  {
+    "zip": "76455",
+    "total": 991,
+    "lat": 31.8468,
+    "lng": -98.4017,
+    "city": "Gustine",
+    "state": "TX"
+  },
+  {
+    "zip": "76475",
+    "total": 989,
+    "lat": 32.5945,
+    "lng": -98.4995,
+    "city": "Strawn",
+    "state": "TX"
+  },
+  {
+    "zip": "76192",
+    "total": 936,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76690",
+    "total": 924,
+    "lat": 32.0593,
+    "lng": -97.7514,
+    "city": "Walnut Springs",
+    "state": "TX"
+  },
+  {
+    "zip": "75471",
+    "total": 919,
+    "lat": 33.0519,
+    "lng": -95.3851,
+    "city": "Pickton",
+    "state": "TX"
+  },
+  {
+    "zip": "75411",
+    "total": 905,
+    "lat": 33.8643,
+    "lng": -95.6111,
+    "city": "Arthur City",
+    "state": "TX"
+  },
+  {
+    "zip": "76631",
+    "total": 883,
+    "lat": 31.9907,
+    "lng": -96.9837,
+    "city": "Bynum",
+    "state": "TX"
+  },
+  {
+    "zip": "75479",
+    "total": 873,
+    "lat": 33.6066,
+    "lng": -96.3502,
+    "city": "Savoy",
+    "state": "TX"
+  },
+  {
+    "zip": "76202",
+    "total": 849,
+    "lat": 33.2255,
+    "lng": -97.1085,
+    "city": "Denton",
+    "state": "TX"
+  },
+  {
+    "zip": "75468",
+    "total": 823,
+    "lat": 33.5702,
+    "lng": -95.3908,
+    "city": "Pattonville",
+    "state": "TX"
+  },
+  {
+    "zip": "76163",
+    "total": 818,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76637",
+    "total": 779,
+    "lat": 31.7486,
+    "lng": -97.8113,
+    "city": "Cranfills Gap",
+    "state": "TX"
+  },
+  {
+    "zip": "76463",
+    "total": 773,
+    "lat": 32.5381,
+    "lng": -98.4219,
+    "city": "Mingus",
+    "state": "TX"
+  },
+  {
+    "zip": "75379",
+    "total": 768,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75354",
+    "total": 761,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75398",
+    "total": 739,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75017",
+    "total": 723,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Irving",
+    "state": "TX"
+  },
+  {
+    "zip": "76238",
+    "total": 720,
+    "lat": 33.4965,
+    "lng": -97.3859,
+    "city": "Era",
+    "state": "TX"
+  },
+  {
+    "zip": "75064",
+    "total": 717,
+    "lat": 32.9247,
+    "lng": -96.9598,
+    "city": "Irving",
+    "state": "TX"
+  },
+  {
+    "zip": "75431",
+    "total": 698,
+    "lat": 33.0107,
+    "lng": -95.4734,
+    "city": "Como",
+    "state": "TX"
+  },
+  {
+    "zip": "75486",
+    "total": 698,
+    "lat": 33.7589,
+    "lng": -95.6807,
+    "city": "Sumner",
+    "state": "TX"
+  },
+  {
+    "zip": "75381",
+    "total": 697,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76147",
+    "total": 693,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76061",
+    "total": 689,
+    "lat": 32.5065,
+    "lng": -97.1875,
+    "city": "Lillian",
+    "state": "TX"
+  },
+  {
+    "zip": "75222",
+    "total": 678,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75355",
+    "total": 655,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76454",
+    "total": 652,
+    "lat": 32.2234,
+    "lng": -98.6834,
+    "city": "Gorman",
+    "state": "TX"
+  },
+  {
+    "zip": "76693",
+    "total": 648,
+    "lat": 31.7865,
+    "lng": -96.4202,
+    "city": "Wortham",
+    "state": "TX"
+  },
+  {
+    "zip": "75301",
+    "total": 634,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76432",
+    "total": 620,
+    "lat": 31.7882,
+    "lng": -98.8311,
+    "city": "Blanket",
+    "state": "TX"
+  },
+  {
+    "zip": "75357",
+    "total": 614,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75437",
+    "total": 613,
+    "lat": 33.2648,
+    "lng": -95.4423,
+    "city": "Dike",
+    "state": "TX"
+  },
+  {
+    "zip": "76041",
+    "total": 592,
+    "lat": 32.2486,
+    "lng": -96.8232,
+    "city": "Forreston",
+    "state": "TX"
+  },
+  {
+    "zip": "76681",
+    "total": 584,
+    "lat": 31.9018,
+    "lng": -96.4373,
+    "city": "Richland",
+    "state": "TX"
+  },
+  {
+    "zip": "75157",
+    "total": 552,
+    "lat": 32.4626,
+    "lng": -96.4533,
+    "city": "Rosser",
+    "state": "TX"
+  },
+  {
+    "zip": "75360",
+    "total": 545,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75168",
+    "total": 525,
+    "lat": 32.3749,
+    "lng": -96.7166,
+    "city": "Waxahachie",
+    "state": "TX"
+  },
+  {
+    "zip": "75118",
+    "total": 522,
+    "lat": 32.5996,
+    "lng": -96.3027,
+    "city": "Elmo",
+    "state": "TX"
+  },
+  {
+    "zip": "75283",
+    "total": 521,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75303",
+    "total": 520,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75492",
+    "total": 517,
+    "lat": 33.5633,
+    "lng": -96.002,
+    "city": "Windom",
+    "state": "TX"
+  },
+  {
+    "zip": "75359",
+    "total": 507,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75151",
+    "total": 496,
+    "lat": 32.0624,
+    "lng": -96.4735,
+    "city": "Corsicana",
+    "state": "TX"
+  },
+  {
+    "zip": "76130",
+    "total": 481,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75838",
+    "total": 477,
+    "lat": 31.4873,
+    "lng": -96.2387,
+    "city": "Donie",
+    "state": "TX"
+  },
+  {
+    "zip": "75550",
+    "total": 472,
+    "lat": 33.5535,
+    "lng": -94.8992,
+    "city": "Annona",
+    "state": "TX"
+  },
+  {
+    "zip": "75404",
+    "total": 453,
+    "lat": 33.0563,
+    "lng": -96.081,
+    "city": "Greenville",
+    "state": "TX"
+  },
+  {
+    "zip": "75312",
+    "total": 449,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76150",
+    "total": 435,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75448",
+    "total": 426,
+    "lat": 33.3034,
+    "lng": -95.8018,
+    "city": "Klondike",
+    "state": "TX"
+  },
+  {
+    "zip": "76666",
+    "total": 423,
+    "lat": 32.0275,
+    "lng": -96.8981,
+    "city": "Mertens",
+    "state": "TX"
+  },
+  {
+    "zip": "75277",
+    "total": 420,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75450",
+    "total": 413,
+    "lat": 33.4116,
+    "lng": -95.4551,
+    "city": "Lake Creek",
+    "state": "TX"
+  },
+  {
+    "zip": "75477",
+    "total": 397,
+    "lat": 33.5429,
+    "lng": -95.7416,
+    "city": "Roxton",
+    "state": "TX"
+  },
+  {
+    "zip": "75367",
+    "total": 395,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75153",
+    "total": 387,
+    "lat": 32.1196,
+    "lng": -96.3327,
+    "city": "Powell",
+    "state": "TX"
+  },
+  {
+    "zip": "75554",
+    "total": 384,
+    "lat": 33.5339,
+    "lng": -94.7867,
+    "city": "Avery",
+    "state": "TX"
+  },
+  {
+    "zip": "76660",
+    "total": 384,
+    "lat": 31.924,
+    "lng": -96.8907,
+    "city": "Malone",
+    "state": "TX"
+  },
+  {
+    "zip": "75342",
+    "total": 372,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76439",
+    "total": 361,
+    "lat": 32.6187,
+    "lng": -97.9267,
+    "city": "Dennis",
+    "state": "TX"
+  },
+  {
+    "zip": "75403",
+    "total": 351,
+    "lat": 33.2185,
+    "lng": -96.0487,
+    "city": "Greenville",
+    "state": "TX"
+  },
+  {
+    "zip": "75284",
+    "total": 349,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76196",
+    "total": 326,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76676",
+    "total": 325,
+    "lat": 31.8551,
+    "lng": -96.9372,
+    "city": "Penelope",
+    "state": "TX"
+  },
+  {
+    "zip": "75358",
+    "total": 316,
+    "lat": 32.7942,
+    "lng": -96.7652,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75458",
+    "total": 316,
+    "lat": 33.2427,
+    "lng": -96.2916,
+    "city": "Merit",
+    "state": "TX"
+  },
+  {
+    "zip": "76190",
+    "total": 307,
+    "lat": 32.7423,
+    "lng": -97.3315,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76263",
+    "total": 297,
+    "lat": 33.4674,
+    "lng": -97.4534,
+    "city": "Rosston",
+    "state": "TX"
+  },
+  {
+    "zip": "75412",
+    "total": 285,
+    "lat": 33.8361,
+    "lng": -95.1487,
+    "city": "Bagwell",
+    "state": "TX"
+  },
+  {
+    "zip": "75435",
+    "total": 270,
+    "lat": 33.5221,
+    "lng": -95.3654,
+    "city": "Deport",
+    "state": "TX"
+  },
+  {
+    "zip": "76445",
+    "total": 235,
+    "lat": 32.2819,
+    "lng": -98.5673,
+    "city": "Desdemona",
+    "state": "TX"
+  },
+  {
+    "zip": "76465",
+    "total": 234,
+    "lat": 32.3882,
+    "lng": -98.1673,
+    "city": "Morgan Mill",
+    "state": "TX"
+  },
+  {
+    "zip": "75425",
+    "total": 232,
+    "lat": 33.869,
+    "lng": -95.5711,
+    "city": "Chicota",
+    "state": "TX"
+  },
+  {
+    "zip": "75395",
+    "total": 229,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75264",
+    "total": 225,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75413",
+    "total": 222,
+    "lat": 33.43,
+    "lng": -96.1662,
+    "city": "Bailey",
+    "state": "TX"
+  },
+  {
+    "zip": "76166",
+    "total": 218,
+    "lat": 32.7539,
+    "lng": -97.3362,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75313",
+    "total": 205,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76191",
+    "total": 203,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "76246",
+    "total": 184,
+    "lat": 33.407,
+    "lng": -97.4716,
+    "city": "Greenwood",
+    "state": "TX"
+  },
+  {
+    "zip": "76673",
+    "total": 183,
+    "lat": 31.7575,
+    "lng": -96.8944,
+    "city": "Mount Calm",
+    "state": "TX"
+  },
+  {
+    "zip": "75832",
+    "total": 177,
+    "lat": 31.9571,
+    "lng": -95.9747,
+    "city": "Cayuga",
+    "state": "TX"
+  },
+  {
+    "zip": "75848",
+    "total": 176,
+    "lat": 31.7666,
+    "lng": -96.3303,
+    "city": "Kirvin",
+    "state": "TX"
+  },
+  {
+    "zip": "75263",
+    "total": 174,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76253",
+    "total": 171,
+    "lat": 33.6178,
+    "lng": -97.309,
+    "city": "Myra",
+    "state": "TX"
+  },
+  {
+    "zip": "75339",
+    "total": 157,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75394",
+    "total": 157,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75470",
+    "total": 152,
+    "lat": 33.6098,
+    "lng": -95.7891,
+    "city": "Petty",
+    "state": "TX"
+  },
+  {
+    "zip": "75481",
+    "total": 144,
+    "lat": 33.3334,
+    "lng": -95.374,
+    "city": "Sulphur Bluff",
+    "state": "TX"
+  },
+  {
+    "zip": "76459",
+    "total": 140,
+    "lat": 33.2636,
+    "lng": -98.3931,
+    "city": "Jermyn",
+    "state": "TX"
+  },
+  {
+    "zip": "75782",
+    "total": 130,
+    "lat": 32.0797,
+    "lng": -95.5938,
+    "city": "Poynor",
+    "state": "TX"
+  },
+  {
+    "zip": "76644",
+    "total": 130,
+    "lat": 31.8593,
+    "lng": -97.3797,
+    "city": "Laguna Park",
+    "state": "TX"
+  },
+  {
+    "zip": "76474",
+    "total": 121,
+    "lat": 31.932,
+    "lng": -98.768,
+    "city": "Sidney",
+    "state": "TX"
+  },
+  {
+    "zip": "75336",
+    "total": 119,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75475",
+    "total": 118,
+    "lat": 33.4846,
+    "lng": -96.2541,
+    "city": "Randolph",
+    "state": "TX"
+  },
+  {
+    "zip": "76198",
+    "total": 114,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75469",
+    "total": 110,
+    "lat": 33.4196,
+    "lng": -95.8262,
+    "city": "Pecan Gap",
+    "state": "TX"
+  },
+  {
+    "zip": "75485",
+    "total": 110,
+    "lat": 33.3627,
+    "lng": -96.4635,
+    "city": "Westminster",
+    "state": "TX"
+  },
+  {
+    "zip": "75267",
+    "total": 106,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "75415",
+    "total": 101,
+    "lat": 33.4768,
+    "lng": -95.7689,
+    "city": "Ben Franklin",
+    "state": "TX"
+  },
+  {
+    "zip": "76452",
+    "total": 94,
+    "lat": 31.7629,
+    "lng": -98.3695,
+    "city": "Energy",
+    "state": "TX"
+  },
+  {
+    "zip": "76199",
+    "total": 82,
+    "lat": 32.7714,
+    "lng": -97.2915,
+    "city": "Fort Worth",
+    "state": "TX"
+  },
+  {
+    "zip": "75880",
+    "total": 79,
+    "lat": 31.8354,
+    "lng": -95.8389,
+    "city": "Tennessee Colony",
+    "state": "TX"
+  },
+  {
+    "zip": "76623",
+    "total": 78,
+    "lat": 32.2054,
+    "lng": -96.79,
+    "city": "Avalon",
+    "state": "TX"
+  },
+  {
+    "zip": "75397",
+    "total": 77,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76467",
+    "total": 76,
+    "lat": 32.2707,
+    "lng": -97.9075,
+    "city": "Paluxy",
+    "state": "TX"
+  },
+  {
+    "zip": "75285",
+    "total": 64,
+    "lat": 32.7673,
+    "lng": -96.7776,
+    "city": "Dallas",
+    "state": "TX"
+  },
+  {
+    "zip": "76628",
+    "total": 61,
+    "lat": 32.0457,
+    "lng": -96.9606,
+    "city": "Brandon",
+    "state": "TX"
+  },
+  {
+    "zip": "76267",
+    "total": 56,
+    "lat": 33.378,
+    "lng": -97.3922,
+    "city": "Slidell",
+    "state": "TX"
+  },
+  {
+    "zip": "76650",
+    "total": 49,
+    "lat": 31.9921,
+    "lng": -96.8714,
+    "city": "Irene",
+    "state": "TX"
+  },
+  {
+    "zip": "75434",
+    "total": 46,
+    "lat": 33.409,
+    "lng": -95.3711,
+    "city": "Cunningham",
+    "state": "TX"
+  },
+  {
+    "zip": "75443",
+    "total": 46,
+    "lat": 33.4697,
+    "lng": -96.1111,
+    "city": "Gober",
+    "state": "TX"
+  },
+  {
+    "zip": "76490",
+    "total": 41,
+    "lat": 32.9555,
+    "lng": -98.021,
+    "city": "Whitt",
+    "state": "TX"
+  },
+  {
+    "zip": "75441",
+    "total": 37,
+    "lat": 33.4291,
+    "lng": -95.6518,
+    "city": "Enloe",
+    "state": "TX"
+  },
+  {
+    "zip": "76468",
+    "total": 35,
+    "lat": 31.9874,
+    "lng": -98.4298,
+    "city": "Proctor",
+    "state": "TX"
+  },
+  {
+    "zip": "75886",
+    "total": 27,
+    "lat": 31.8354,
+    "lng": -95.8389,
+    "city": "Tennessee Colony",
+    "state": "TX"
+  },
+  {
+    "zip": "75779",
+    "total": 25,
+    "lat": 31.8668,
+    "lng": -95.4958,
+    "city": "Neches",
+    "state": "TX"
+  },
+  {
+    "zip": "76436",
+    "total": 24,
+    "lat": 31.8949,
+    "lng": -98.1842,
+    "city": "Carlton",
+    "state": "TX"
+  },
+  {
+    "zip": "76565",
+    "total": 13,
+    "lat": 31.6732,
+    "lng": -98.3256,
+    "city": "Pottsville",
+    "state": "TX"
+  },
+  {
+    "zip": "75884",
+    "total": 11,
+    "lat": 31.8354,
+    "lng": -95.8389,
+    "city": "Tennessee Colony",
+    "state": "TX"
+  },
+  {
+    "zip": "76461",
+    "total": 7,
+    "lat": 32.2446,
+    "lng": -98.3775,
+    "city": "Lingleville",
+    "state": "TX"
+  }
+];
+const hitlistZips = [];
+const dealerPin = {"name": "Frisco CDJR", "address": "8520 State Highway 121, Frisco, TX 75034", "lat": 0, "lng": 0};
+
+const maxTotal = Math.max(...cities.map(c=>c.total));
+const grandTotal = cities.reduce((s,c)=>s+c.total,0);
+document.getElementById('total-num').textContent = grandTotal.toLocaleString();
+
+// Render Top 8 Cities sidebar dynamically
+(function(){
+  const top8 = [...cities].sort((a,b)=>b.total-a.total).slice(0,8);
+  const topMax = top8[0].total;
+  const body = document.getElementById('stats-body');
+  body.innerHTML = top8.map(c=>{
+    const pct = Math.round((c.total/topMax)*100);
+    return `<div class="stat-row"><span class="stat-city">${c.name}</span><span class="stat-num">${c.total.toLocaleString()}</span></div>
+<div class="stat-bar-wrap"><div class="stat-bar" style="width:${pct}%"></div></div>`;
+  }).join('');
+})();
+
+function fmtZips(zips) {
+  if (!zips) return '';
+  const z = zips.split(', ');
+  return 'ZIP: ' + (z.length <= 4 ? zips : z.slice(0,4).join(', ') + ` \u2026 +${z.length-4} more`);
+}
+
+function getRadius(t){
+  const mn=4,mx=52;
+  return mn+(Math.sqrt(t)/Math.sqrt(maxTotal))*(mx-mn);
+}
+
+function getTierStyle(t){
+  if(t>=50000) return {fill:'rgba(55,11,85,0.72)',   stroke:'#370B55'};
+  if(t>=10000) return {fill:'rgba(100,30,150,0.65)', stroke:'#6A1E96'};
+  if(t>= 3000) return {fill:'rgba(129,54,178,0.60)', stroke:'#8136B2'};
+  if(t>= 1000) return {fill:'rgba(171,116,207,0.55)',stroke:'#AB74CF'};
+  if(t>=  300) return {fill:'rgba(217,186,238,0.65)',stroke:'#C8A0E4'};
+  return              {fill:'rgba(240,230,250,0.75)',stroke:'#D9BAEE'};
+}
+
+const map = L.map('map',{center:mapConfig.center,zoom:mapConfig.zoom,zoomControl:false,attributionControl:false});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; <a href="https://carto.com/">CARTO</a>'}).addTo(map);
+L.control.zoom({position:'topright'}).addTo(map);
+
+// City markers are now rendered via renderCityMarkers() into cityLayerGroup
+
+// ── City/ZIP view toggle ────────────────────────────────────────────────────
+let cityLayerGroup = L.layerGroup();
+let zipLayerGroup = L.layerGroup();
+let hitlistLayerGroup = L.layerGroup();
+let dealerLayerGroup = L.layerGroup();
+let currentView = 'city';
+
+// Move city markers into a layer group (re-render)
+function renderCityMarkers() {
+  cityLayerGroup.clearLayers();
+  cities.forEach(c => {
+    const r  = getRadius(c.total);
+    const st = getTierStyle(c.total);
+    const circle = L.circleMarker([c.lat,c.lng],{
+      radius:r, fillColor:st.fill, fillOpacity:1,
+      color:st.stroke, weight:1.5,
+    });
+    circle.bindTooltip(
+      `<div class="tt-city">${c.name}</div>
+       <div class="tt-count">${c.total.toLocaleString()} searches</div>
+       <div class="tt-zips">${fmtZips(c.zips)}</div>`,
+      {className:'cars-tooltip',sticky:true,offset:[10,0]}
+    );
+    cityLayerGroup.addLayer(circle);
+    if(c.total>=2000){
+      const lbl=L.divIcon({
+        html:`<div style="color:#370B55;font-family:Inter,sans-serif;font-size:10px;font-weight:600;white-space:nowrap;text-shadow:0 1px 3px rgba(255,255,255,.95);pointer-events:none;margin-top:${r+3}px;text-align:center;transform:translateX(-50%);">${c.name}</div>`,
+        className:'',iconAnchor:[0,0]
+      });
+      cityLayerGroup.addLayer(L.marker([c.lat,c.lng],{icon:lbl,interactive:false}));
+    }
+  });
+}
+
+function renderZipMarkers() {
+  zipLayerGroup.clearLayers();
+  if (typeof zipData === 'undefined' || !zipData.length) return;
+  const maxZip = Math.max(...zipData.map(z=>z.total));
+  zipData.forEach(z => {
+    const r = 3 + (Math.sqrt(z.total)/Math.sqrt(maxZip)) * 28;
+    const st = getTierStyle(z.total);
+    const isHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.includes(z.zip);
+    const opts = isHitlist
+      ? { radius:r, fillColor:'rgba(232,168,23,0.75)', fillOpacity:1, color:'#B8860B', weight:2.5 }
+      : { radius:r, fillColor:st.fill, fillOpacity:1, color:st.stroke, weight:1.5 };
+    const circle = L.circleMarker([z.lat,z.lng], opts);
+    circle.bindTooltip(
+      `<div class="tt-city">${z.zip}${isHitlist ? ' <span style="color:#B8860B;font-weight:700;">★ HITLIST</span>' : ''}</div>
+       <div class="tt-count">${z.total.toLocaleString()} searches</div>
+       <div class="tt-zips">${z.city}, ${z.state}</div>`,
+      {className:'cars-tooltip',sticky:true,offset:[10,0]}
+    );
+    zipLayerGroup.addLayer(circle);
+    if(z.total >= 1500) {
+      const lbl=L.divIcon({
+        html:`<div style="color:${isHitlist?'#B8860B':'#370B55'};font-family:Inter,sans-serif;font-size:9px;font-weight:600;white-space:nowrap;text-shadow:0 1px 3px rgba(255,255,255,.95);pointer-events:none;margin-top:${r+2}px;text-align:center;transform:translateX(-50%);">${z.zip}</div>`,
+        className:'',iconAnchor:[0,0]
+      });
+      zipLayerGroup.addLayer(L.marker([z.lat,z.lng],{icon:lbl,interactive:false}));
+    }
+  });
+}
+
+function renderDealerPin() {
+  dealerLayerGroup.clearLayers();
+  if (typeof dealerPin === 'undefined' || !dealerPin.lat) return;
+  const star = L.divIcon({
+    html:'<div class="dealer-star">★</div>',
+    className:'',iconSize:[20,20],iconAnchor:[10,10]
+  });
+  const marker = L.marker([dealerPin.lat, dealerPin.lng], {icon:star, zIndexOffset:1000, interactive:true});
+  marker.bindTooltip(
+    `<div class="tt-city">${dealerPin.name || 'Dealer'}</div><div class="tt-zips">${dealerPin.address || ''}</div>`,
+    {className:'cars-tooltip',offset:[12,0]}
+  );
+  dealerLayerGroup.addLayer(marker);
+  document.getElementById('dealer-legend').style.display = 'flex';
+}
+
+function setView(view) {
+  currentView = view;
+  document.getElementById('btn-city').classList.toggle('active', view==='city');
+  document.getElementById('btn-zip').classList.toggle('active', view==='zip');
+  if (view === 'city') {
+    map.removeLayer(zipLayerGroup);
+    map.addLayer(cityLayerGroup);
+  } else {
+    map.removeLayer(cityLayerGroup);
+    if (zipLayerGroup.getLayers().length === 0) renderZipMarkers();
+    map.addLayer(zipLayerGroup);
+  }
+  // Show hitlist legend in ZIP view if hitlist data exists
+  const hl = document.getElementById('hitlist-legend');
+  if (hl) hl.style.display = (view==='zip' && typeof hitlistZips !== 'undefined' && hitlistZips.length) ? 'flex' : 'none';
+}
+
+// Initialize
+renderCityMarkers();
+cityLayerGroup.addTo(map);
+renderDealerPin();
+dealerLayerGroup.addTo(map);
+
+// Tier legend
+const tl=L.control({position:'bottomright'});
+tl.onAdd=function(){
+  const d=L.DomUtil.create('div','panel tier-legend');
+  d.innerHTML=`
+    <h3 style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#8136B2;margin-bottom:10px;border-bottom:2px solid #D9BAEE;padding-bottom:6px;">Volume Tiers</h3>
+    ${[
+      ['rgba(55,11,85,0.72)','#370B55','50,000+'],
+      ['rgba(100,30,150,0.65)','#6A1E96','10,000 – 50,000'],
+      ['rgba(129,54,178,0.60)','#8136B2','3,000 – 10,000'],
+      ['rgba(171,116,207,0.55)','#AB74CF','1,000 – 3,000'],
+      ['rgba(217,186,238,0.65)','#C8A0E4','300 – 1,000'],
+      ['rgba(240,230,250,0.75)','#D9BAEE','< 300'],
+    ].map(([f,s,l])=>`
+      <div class="tier-item">
+        <div class="tier-dot" style="background:${f};border:2px solid ${s};"></div>
+        <span>${l}</span>
+      </div>`).join('')}`;
+  return d;
+};
+tl.addTo(map);
+
+// ── 30-Mile Radius Tool ────────────────────────────────────────────────────────
+const RADIUS_M = 48280; // 30 miles in meters
+const RADIUS_MI = 30;
+let placedRadii = []; // [{ring, badge, pin, lat, lng, label}]
+let clickModeActive = false;
+
+// Haversine distance in miles between two lat/lng points
+function haversineMi(lat1, lng1, lat2, lng2) {
+  const R = 3958.8;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
+    * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Sum searches and count cities whose centroid falls within RADIUS_MI of (lat, lng)
+function searchesInRadius(lat, lng) {
+  let searches = 0, count = 0;
+  cities.forEach(c => {
+    if (haversineMi(lat, lng, c.lat, c.lng) <= RADIUS_MI) { searches += c.total; count++; }
+  });
+  return { searches, count };
+}
+
+// ZIP-level radius capture — returns detailed list
+function zipsInRadius(lat, lng) {
+  if (typeof zipData === 'undefined' || !zipData.length) return [];
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  return zipData
+    .filter(z => haversineMi(lat, lng, z.lat, z.lng) <= RADIUS_MI)
+    .map(z => ({
+      zip: z.zip, city: z.city, state: z.state, total: z.total,
+      hitlist: hasHitlist && hitlistZips.includes(z.zip),
+      dist: Math.round(haversineMi(lat, lng, z.lat, z.lng) * 10) / 10,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+// Combined ZIPs across all placed radii (deduplicated), plus any hitlist ZIPs outside radii
+function getAllRadiusZips() {
+  if (!placedRadii.length) return [];
+  const zipMap = new Map();
+  placedRadii.forEach((r, idx) => {
+    const label = r.label || ('Radius ' + (idx + 1));
+    zipsInRadius(r.lat, r.lng).forEach(z => {
+      if (zipMap.has(z.zip)) {
+        const existing = zipMap.get(z.zip);
+        if (!existing.radii.includes(label)) existing.radii.push(label);
+        existing.dist = Math.min(existing.dist, z.dist);
+      } else {
+        zipMap.set(z.zip, Object.assign({}, z, { radii: [label] }));
+      }
+    });
+  });
+
+  // Ensure ALL hitlist ZIPs appear even if outside every radius
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  if (hasHitlist && typeof zipData !== 'undefined') {
+    hitlistZips.forEach(hlZip => {
+      if (!zipMap.has(hlZip)) {
+        const zd = zipData.find(z => z.zip === hlZip);
+        if (zd) {
+          zipMap.set(hlZip, {
+            zip: zd.zip, city: zd.city, state: zd.state, total: zd.total,
+            hitlist: true, dist: -1, radii: ['Outside Radii'],
+          });
+        }
+      }
+    });
+  }
+
+  return Array.from(zipMap.values()).sort((a, b) => b.total - a.total);
+}
+
+let lastRadiusCapture = [];
+let hitlistFilterActive = false;
+
+function toggleHitlistFilter() {
+  hitlistFilterActive = !hitlistFilterActive;
+  const btn = document.getElementById('hitlist-filter-btn');
+  if (hitlistFilterActive) {
+    btn.classList.add('active');
+    btn.textContent = 'Show All ZIPs';
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = 'Show Hitlist Only';
+  }
+  renderRadiusPanel();
+}
+
+function getDisplayCapture() {
+  return hitlistFilterActive ? lastRadiusCapture.filter(z => z.hitlist) : lastRadiusCapture;
+}
+
+function renderRadiusPanel() {
+  const panel = document.getElementById('radius-results');
+  const list = document.getElementById('radius-zip-list');
+  const display = getDisplayCapture();
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  const hitlistCount = lastRadiusCapture.filter(z => z.hitlist).length;
+
+  if (!lastRadiusCapture.length) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+  const totalSearches = display.reduce((s, z) => s + z.total, 0);
+
+  document.getElementById('radius-zip-count').textContent = display.length + ' ZIPs';
+  document.getElementById('radius-total-searches').textContent = totalSearches.toLocaleString();
+  document.getElementById('radius-hitlist-count').textContent =
+    hitlistFilterActive
+      ? hitlistCount + ' of ' + hitlistCount
+      : hitlistCount + ' of ' + lastRadiusCapture.length;
+
+  // Show hitlist filter toggle when hitlist data exists
+  const filterRow = document.getElementById('hitlist-filter-row');
+  if (filterRow) filterRow.style.display = hasHitlist ? 'block' : 'none';
+
+  // Sort: hitlist ZIPs first when filter is off and hitlist exists
+  const sorted = hasHitlist && !hitlistFilterActive
+    ? [...display].sort((a, b) => (b.hitlist ? 1 : 0) - (a.hitlist ? 1 : 0) || b.total - a.total)
+    : display;
+
+  list.innerHTML =
+    `<div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
+      <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
+    </div>` +
+    sorted.map(z =>
+      `<div class="rz-row${z.hitlist ? ' rz-hitlist' : ''}">
+        <span class="rz-zip">${z.zip}</span>
+        <span class="rz-city">${z.city}, ${z.state}</span>
+        <span class="rz-vol">${z.total.toLocaleString()}</span>
+        <span class="rz-hl">${z.hitlist ? '★' : ''}</span>
+      </div>`
+    ).join('');
+}
+
+function updateAllRadiusResults() {
+  lastRadiusCapture = getAllRadiusZips();
+
+  // Update panel title for multi-radius
+  const titleEl = document.getElementById('radius-title');
+  if (titleEl) titleEl.textContent = placedRadii.length > 1 ? 'ZIPs in ' + placedRadii.length + ' Radii' : 'ZIPs in Radius';
+
+  renderRadiusPanel();
+}
+
+function copyRadiusTable() {
+  const data = getDisplayCapture();
+  if (!data.length) return;
+  const multi = placedRadii.length > 1;
+  const header = multi ? 'ZIP\tCity\tState\tSearches\tHitlist\tRadius' : 'ZIP\tCity\tState\tSearches\tHitlist';
+  const rows = data.map(z =>
+    multi
+      ? `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}\t${z.radii.join('; ')}`
+      : `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}`
+  );
+  const tsv = [header, ...rows].join('\n');
+  navigator.clipboard.writeText(tsv).then(() => {
+    setStatus('✓ Copied ' + data.length + ' ZIPs — paste into Sheets', 3000);
+  });
+}
+
+function downloadRadiusCsv() {
+  const data = getDisplayCapture();
+  if (!data.length) return;
+  const multi = placedRadii.length > 1;
+  const header = multi ? 'ZIP,City,State,Searches,Hitlist,Radius' : 'ZIP,City,State,Searches,Hitlist';
+  const rows = data.map(z =>
+    multi
+      ? `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''},"${z.radii.join('; ')}"`
+      : `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''}`
+  );
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'radius_zips_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('✓ Downloaded ' + data.length + ' ZIPs', 3000);
+}
+
+function makeBadgeIcon(searches, count) {
+  return L.divIcon({
+    html: `<div style="
+      background:rgba(55,11,85,0.88);color:#fff;
+      font-family:Inter,sans-serif;font-size:10px;font-weight:600;
+      padding:3px 8px;border-radius:10px;white-space:nowrap;
+      transform:translate(-50%, 14px);pointer-events:none;
+      box-shadow:0 2px 8px rgba(55,11,85,.35);letter-spacing:.2px;
+    ">${searches.toLocaleString()} searches · ${count} ${count === 1 ? 'city' : 'cities'}</div>`,
+    className: '',
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+}
+
+function makePinIcon() {
+  return L.divIcon({
+    html: `<div style="
+      width:12px;height:12px;background:#fff;
+      border:2.5px solid #8136B2;border-radius:50%;
+      cursor:grab;box-shadow:0 1px 5px rgba(55,11,85,.4);
+    "></div>`,
+    className: '',
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
+  });
+}
+
+function placeRadius(lat, lng, label) {
+  const ring = L.circle([lat, lng], {
+    radius: RADIUS_M,
+    color: '#8136B2',
+    weight: 2,
+    dashArray: '10 7',
+    fillColor: '#8136B2',
+    fillOpacity: 0.05,
+    interactive: false,
+  }).addTo(map);
+
+  const initial = searchesInRadius(lat, lng);
+
+  const badge = L.marker([lat, lng], {
+    icon: makeBadgeIcon(initial.searches, initial.count),
+    interactive: false,
+    zIndexOffset: -200,
+  }).addTo(map);
+
+  const pin = L.marker([lat, lng], {
+    draggable: true,
+    icon: makePinIcon(),
+    zIndexOffset: 500,
+  }).addTo(map);
+
+  const hintLine = `<div style="font-size:10px;color:#999;margin-top:2px;">30-mile radius · drag to reposition</div>`;
+  pin.bindTooltip(
+    `${label ? `<div class="tt-city">${label}</div>` : ''}${hintLine}`,
+    { className: 'cars-tooltip', sticky: false, offset: [12, 0] }
+  );
+
+  const radiusObj = { ring, badge, pin, lat, lng, label };
+  placedRadii.push(radiusObj);
+
+  // Show combined ZIP breakdown across all radii
+  updateAllRadiusResults();
+
+  pin.on('dragstart', function() {
+    map.getContainer().style.cursor = 'grabbing';
+    pin.closeTooltip();
+  });
+
+  pin.on('drag', function(e) {
+    const { lat: la, lng: ln } = e.latlng;
+    ring.setLatLng([la, ln]);
+    badge.setLatLng([la, ln]);
+    radiusObj.lat = la;
+    radiusObj.lng = ln;
+    const r = searchesInRadius(la, ln);
+    badge.setIcon(makeBadgeIcon(r.searches, r.count));
+  });
+
+  pin.on('dragend', function() {
+    map.getContainer().style.cursor = clickModeActive ? 'crosshair' : '';
+    const { lat: la, lng: ln } = pin.getLatLng();
+    radiusObj.lat = la;
+    radiusObj.lng = ln;
+    const r = searchesInRadius(la, ln);
+    setStatus(`✓ ${r.searches.toLocaleString()} searches · ${r.count} cities in radius`, 4000);
+    // Update combined ZIP breakdown after drag
+    updateAllRadiusResults();
+  });
+}
+
+function geocodeAndPlace() {
+  const addr = document.getElementById('radius-address').value.trim();
+  if (!addr) return;
+  setStatus('Searching…');
+
+  fetch(
+    'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(addr),
+    { headers: { 'Accept-Language': 'en' } }
+  )
+    .then(r => r.json())
+    .then(data => {
+      if (!data.length) { setStatus('Address not found.'); return; }
+      const lat = parseFloat(data[0].lat);
+      const lng = parseFloat(data[0].lon);
+      const label = data[0].display_name.split(',')[0];
+      placeRadius(lat, lng, label);
+      map.panTo([lat, lng]);
+      const result = searchesInRadius(lat, lng);
+      setStatus('✓ ' + result.searches.toLocaleString() + ' searches captured', 4000);
+    })
+    .catch(() => setStatus('Geocoding failed — check connection.'));
+}
+
+function toggleClickMode() {
+  clickModeActive = !clickModeActive;
+  const btn = document.getElementById('click-toggle');
+  if (clickModeActive) {
+    btn.classList.add('active');
+    map.getContainer().style.cursor = 'crosshair';
+    setStatus('Click anywhere on the map.');
+  } else {
+    btn.classList.remove('active');
+    map.getContainer().style.cursor = '';
+    setStatus('');
+  }
+}
+
+function clearRadii() {
+  placedRadii.forEach(r => { map.removeLayer(r.ring); map.removeLayer(r.badge); map.removeLayer(r.pin); });
+  placedRadii = [];
+  setStatus('');
+  document.getElementById('radius-results').style.display = 'none';
+}
+
+function setStatus(msg, clearAfterMs) {
+  const el = document.getElementById('radius-status');
+  el.textContent = msg;
+  if (clearAfterMs) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, clearAfterMs);
+}
+
+map.on('click', function(e) {
+  if (!clickModeActive) return;
+  placeRadius(e.latlng.lat, e.latlng.lng, null);
+  const result = searchesInRadius(e.latlng.lat, e.latlng.lng);
+  setStatus(result.searches.toLocaleString() + ' searches · drag to reposition');
+});
+
+document.getElementById('radius-address').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') geocodeAndPlace();
+});
+</script>
+</body>
+</html>
