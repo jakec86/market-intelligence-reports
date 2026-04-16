@@ -1,0 +1,2478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Austin Search Volume — Cars.com</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  :root {
+    --jagger:#370B55; --violet:#8136B2; --vixen:#AB74CF;
+    --lavender:#D9BAEE; --gray:#4D4D4D; --white:#FFFFFF;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Inter',sans-serif;background:#f0ecf5;color:var(--gray);height:100vh;overflow:hidden;}
+
+  #topbar{
+    position:absolute;top:0;left:0;right:0;z-index:1100;height:62px;
+    background:var(--jagger);display:flex;align-items:center;
+    justify-content:space-between;padding:0 20px;
+    box-shadow:0 2px 12px rgba(55,11,85,.45);
+  }
+  #logo{display:flex;align-items:center;gap:10px;}
+  #logo svg{height:28px;}
+  #logo-divider{width:1px;height:28px;background:rgba(255,255,255,.25);}
+  #logo-subtitle{color:var(--lavender);font-size:12px;font-weight:500;letter-spacing:.8px;text-transform:uppercase;}
+  #data-date{color:rgba(217,186,238,.65);font-size:10px;font-weight:400;letter-spacing:.5px;margin-left:4px;}
+  #total-badge{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px 16px;text-align:right;}
+  #total-badge .num{font-size:18px;font-weight:700;color:var(--white);letter-spacing:-.5px;}
+  #total-badge .lbl{font-size:10px;color:var(--lavender);text-transform:uppercase;letter-spacing:1px;}
+
+  #map{width:100%;height:100vh;padding-top:62px;}
+  .leaflet-container{background:#ede8f2!important;}
+
+  .panel{background:var(--white);border:1px solid #ddd;border-radius:10px;padding:14px 16px;
+    box-shadow:0 2px 10px rgba(55,11,85,.12);font-family:'Inter',sans-serif;}
+  .panel h3{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
+    color:var(--violet);margin-bottom:10px;border-bottom:2px solid var(--lavender);padding-bottom:6px;}
+
+  #legend{position:absolute;bottom:24px;left:16px;z-index:1000;}
+  .legend-item{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:11px;color:var(--gray);}
+  .legend-circle{border-radius:50%;background:rgba(129,54,178,.18);border:2px solid rgba(129,54,178,.65);flex-shrink:0;}
+
+  #stats{position:absolute;bottom:24px;right:16px;z-index:1000;min-width:200px;}
+  .stat-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:11px;}
+  .stat-city{color:var(--gray);}
+  .stat-num{color:var(--violet);font-weight:600;}
+  .stat-bar-wrap{width:100%;height:4px;background:#f0ecf5;border-radius:2px;margin-bottom:8px;}
+  .stat-bar{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--jagger),var(--vixen));}
+
+  .cars-tooltip{background:var(--white)!important;border:1.5px solid var(--vixen)!important;
+    border-radius:10px!important;color:var(--gray)!important;font-family:'Inter',sans-serif!important;
+    font-size:12px!important;padding:10px 14px!important;box-shadow:0 6px 18px rgba(55,11,85,.18)!important;}
+  .tt-city{font-size:14px;font-weight:700;color:var(--jagger);margin-bottom:3px;}
+  .tt-count{font-size:13px;font-weight:600;color:var(--violet);}
+  .tt-zips{font-size:10px;color:#888;margin-top:4px;max-width:240px;line-height:1.6;}
+
+  .tier-legend{min-width:170px;}
+  .tier-item{display:flex;align-items:center;gap:9px;margin-bottom:6px;font-size:11px;color:var(--gray);}
+  .tier-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;}
+
+  /* ── Radius Panel ── */
+  #radius-panel{position:absolute;top:74px;left:16px;z-index:1000;width:228px;}
+  #radius-panel h3{margin-bottom:8px;}
+  #radius-input-row{display:flex;gap:6px;margin-bottom:7px;}
+  #radius-address{
+    flex:1;padding:6px 8px;border:1px solid #ddd;border-radius:6px;
+    font-size:11px;font-family:'Inter',sans-serif;color:var(--gray);outline:none;
+  }
+  #radius-address:focus{border-color:var(--vixen);}
+  #radius-go{
+    padding:6px 10px;background:var(--violet);color:#fff;border:none;
+    border-radius:6px;font-size:11px;font-family:'Inter',sans-serif;cursor:pointer;
+    white-space:nowrap;
+  }
+  #radius-go:hover{background:var(--jagger);}
+  #radius-btn-row{display:flex;gap:6px;}
+  .radius-btn{
+    flex:1;padding:5px 0;background:#f0ecf5;color:var(--violet);
+    border:1px solid var(--lavender);border-radius:6px;font-size:10px;
+    font-family:'Inter',sans-serif;cursor:pointer;text-align:center;
+  }
+  .radius-btn:hover{background:var(--lavender);}
+  .radius-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+  #radius-clear{color:var(--gray);border-color:#ddd;}
+  #radius-clear:hover{background:#f5f0f8;}
+  #radius-status{font-size:10px;color:#999;margin-top:6px;min-height:13px;line-height:1.3;}
+
+  /* ── View Toggle ── */
+  #view-toggle{position:absolute;top:74px;right:16px;z-index:1000;}
+  .toggle-row{display:flex;gap:4px;margin-bottom:6px;}
+  .view-btn{
+    flex:1;padding:5px 10px;background:#f0ecf5;color:var(--violet);
+    border:1px solid var(--lavender);border-radius:6px;font-size:10px;
+    font-family:'Inter',sans-serif;cursor:pointer;text-align:center;
+  }
+  .view-btn:hover{background:var(--lavender);}
+  .view-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+
+  /* ── Hitlist marker ── */
+  .hitlist-pin{
+    background:#E8A817;border:2px solid #B8860B;border-radius:50%;
+    box-shadow:0 1px 5px rgba(184,134,11,.5);
+  }
+  .dealer-star{font-size:20px;text-shadow:0 1px 5px rgba(55,11,85,.5);pointer-events:none;}
+
+  /* ── Radius ZIP results ── */
+  .rz-row{display:flex;align-items:center;padding:3px 0;border-bottom:1px solid #f8f5fb;}
+  .rz-row:last-child{border-bottom:none;}
+  .rz-row.rz-hitlist{background:#f0f8e8;border-radius:3px;padding:3px 4px;margin:1px 0;}
+  .rz-zip{width:48px;font-weight:600;color:#370B55;}
+  .rz-city{flex:1;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-vol{width:50px;text-align:right;font-weight:600;color:#8136B2;}
+  .rz-hl{width:14px;text-align:center;margin-left:4px;}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div id="logo">
+    <svg viewBox="0 0 120 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <text x="0" y="23" font-family="Inter,sans-serif" font-weight="800" font-size="22" fill="#FFFFFF" letter-spacing="-0.5">Cars</text>
+      <text x="51" y="23" font-family="Inter,sans-serif" font-weight="800" font-size="22" fill="#AB74CF" letter-spacing="-0.5">.com</text>
+    </svg>
+    <div id="logo-divider"></div>
+    <span id="logo-subtitle">Austin Market Intelligence</span><span id="data-date">· Data as of Q1 2024 – Q2 2026</span>
+  </div>
+  <div id="total-badge">
+    <div class="num" id="total-num">—</div>
+    <div class="lbl">Total Searches</div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<!-- Radius Tool Panel -->
+<div id="radius-panel" class="panel">
+  <h3>30-Mile Radius</h3>
+  <div id="radius-input-row">
+    <input id="radius-address" type="text" placeholder="Address, city, or ZIP…" autocomplete="off">
+    <button id="radius-go" onclick="geocodeAndPlace()">Place</button>
+  </div>
+  <div id="radius-btn-row">
+    <button id="click-toggle" class="radius-btn" onclick="toggleClickMode()">Click to Place</button>
+    <button id="radius-clear" class="radius-btn" onclick="clearRadii()">Clear All</button>
+  </div>
+  <div id="radius-status"></div>
+  <div id="radius-results" style="display:none;margin-top:8px;border-top:1px solid #f0ecf5;padding-top:8px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span id="radius-title" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#8136B2;">ZIPs in Radius</span>
+      <span id="radius-zip-count" style="font-size:10px;color:#999;"></span>
+    </div>
+    <div id="hitlist-filter-row" style="display:none;margin-bottom:6px;">
+      <button id="hitlist-filter-btn" onclick="toggleHitlistFilter()" class="radius-btn" style="width:100%;font-size:9px;padding:4px 0;">Show Hitlist Only</button>
+    </div>
+    <div style="display:flex;gap:4px;margin-bottom:6px;">
+      <button onclick="copyRadiusTable()" class="radius-btn" style="flex:1;font-size:9px;padding:4px 0;">Copy to Clipboard</button>
+      <button onclick="downloadRadiusCsv()" class="radius-btn" style="flex:1;font-size:9px;padding:4px 0;">Download CSV</button>
+    </div>
+    <div id="radius-zip-list" style="max-height:280px;overflow-y:auto;font-size:10px;">
+      <div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
+        <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
+      </div>
+    </div>
+    <div id="radius-totals" style="display:flex;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid #f0ecf5;">
+      <div style="flex:1;font-size:10px;"><span style="color:#999;">Total:</span> <strong id="radius-total-searches" style="color:#370B55;">0</strong></div>
+      <div style="flex:1;font-size:10px;"><span style="color:#999;">Hitlist:</span> <strong id="radius-hitlist-count" style="color:#38761D;">0</strong></div>
+    </div>
+  </div>
+  <div id="radius-note" style="font-size:9.5px;color:#aaa;margin-top:8px;line-height:1.5;border-top:1px solid #f0ecf5;padding-top:8px;">
+    ZIP-level breakdown available when ZIP data is loaded. City view uses city-center approximation.
+  </div>
+</div>
+
+<div id="view-toggle" class="panel">
+  <h3>Map View</h3>
+  <div class="toggle-row">
+    <button id="btn-city" class="view-btn active" onclick="setView('city')">Cities</button>
+    <button id="btn-zip" class="view-btn" onclick="setView('zip')">ZIP Codes</button>
+  </div>
+</div>
+
+<div id="legend" class="panel">
+  <h3>Search Volume</h3>
+  <div class="legend-item"><div class="legend-circle" style="width:44px;height:44px;"></div><span>50,000+</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:30px;height:30px;"></div><span>10,000 – 50,000</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:18px;height:18px;"></div><span>1,000 – 10,000</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:10px;height:10px;"></div><span>&lt; 1,000</span></div>
+  <div class="legend-item" id="hitlist-legend" style="display:none;margin-top:8px;padding-top:6px;border-top:1px solid #f0ecf5;">
+    <div class="hitlist-pin" style="width:14px;height:14px;"></div><span>Hitlist ZIP</span>
+  </div>
+  <div class="legend-item" id="dealer-legend" style="display:none;">
+    <span class="dealer-star" style="font-size:14px;">★</span><span>Dealer Location</span>
+  </div>
+</div>
+
+<div id="stats" class="panel">
+  <h3>Top 8 Cities</h3>
+  <div id="stats-body"></div>
+</div>
+
+<script>
+const cities = [
+  {
+    "name": "Austin",
+    "total": 132713,
+    "lat": 30.3264,
+    "lng": -97.7653,
+    "zips": "73301, 73344, 78701, 78702, 78703, 78704, 78705, 78708, 78709, 78710, 78711, 78712, 78713, 78714, 78715, 78716, 78717, 78718, 78719, 78720, 78721, 78722, 78723, 78724, 78725, 78726, 78727, 78728, 78729, 78730, 78731, 78732, 78733, 78734, 78735, 78736, 78737, 78738, 78739, 78741, 78742, 78744, 78745, 78746, 78747, 78748, 78749, 78750, 78751, 78752, 78753, 78754, 78755, 78756, 78757, 78758, 78759, 78760, 78761, 78762, 78763, 78764, 78765, 78766, 78767, 78768, 78769, 78772, 78773, 78774, 78778, 78779, 78783, 78799"
+  },
+  {
+    "name": "Round Rock",
+    "total": 20968,
+    "lat": 30.58565,
+    "lng": -97.6353,
+    "zips": "78664, 78665, 78680, 78681, 78682, 78683"
+  },
+  {
+    "name": "Georgetown",
+    "total": 14259,
+    "lat": 30.63705,
+    "lng": -97.71415,
+    "zips": "78626, 78627, 78628, 78633"
+  },
+  {
+    "name": "Leander",
+    "total": 13379,
+    "lat": 30.5788,
+    "lng": -97.8575,
+    "zips": "78641, 78645, 78646"
+  },
+  {
+    "name": "Pflugerville",
+    "total": 11484,
+    "lat": 30.44075,
+    "lng": -97.62495,
+    "zips": "78660, 78691"
+  },
+  {
+    "name": "Cedar Park",
+    "total": 10013,
+    "lat": 30.5052,
+    "lng": -97.8203,
+    "zips": "78613, 78630"
+  },
+  {
+    "name": "Kyle",
+    "total": 6392,
+    "lat": 29.9966,
+    "lng": -97.8335,
+    "zips": "78640"
+  },
+  {
+    "name": "Buda",
+    "total": 5156,
+    "lat": 30.0918,
+    "lng": -97.8534,
+    "zips": "78610"
+  },
+  {
+    "name": "Hutto",
+    "total": 4761,
+    "lat": 30.5257,
+    "lng": -97.5672,
+    "zips": "78634"
+  },
+  {
+    "name": "Liberty Hill",
+    "total": 3421,
+    "lat": 30.663,
+    "lng": -97.9316,
+    "zips": "78642"
+  },
+  {
+    "name": "Bastrop",
+    "total": 2735,
+    "lat": 30.1388,
+    "lng": -97.2921,
+    "zips": "78602"
+  },
+  {
+    "name": "Manor",
+    "total": 2528,
+    "lat": 30.3388,
+    "lng": -97.5323,
+    "zips": "78653"
+  },
+  {
+    "name": "Dripping Springs",
+    "total": 2512,
+    "lat": 30.2268,
+    "lng": -98.1029,
+    "zips": "78620"
+  },
+  {
+    "name": "Lockhart",
+    "total": 2316,
+    "lat": 29.8868,
+    "lng": -97.6769,
+    "zips": "78644"
+  },
+  {
+    "name": "Elgin",
+    "total": 1565,
+    "lat": 30.3231,
+    "lng": -97.3737,
+    "zips": "78621"
+  },
+  {
+    "name": "San Marcos",
+    "total": 1545,
+    "lat": 29.9649,
+    "lng": -97.972,
+    "zips": "78666, 78667"
+  },
+  {
+    "name": "Marble Falls",
+    "total": 1432,
+    "lat": 30.5784,
+    "lng": -98.2751,
+    "zips": "78654"
+  },
+  {
+    "name": "Cedar Creek",
+    "total": 1321,
+    "lat": 30.0966,
+    "lng": -97.4976,
+    "zips": "78612"
+  },
+  {
+    "name": "Spicewood",
+    "total": 1151,
+    "lat": 30.3899,
+    "lng": -98.0539,
+    "zips": "78669"
+  },
+  {
+    "name": "Taylor",
+    "total": 1100,
+    "lat": 30.5708,
+    "lng": -97.4094,
+    "zips": "76574"
+  },
+  {
+    "name": "Del Valle",
+    "total": 1050,
+    "lat": 30.1745,
+    "lng": -97.6134,
+    "zips": "78617"
+  },
+  {
+    "name": "Burnet",
+    "total": 724,
+    "lat": 30.7766,
+    "lng": -98.2642,
+    "zips": "78611"
+  },
+  {
+    "name": "La Grange",
+    "total": 579,
+    "lat": 29.904,
+    "lng": -96.886,
+    "zips": "78945"
+  },
+  {
+    "name": "Bertram",
+    "total": 440,
+    "lat": 30.7411,
+    "lng": -98.0529,
+    "zips": "78605"
+  },
+  {
+    "name": "Driftwood",
+    "total": 426,
+    "lat": 30.1072,
+    "lng": -98.0327,
+    "zips": "78619"
+  },
+  {
+    "name": "Dale",
+    "total": 310,
+    "lat": 29.9528,
+    "lng": -97.581,
+    "zips": "78616"
+  },
+  {
+    "name": "Johnson City",
+    "total": 301,
+    "lat": 30.2948,
+    "lng": -98.3691,
+    "zips": "78636"
+  },
+  {
+    "name": "Giddings",
+    "total": 289,
+    "lat": 30.1777,
+    "lng": -96.9332,
+    "zips": "78942"
+  },
+  {
+    "name": "Horseshoe Bay",
+    "total": 253,
+    "lat": 30.5443,
+    "lng": -98.3739,
+    "zips": "78657"
+  },
+  {
+    "name": "Lexington",
+    "total": 244,
+    "lat": 30.4191,
+    "lng": -97.0524,
+    "zips": "78947"
+  },
+  {
+    "name": "Manchaca",
+    "total": 238,
+    "lat": 30.1238,
+    "lng": -97.8393,
+    "zips": "78652"
+  },
+  {
+    "name": "Llano",
+    "total": 234,
+    "lat": 30.7151,
+    "lng": -98.6109,
+    "zips": "78643"
+  },
+  {
+    "name": "Maxwell",
+    "total": 232,
+    "lat": 29.8953,
+    "lng": -97.8144,
+    "zips": "78656"
+  },
+  {
+    "name": "Smithville",
+    "total": 204,
+    "lat": 30.0178,
+    "lng": -97.1494,
+    "zips": "78957"
+  },
+  {
+    "name": "Kingsland",
+    "total": 148,
+    "lat": 30.6662,
+    "lng": -98.4475,
+    "zips": "78639"
+  },
+  {
+    "name": "Mason",
+    "total": 117,
+    "lat": 30.7434,
+    "lng": -99.2261,
+    "zips": "76856"
+  },
+  {
+    "name": "Round Mountain",
+    "total": 85,
+    "lat": 30.4429,
+    "lng": -98.4365,
+    "zips": "78663"
+  },
+  {
+    "name": "Mc Dade",
+    "total": 74,
+    "lat": 30.2968,
+    "lng": -97.2386,
+    "zips": "78650"
+  },
+  {
+    "name": "Stonewall",
+    "total": 67,
+    "lat": 30.2088,
+    "lng": -98.6131,
+    "zips": "78671"
+  },
+  {
+    "name": "West Point",
+    "total": 62,
+    "lat": 29.9523,
+    "lng": -97.0361,
+    "zips": "78963"
+  },
+  {
+    "name": "Weir",
+    "total": 60,
+    "lat": 30.6747,
+    "lng": -97.5929,
+    "zips": "78674"
+  },
+  {
+    "name": "Buchanan Dam",
+    "total": 55,
+    "lat": 30.7538,
+    "lng": -98.4295,
+    "zips": "78609"
+  },
+  {
+    "name": "Paige",
+    "total": 53,
+    "lat": 30.1858,
+    "lng": -97.1198,
+    "zips": "78659"
+  },
+  {
+    "name": "Red Rock",
+    "total": 50,
+    "lat": 29.9906,
+    "lng": -97.4081,
+    "zips": "78662"
+  },
+  {
+    "name": "Rosanky",
+    "total": 39,
+    "lat": 29.9241,
+    "lng": -97.3119,
+    "zips": "78953"
+  },
+  {
+    "name": "Dime Box",
+    "total": 35,
+    "lat": 30.3579,
+    "lng": -96.8248,
+    "zips": "77853"
+  },
+  {
+    "name": "Lincoln",
+    "total": 28,
+    "lat": 30.3177,
+    "lng": -96.9702,
+    "zips": "78948"
+  },
+  {
+    "name": "Mc Neil",
+    "total": 25,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "zips": "78651"
+  },
+  {
+    "name": "Coupland",
+    "total": 18,
+    "lat": 30.4872,
+    "lng": -97.3676,
+    "zips": "78615"
+  },
+  {
+    "name": "Briggs",
+    "total": 16,
+    "lat": 30.9325,
+    "lng": -97.9702,
+    "zips": "78608"
+  },
+  {
+    "name": "Tow",
+    "total": 15,
+    "lat": 30.8609,
+    "lng": -98.4596,
+    "zips": "78672"
+  },
+  {
+    "name": "Hye",
+    "total": 15,
+    "lat": 30.2269,
+    "lng": -98.5396,
+    "zips": "78635"
+  },
+  {
+    "name": "Fentress",
+    "total": 14,
+    "lat": 29.7561,
+    "lng": -97.7764,
+    "zips": "78622"
+  },
+  {
+    "name": "Ellinger",
+    "total": 11,
+    "lat": 29.8459,
+    "lng": -96.6966,
+    "zips": "78938"
+  },
+  {
+    "name": "Doss",
+    "total": 10,
+    "lat": 30.4613,
+    "lng": -99.1707,
+    "zips": "78618"
+  },
+  {
+    "name": "Valley Spring",
+    "total": 7,
+    "lat": 30.866,
+    "lng": -98.8357,
+    "zips": "76885"
+  },
+  {
+    "name": "Walburg",
+    "total": 5,
+    "lat": 30.7415,
+    "lng": -97.5891,
+    "zips": "78673"
+  },
+  {
+    "name": "Prairie Lea",
+    "total": 5,
+    "lat": 29.7239,
+    "lng": -97.7449,
+    "zips": "78661"
+  },
+  {
+    "name": "Muldoon",
+    "total": 4,
+    "lat": 29.7993,
+    "lng": -97.1006,
+    "zips": "78949"
+  },
+  {
+    "name": "Art",
+    "total": 3,
+    "lat": 30.767,
+    "lng": -99.0486,
+    "zips": "76820"
+  },
+  {
+    "name": "Bluffton",
+    "total": 2,
+    "lat": 30.8256,
+    "lng": -98.515,
+    "zips": "78607"
+  },
+  {
+    "name": "Fredonia",
+    "total": 2,
+    "lat": 30.9214,
+    "lng": -99.1216,
+    "zips": "76842"
+  },
+  {
+    "name": "Warda",
+    "total": 1,
+    "lat": 30.0702,
+    "lng": -96.902,
+    "zips": "78960"
+  },
+  {
+    "name": "Pontotoc",
+    "total": 0,
+    "lat": 30.8906,
+    "lng": -99.0212,
+    "zips": "76869"
+  },
+  {
+    "name": "Florence",
+    "total": 0,
+    "lat": 30.8076,
+    "lng": -97.7812,
+    "zips": "76527"
+  },
+  {
+    "name": "Willow City",
+    "total": 0,
+    "lat": 30.4549,
+    "lng": -98.6646,
+    "zips": "78675"
+  },
+  {
+    "name": "Bartlett",
+    "total": 0,
+    "lat": 30.7991,
+    "lng": -97.4263,
+    "zips": "76511"
+  },
+  {
+    "name": "Blanco",
+    "total": 0,
+    "lat": 30.0874,
+    "lng": -98.4107,
+    "zips": "78606"
+  },
+  {
+    "name": "Carmine",
+    "total": 0,
+    "lat": 30.1404,
+    "lng": -96.6861,
+    "zips": "78932"
+  },
+  {
+    "name": "Fayetteville",
+    "total": 0,
+    "lat": 29.8868,
+    "lng": -96.6463,
+    "zips": "78940"
+  },
+  {
+    "name": "Thrall",
+    "total": 0,
+    "lat": 30.592,
+    "lng": -97.2893,
+    "zips": "76578"
+  },
+  {
+    "name": "Flatonia",
+    "total": 0,
+    "lat": 29.7095,
+    "lng": -97.0987,
+    "zips": "78941"
+  },
+  {
+    "name": "Fredericksburg",
+    "total": 0,
+    "lat": 30.2817,
+    "lng": -98.8799,
+    "zips": "78624"
+  },
+  {
+    "name": "Martindale",
+    "total": 0,
+    "lat": 29.8394,
+    "lng": -97.8508,
+    "zips": "78655"
+  },
+  {
+    "name": "Schwertner",
+    "total": 0,
+    "lat": 30.8155,
+    "lng": -97.5142,
+    "zips": "76573"
+  },
+  {
+    "name": "Schulenburg",
+    "total": 0,
+    "lat": 29.6882,
+    "lng": -96.9106,
+    "zips": "78956"
+  },
+  {
+    "name": "Granger",
+    "total": 0,
+    "lat": 30.7398,
+    "lng": -97.4451,
+    "zips": "76530"
+  },
+  {
+    "name": "Round Top",
+    "total": 0,
+    "lat": 30.05315,
+    "lng": -96.7151,
+    "zips": "78954, 78961"
+  },
+  {
+    "name": "Harper",
+    "total": 0,
+    "lat": 30.2816,
+    "lng": -99.241,
+    "zips": "78631"
+  },
+  {
+    "name": "Jarrell",
+    "total": 0,
+    "lat": 30.8119,
+    "lng": -97.5942,
+    "zips": "76537"
+  },
+  {
+    "name": "Ledbetter",
+    "total": 0,
+    "lat": 30.2383,
+    "lng": -96.7613,
+    "zips": "78946"
+  },
+  {
+    "name": "Luling",
+    "total": 0,
+    "lat": 29.6826,
+    "lng": -97.6499,
+    "zips": "78648"
+  },
+  {
+    "name": "Wimberley",
+    "total": 0,
+    "lat": 30.0265,
+    "lng": -98.1123,
+    "zips": "78676"
+  }
+];
+const mapConfig = {center: [30.3944, -97.7529], zoom: 8};
+const zipData = [
+  {
+    "zip": "78763",
+    "total": 21984,
+    "lat": 30.3354,
+    "lng": -97.5598,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78660",
+    "total": 9123,
+    "lat": 30.4421,
+    "lng": -97.6299,
+    "city": "Pflugerville",
+    "state": "TX"
+  },
+  {
+    "zip": "78641",
+    "total": 8853,
+    "lat": 30.5835,
+    "lng": -97.8575,
+    "city": "Leander",
+    "state": "TX"
+  },
+  {
+    "zip": "78613",
+    "total": 7863,
+    "lat": 30.5052,
+    "lng": -97.8203,
+    "city": "Cedar Park",
+    "state": "TX"
+  },
+  {
+    "zip": "78745",
+    "total": 6541,
+    "lat": 30.2063,
+    "lng": -97.7956,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78640",
+    "total": 6392,
+    "lat": 29.9966,
+    "lng": -97.8335,
+    "city": "Kyle",
+    "state": "TX"
+  },
+  {
+    "zip": "78628",
+    "total": 6045,
+    "lat": 30.6411,
+    "lng": -97.7511,
+    "city": "Georgetown",
+    "state": "TX"
+  },
+  {
+    "zip": "78665",
+    "total": 5945,
+    "lat": 30.5145,
+    "lng": -97.668,
+    "city": "Round Rock",
+    "state": "TX"
+  },
+  {
+    "zip": "78681",
+    "total": 5266,
+    "lat": 30.5083,
+    "lng": -97.6789,
+    "city": "Round Rock",
+    "state": "TX"
+  },
+  {
+    "zip": "78610",
+    "total": 5156,
+    "lat": 30.0918,
+    "lng": -97.8534,
+    "city": "Buda",
+    "state": "TX"
+  },
+  {
+    "zip": "78704",
+    "total": 5119,
+    "lat": 30.2428,
+    "lng": -97.7658,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78748",
+    "total": 5031,
+    "lat": 30.1743,
+    "lng": -97.8225,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78634",
+    "total": 4761,
+    "lat": 30.5257,
+    "lng": -97.5672,
+    "city": "Hutto",
+    "state": "TX"
+  },
+  {
+    "zip": "78717",
+    "total": 4280,
+    "lat": 30.506,
+    "lng": -97.7472,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78753",
+    "total": 4260,
+    "lat": 30.3649,
+    "lng": -97.6827,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78664",
+    "total": 4029,
+    "lat": 30.5145,
+    "lng": -97.668,
+    "city": "Round Rock",
+    "state": "TX"
+  },
+  {
+    "zip": "78682",
+    "total": 4025,
+    "lat": 30.6568,
+    "lng": -97.6026,
+    "city": "Round Rock",
+    "state": "TX"
+  },
+  {
+    "zip": "78626",
+    "total": 4002,
+    "lat": 30.633,
+    "lng": -97.6707,
+    "city": "Georgetown",
+    "state": "TX"
+  },
+  {
+    "zip": "78758",
+    "total": 3985,
+    "lat": 30.3764,
+    "lng": -97.7078,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78744",
+    "total": 3800,
+    "lat": 30.1876,
+    "lng": -97.7472,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78723",
+    "total": 3796,
+    "lat": 30.3085,
+    "lng": -97.6849,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78738",
+    "total": 3565,
+    "lat": 30.3337,
+    "lng": -97.9824,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78727",
+    "total": 3449,
+    "lat": 30.4254,
+    "lng": -97.7195,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78642",
+    "total": 3421,
+    "lat": 30.663,
+    "lng": -97.9316,
+    "city": "Liberty Hill",
+    "state": "TX"
+  },
+  {
+    "zip": "78741",
+    "total": 3347,
+    "lat": 30.2315,
+    "lng": -97.7223,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78701",
+    "total": 3309,
+    "lat": 30.2713,
+    "lng": -97.7426,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78759",
+    "total": 3175,
+    "lat": 30.4036,
+    "lng": -97.7526,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78734",
+    "total": 3126,
+    "lat": 30.3705,
+    "lng": -97.9427,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78749",
+    "total": 3074,
+    "lat": 30.2166,
+    "lng": -97.8508,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78757",
+    "total": 2973,
+    "lat": 30.3437,
+    "lng": -97.7316,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78750",
+    "total": 2950,
+    "lat": 30.4224,
+    "lng": -97.7967,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78602",
+    "total": 2735,
+    "lat": 30.1388,
+    "lng": -97.2921,
+    "city": "Bastrop",
+    "state": "TX"
+  },
+  {
+    "zip": "78646",
+    "total": 2699,
+    "lat": 30.5788,
+    "lng": -97.8531,
+    "city": "Leander",
+    "state": "TX"
+  },
+  {
+    "zip": "78737",
+    "total": 2595,
+    "lat": 30.2107,
+    "lng": -97.9427,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78714",
+    "total": 2546,
+    "lat": 30.2672,
+    "lng": -97.7431,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78653",
+    "total": 2528,
+    "lat": 30.3388,
+    "lng": -97.5323,
+    "city": "Manor",
+    "state": "TX"
+  },
+  {
+    "zip": "78620",
+    "total": 2512,
+    "lat": 30.2268,
+    "lng": -98.1029,
+    "city": "Dripping Springs",
+    "state": "TX"
+  },
+  {
+    "zip": "78691",
+    "total": 2361,
+    "lat": 30.4394,
+    "lng": -97.62,
+    "city": "Pflugerville",
+    "state": "TX"
+  },
+  {
+    "zip": "78644",
+    "total": 2316,
+    "lat": 29.8868,
+    "lng": -97.6769,
+    "city": "Lockhart",
+    "state": "TX"
+  },
+  {
+    "zip": "78729",
+    "total": 2260,
+    "lat": 30.4521,
+    "lng": -97.7688,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78633",
+    "total": 2191,
+    "lat": 30.7177,
+    "lng": -97.7543,
+    "city": "Georgetown",
+    "state": "TX"
+  },
+  {
+    "zip": "78746",
+    "total": 2169,
+    "lat": 30.2971,
+    "lng": -97.8181,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78630",
+    "total": 2150,
+    "lat": 30.5052,
+    "lng": -97.8203,
+    "city": "Cedar Park",
+    "state": "TX"
+  },
+  {
+    "zip": "78728",
+    "total": 2148,
+    "lat": 30.4417,
+    "lng": -97.6811,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78747",
+    "total": 2085,
+    "lat": 30.1204,
+    "lng": -97.7433,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "73301",
+    "total": 2084,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78702",
+    "total": 2059,
+    "lat": 30.2638,
+    "lng": -97.7166,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78627",
+    "total": 2021,
+    "lat": 30.6327,
+    "lng": -97.6772,
+    "city": "Georgetown",
+    "state": "TX"
+  },
+  {
+    "zip": "78703",
+    "total": 2014,
+    "lat": 30.2907,
+    "lng": -97.7648,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78726",
+    "total": 1968,
+    "lat": 30.43,
+    "lng": -97.8326,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78724",
+    "total": 1881,
+    "lat": 30.296,
+    "lng": -97.6396,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78645",
+    "total": 1827,
+    "lat": 30.449,
+    "lng": -97.9669,
+    "city": "Leander",
+    "state": "TX"
+  },
+  {
+    "zip": "78731",
+    "total": 1573,
+    "lat": 30.3471,
+    "lng": -97.7609,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78621",
+    "total": 1565,
+    "lat": 30.3231,
+    "lng": -97.3737,
+    "city": "Elgin",
+    "state": "TX"
+  },
+  {
+    "zip": "78667",
+    "total": 1545,
+    "lat": 30.0544,
+    "lng": -98.0036,
+    "city": "San Marcos",
+    "state": "TX"
+  },
+  {
+    "zip": "78754",
+    "total": 1496,
+    "lat": 30.3423,
+    "lng": -97.6673,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78735",
+    "total": 1472,
+    "lat": 30.249,
+    "lng": -97.8414,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78732",
+    "total": 1467,
+    "lat": 30.3752,
+    "lng": -97.9007,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78654",
+    "total": 1432,
+    "lat": 30.5784,
+    "lng": -98.2751,
+    "city": "Marble Falls",
+    "state": "TX"
+  },
+  {
+    "zip": "78739",
+    "total": 1344,
+    "lat": 30.172,
+    "lng": -97.8784,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78612",
+    "total": 1321,
+    "lat": 30.0966,
+    "lng": -97.4976,
+    "city": "Cedar Creek",
+    "state": "TX"
+  },
+  {
+    "zip": "78683",
+    "total": 1256,
+    "lat": 30.6568,
+    "lng": -97.6026,
+    "city": "Round Rock",
+    "state": "TX"
+  },
+  {
+    "zip": "78736",
+    "total": 1235,
+    "lat": 30.2444,
+    "lng": -97.916,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78708",
+    "total": 1181,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78669",
+    "total": 1151,
+    "lat": 30.3899,
+    "lng": -98.0539,
+    "city": "Spicewood",
+    "state": "TX"
+  },
+  {
+    "zip": "76574",
+    "total": 1100,
+    "lat": 30.5708,
+    "lng": -97.4094,
+    "city": "Taylor",
+    "state": "TX"
+  },
+  {
+    "zip": "78751",
+    "total": 1087,
+    "lat": 30.3093,
+    "lng": -97.7242,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78617",
+    "total": 1050,
+    "lat": 30.1745,
+    "lng": -97.6134,
+    "city": "Del Valle",
+    "state": "TX"
+  },
+  {
+    "zip": "78705",
+    "total": 977,
+    "lat": 30.2896,
+    "lng": -97.7396,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78752",
+    "total": 962,
+    "lat": 30.3316,
+    "lng": -97.7004,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78720",
+    "total": 953,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78756",
+    "total": 831,
+    "lat": 30.3223,
+    "lng": -97.739,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78733",
+    "total": 758,
+    "lat": 30.3314,
+    "lng": -97.8666,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78765",
+    "total": 755,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78611",
+    "total": 724,
+    "lat": 30.7766,
+    "lng": -98.2642,
+    "city": "Burnet",
+    "state": "TX"
+  },
+  {
+    "zip": "78721",
+    "total": 697,
+    "lat": 30.2721,
+    "lng": -97.6868,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78725",
+    "total": 597,
+    "lat": 30.2562,
+    "lng": -97.6243,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78945",
+    "total": 579,
+    "lat": 29.904,
+    "lng": -96.886,
+    "city": "La Grange",
+    "state": "TX"
+  },
+  {
+    "zip": "78761",
+    "total": 541,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78730",
+    "total": 507,
+    "lat": 30.3607,
+    "lng": -97.8241,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78680",
+    "total": 447,
+    "lat": 30.6568,
+    "lng": -97.6026,
+    "city": "Round Rock",
+    "state": "TX"
+  },
+  {
+    "zip": "78605",
+    "total": 440,
+    "lat": 30.7411,
+    "lng": -98.0529,
+    "city": "Bertram",
+    "state": "TX"
+  },
+  {
+    "zip": "78619",
+    "total": 426,
+    "lat": 30.1072,
+    "lng": -98.0327,
+    "city": "Driftwood",
+    "state": "TX"
+  },
+  {
+    "zip": "78713",
+    "total": 399,
+    "lat": 30.2672,
+    "lng": -97.7431,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78742",
+    "total": 396,
+    "lat": 30.2313,
+    "lng": -97.6703,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78722",
+    "total": 388,
+    "lat": 30.2893,
+    "lng": -97.715,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78616",
+    "total": 310,
+    "lat": 29.9528,
+    "lng": -97.581,
+    "city": "Dale",
+    "state": "TX"
+  },
+  {
+    "zip": "78779",
+    "total": 302,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78636",
+    "total": 301,
+    "lat": 30.2948,
+    "lng": -98.3691,
+    "city": "Johnson City",
+    "state": "TX"
+  },
+  {
+    "zip": "78942",
+    "total": 289,
+    "lat": 30.1777,
+    "lng": -96.9332,
+    "city": "Giddings",
+    "state": "TX"
+  },
+  {
+    "zip": "78657",
+    "total": 253,
+    "lat": 30.5443,
+    "lng": -98.3739,
+    "city": "Horseshoe Bay",
+    "state": "TX"
+  },
+  {
+    "zip": "78767",
+    "total": 250,
+    "lat": 30.2672,
+    "lng": -97.7431,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78947",
+    "total": 244,
+    "lat": 30.4191,
+    "lng": -97.0524,
+    "city": "Lexington",
+    "state": "TX"
+  },
+  {
+    "zip": "78652",
+    "total": 238,
+    "lat": 30.1238,
+    "lng": -97.8393,
+    "city": "Manchaca",
+    "state": "TX"
+  },
+  {
+    "zip": "78643",
+    "total": 234,
+    "lat": 30.7151,
+    "lng": -98.6109,
+    "city": "Llano",
+    "state": "TX"
+  },
+  {
+    "zip": "78656",
+    "total": 232,
+    "lat": 29.8953,
+    "lng": -97.8144,
+    "city": "Maxwell",
+    "state": "TX"
+  },
+  {
+    "zip": "78957",
+    "total": 204,
+    "lat": 30.0178,
+    "lng": -97.1494,
+    "city": "Smithville",
+    "state": "TX"
+  },
+  {
+    "zip": "78716",
+    "total": 197,
+    "lat": 30.3162,
+    "lng": -97.8588,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78719",
+    "total": 153,
+    "lat": 30.1802,
+    "lng": -97.6667,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78639",
+    "total": 148,
+    "lat": 30.6662,
+    "lng": -98.4475,
+    "city": "Kingsland",
+    "state": "TX"
+  },
+  {
+    "zip": "73344",
+    "total": 133,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "76856",
+    "total": 117,
+    "lat": 30.7434,
+    "lng": -99.2261,
+    "city": "Mason",
+    "state": "TX"
+  },
+  {
+    "zip": "78709",
+    "total": 110,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78663",
+    "total": 85,
+    "lat": 30.4429,
+    "lng": -98.4365,
+    "city": "Round Mountain",
+    "state": "TX"
+  },
+  {
+    "zip": "78650",
+    "total": 74,
+    "lat": 30.2968,
+    "lng": -97.2386,
+    "city": "Mc Dade",
+    "state": "TX"
+  },
+  {
+    "zip": "78671",
+    "total": 67,
+    "lat": 30.2088,
+    "lng": -98.6131,
+    "city": "Stonewall",
+    "state": "TX"
+  },
+  {
+    "zip": "78963",
+    "total": 62,
+    "lat": 29.9523,
+    "lng": -97.0361,
+    "city": "West Point",
+    "state": "TX"
+  },
+  {
+    "zip": "78674",
+    "total": 60,
+    "lat": 30.6747,
+    "lng": -97.5929,
+    "city": "Weir",
+    "state": "TX"
+  },
+  {
+    "zip": "78609",
+    "total": 55,
+    "lat": 30.7538,
+    "lng": -98.4295,
+    "city": "Buchanan Dam",
+    "state": "TX"
+  },
+  {
+    "zip": "78659",
+    "total": 53,
+    "lat": 30.1858,
+    "lng": -97.1198,
+    "city": "Paige",
+    "state": "TX"
+  },
+  {
+    "zip": "78662",
+    "total": 50,
+    "lat": 29.9906,
+    "lng": -97.4081,
+    "city": "Red Rock",
+    "state": "TX"
+  },
+  {
+    "zip": "78710",
+    "total": 41,
+    "lat": 30.352,
+    "lng": -97.7151,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78712",
+    "total": 41,
+    "lat": 30.2852,
+    "lng": -97.7354,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78762",
+    "total": 39,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78953",
+    "total": 39,
+    "lat": 29.9241,
+    "lng": -97.3119,
+    "city": "Rosanky",
+    "state": "TX"
+  },
+  {
+    "zip": "77853",
+    "total": 35,
+    "lat": 30.3579,
+    "lng": -96.8248,
+    "city": "Dime Box",
+    "state": "TX"
+  },
+  {
+    "zip": "78766",
+    "total": 33,
+    "lat": 30.2672,
+    "lng": -97.7431,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78764",
+    "total": 30,
+    "lat": 30.4455,
+    "lng": -97.6595,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78768",
+    "total": 29,
+    "lat": 30.2672,
+    "lng": -97.7431,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78948",
+    "total": 28,
+    "lat": 30.3177,
+    "lng": -96.9702,
+    "city": "Lincoln",
+    "state": "TX"
+  },
+  {
+    "zip": "78755",
+    "total": 27,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78715",
+    "total": 26,
+    "lat": 30.2672,
+    "lng": -97.7431,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78651",
+    "total": 25,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Mc Neil",
+    "state": "TX"
+  },
+  {
+    "zip": "78711",
+    "total": 24,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78783",
+    "total": 24,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78615",
+    "total": 18,
+    "lat": 30.4872,
+    "lng": -97.3676,
+    "city": "Coupland",
+    "state": "TX"
+  },
+  {
+    "zip": "78760",
+    "total": 18,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78608",
+    "total": 16,
+    "lat": 30.9325,
+    "lng": -97.9702,
+    "city": "Briggs",
+    "state": "TX"
+  },
+  {
+    "zip": "78635",
+    "total": 15,
+    "lat": 30.2269,
+    "lng": -98.5396,
+    "city": "Hye",
+    "state": "TX"
+  },
+  {
+    "zip": "78672",
+    "total": 15,
+    "lat": 30.8609,
+    "lng": -98.4596,
+    "city": "Tow",
+    "state": "TX"
+  },
+  {
+    "zip": "78718",
+    "total": 15,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78622",
+    "total": 14,
+    "lat": 29.7561,
+    "lng": -97.7764,
+    "city": "Fentress",
+    "state": "TX"
+  },
+  {
+    "zip": "78772",
+    "total": 13,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78938",
+    "total": 11,
+    "lat": 29.8459,
+    "lng": -96.6966,
+    "city": "Ellinger",
+    "state": "TX"
+  },
+  {
+    "zip": "78618",
+    "total": 10,
+    "lat": 30.4613,
+    "lng": -99.1707,
+    "city": "Doss",
+    "state": "TX"
+  },
+  {
+    "zip": "76885",
+    "total": 7,
+    "lat": 30.866,
+    "lng": -98.8357,
+    "city": "Valley Spring",
+    "state": "TX"
+  },
+  {
+    "zip": "78773",
+    "total": 7,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78778",
+    "total": 6,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78661",
+    "total": 5,
+    "lat": 29.7239,
+    "lng": -97.7449,
+    "city": "Prairie Lea",
+    "state": "TX"
+  },
+  {
+    "zip": "78673",
+    "total": 5,
+    "lat": 30.7415,
+    "lng": -97.5891,
+    "city": "Walburg",
+    "state": "TX"
+  },
+  {
+    "zip": "78799",
+    "total": 5,
+    "lat": 30.2672,
+    "lng": -97.7431,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78949",
+    "total": 4,
+    "lat": 29.7993,
+    "lng": -97.1006,
+    "city": "Muldoon",
+    "state": "TX"
+  },
+  {
+    "zip": "76820",
+    "total": 3,
+    "lat": 30.767,
+    "lng": -99.0486,
+    "city": "Art",
+    "state": "TX"
+  },
+  {
+    "zip": "76842",
+    "total": 2,
+    "lat": 30.9214,
+    "lng": -99.1216,
+    "city": "Fredonia",
+    "state": "TX"
+  },
+  {
+    "zip": "78607",
+    "total": 2,
+    "lat": 30.8256,
+    "lng": -98.515,
+    "city": "Bluffton",
+    "state": "TX"
+  },
+  {
+    "zip": "78774",
+    "total": 1,
+    "lat": 30.3264,
+    "lng": -97.7713,
+    "city": "Austin",
+    "state": "TX"
+  },
+  {
+    "zip": "78960",
+    "total": 1,
+    "lat": 30.0702,
+    "lng": -96.902,
+    "city": "Warda",
+    "state": "TX"
+  }
+];
+const hitlistZips = [];
+const dealerPin = {"name": "Toyota of Cedar Park", "address": "5600 183A, Cedar Park, TX 78641", "lat": 0, "lng": 0};
+
+const maxTotal = Math.max(...cities.map(c=>c.total));
+const grandTotal = cities.reduce((s,c)=>s+c.total,0);
+document.getElementById('total-num').textContent = grandTotal.toLocaleString();
+
+// Render Top 8 Cities sidebar dynamically
+(function(){
+  const top8 = [...cities].sort((a,b)=>b.total-a.total).slice(0,8);
+  const topMax = top8[0].total;
+  const body = document.getElementById('stats-body');
+  body.innerHTML = top8.map(c=>{
+    const pct = Math.round((c.total/topMax)*100);
+    return `<div class="stat-row"><span class="stat-city">${c.name}</span><span class="stat-num">${c.total.toLocaleString()}</span></div>
+<div class="stat-bar-wrap"><div class="stat-bar" style="width:${pct}%"></div></div>`;
+  }).join('');
+})();
+
+function fmtZips(zips) {
+  if (!zips) return '';
+  const z = zips.split(', ');
+  return 'ZIP: ' + (z.length <= 4 ? zips : z.slice(0,4).join(', ') + ` \u2026 +${z.length-4} more`);
+}
+
+function getRadius(t){
+  const mn=4,mx=52;
+  return mn+(Math.sqrt(t)/Math.sqrt(maxTotal))*(mx-mn);
+}
+
+function getTierStyle(t){
+  if(t>=50000) return {fill:'rgba(55,11,85,0.72)',   stroke:'#370B55'};
+  if(t>=10000) return {fill:'rgba(100,30,150,0.65)', stroke:'#6A1E96'};
+  if(t>= 3000) return {fill:'rgba(129,54,178,0.60)', stroke:'#8136B2'};
+  if(t>= 1000) return {fill:'rgba(171,116,207,0.55)',stroke:'#AB74CF'};
+  if(t>=  300) return {fill:'rgba(217,186,238,0.65)',stroke:'#C8A0E4'};
+  return              {fill:'rgba(240,230,250,0.75)',stroke:'#D9BAEE'};
+}
+
+const map = L.map('map',{center:mapConfig.center,zoom:mapConfig.zoom,zoomControl:false,attributionControl:false});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; <a href="https://carto.com/">CARTO</a>'}).addTo(map);
+L.control.zoom({position:'topright'}).addTo(map);
+
+// City markers are now rendered via renderCityMarkers() into cityLayerGroup
+
+// ── City/ZIP view toggle ────────────────────────────────────────────────────
+let cityLayerGroup = L.layerGroup();
+let zipLayerGroup = L.layerGroup();
+let hitlistLayerGroup = L.layerGroup();
+let dealerLayerGroup = L.layerGroup();
+let currentView = 'city';
+
+// Move city markers into a layer group (re-render)
+function renderCityMarkers() {
+  cityLayerGroup.clearLayers();
+  cities.forEach(c => {
+    const r  = getRadius(c.total);
+    const st = getTierStyle(c.total);
+    const circle = L.circleMarker([c.lat,c.lng],{
+      radius:r, fillColor:st.fill, fillOpacity:1,
+      color:st.stroke, weight:1.5,
+    });
+    circle.bindTooltip(
+      `<div class="tt-city">${c.name}</div>
+       <div class="tt-count">${c.total.toLocaleString()} searches</div>
+       <div class="tt-zips">${fmtZips(c.zips)}</div>`,
+      {className:'cars-tooltip',sticky:true,offset:[10,0]}
+    );
+    cityLayerGroup.addLayer(circle);
+    if(c.total>=2000){
+      const lbl=L.divIcon({
+        html:`<div style="color:#370B55;font-family:Inter,sans-serif;font-size:10px;font-weight:600;white-space:nowrap;text-shadow:0 1px 3px rgba(255,255,255,.95);pointer-events:none;margin-top:${r+3}px;text-align:center;transform:translateX(-50%);">${c.name}</div>`,
+        className:'',iconAnchor:[0,0]
+      });
+      cityLayerGroup.addLayer(L.marker([c.lat,c.lng],{icon:lbl,interactive:false}));
+    }
+  });
+}
+
+function renderZipMarkers() {
+  zipLayerGroup.clearLayers();
+  if (typeof zipData === 'undefined' || !zipData.length) return;
+  const maxZip = Math.max(...zipData.map(z=>z.total));
+  zipData.forEach(z => {
+    const r = 3 + (Math.sqrt(z.total)/Math.sqrt(maxZip)) * 28;
+    const st = getTierStyle(z.total);
+    const isHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.includes(z.zip);
+    const opts = isHitlist
+      ? { radius:r, fillColor:'rgba(232,168,23,0.75)', fillOpacity:1, color:'#B8860B', weight:2.5 }
+      : { radius:r, fillColor:st.fill, fillOpacity:1, color:st.stroke, weight:1.5 };
+    const circle = L.circleMarker([z.lat,z.lng], opts);
+    circle.bindTooltip(
+      `<div class="tt-city">${z.zip}${isHitlist ? ' <span style="color:#B8860B;font-weight:700;">★ HITLIST</span>' : ''}</div>
+       <div class="tt-count">${z.total.toLocaleString()} searches</div>
+       <div class="tt-zips">${z.city}, ${z.state}</div>`,
+      {className:'cars-tooltip',sticky:true,offset:[10,0]}
+    );
+    zipLayerGroup.addLayer(circle);
+    if(z.total >= 1500) {
+      const lbl=L.divIcon({
+        html:`<div style="color:${isHitlist?'#B8860B':'#370B55'};font-family:Inter,sans-serif;font-size:9px;font-weight:600;white-space:nowrap;text-shadow:0 1px 3px rgba(255,255,255,.95);pointer-events:none;margin-top:${r+2}px;text-align:center;transform:translateX(-50%);">${z.zip}</div>`,
+        className:'',iconAnchor:[0,0]
+      });
+      zipLayerGroup.addLayer(L.marker([z.lat,z.lng],{icon:lbl,interactive:false}));
+    }
+  });
+}
+
+function renderDealerPin() {
+  dealerLayerGroup.clearLayers();
+  if (typeof dealerPin === 'undefined' || !dealerPin.lat) return;
+  const star = L.divIcon({
+    html:'<div class="dealer-star">★</div>',
+    className:'',iconSize:[20,20],iconAnchor:[10,10]
+  });
+  const marker = L.marker([dealerPin.lat, dealerPin.lng], {icon:star, zIndexOffset:1000, interactive:true});
+  marker.bindTooltip(
+    `<div class="tt-city">${dealerPin.name || 'Dealer'}</div><div class="tt-zips">${dealerPin.address || ''}</div>`,
+    {className:'cars-tooltip',offset:[12,0]}
+  );
+  dealerLayerGroup.addLayer(marker);
+  document.getElementById('dealer-legend').style.display = 'flex';
+}
+
+function setView(view) {
+  currentView = view;
+  document.getElementById('btn-city').classList.toggle('active', view==='city');
+  document.getElementById('btn-zip').classList.toggle('active', view==='zip');
+  if (view === 'city') {
+    map.removeLayer(zipLayerGroup);
+    map.addLayer(cityLayerGroup);
+  } else {
+    map.removeLayer(cityLayerGroup);
+    if (zipLayerGroup.getLayers().length === 0) renderZipMarkers();
+    map.addLayer(zipLayerGroup);
+  }
+  // Show hitlist legend in ZIP view if hitlist data exists
+  const hl = document.getElementById('hitlist-legend');
+  if (hl) hl.style.display = (view==='zip' && typeof hitlistZips !== 'undefined' && hitlistZips.length) ? 'flex' : 'none';
+}
+
+// Initialize
+renderCityMarkers();
+cityLayerGroup.addTo(map);
+renderDealerPin();
+dealerLayerGroup.addTo(map);
+
+// Tier legend
+const tl=L.control({position:'bottomright'});
+tl.onAdd=function(){
+  const d=L.DomUtil.create('div','panel tier-legend');
+  d.innerHTML=`
+    <h3 style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#8136B2;margin-bottom:10px;border-bottom:2px solid #D9BAEE;padding-bottom:6px;">Volume Tiers</h3>
+    ${[
+      ['rgba(55,11,85,0.72)','#370B55','50,000+'],
+      ['rgba(100,30,150,0.65)','#6A1E96','10,000 – 50,000'],
+      ['rgba(129,54,178,0.60)','#8136B2','3,000 – 10,000'],
+      ['rgba(171,116,207,0.55)','#AB74CF','1,000 – 3,000'],
+      ['rgba(217,186,238,0.65)','#C8A0E4','300 – 1,000'],
+      ['rgba(240,230,250,0.75)','#D9BAEE','< 300'],
+    ].map(([f,s,l])=>`
+      <div class="tier-item">
+        <div class="tier-dot" style="background:${f};border:2px solid ${s};"></div>
+        <span>${l}</span>
+      </div>`).join('')}`;
+  return d;
+};
+tl.addTo(map);
+
+// ── 30-Mile Radius Tool ────────────────────────────────────────────────────────
+const RADIUS_M = 48280; // 30 miles in meters
+const RADIUS_MI = 30;
+let placedRadii = []; // [{ring, badge, pin, lat, lng, label}]
+let clickModeActive = false;
+
+// Haversine distance in miles between two lat/lng points
+function haversineMi(lat1, lng1, lat2, lng2) {
+  const R = 3958.8;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
+    * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Sum searches and count cities whose centroid falls within RADIUS_MI of (lat, lng)
+function searchesInRadius(lat, lng) {
+  let searches = 0, count = 0;
+  cities.forEach(c => {
+    if (haversineMi(lat, lng, c.lat, c.lng) <= RADIUS_MI) { searches += c.total; count++; }
+  });
+  return { searches, count };
+}
+
+// ZIP-level radius capture — returns detailed list
+function zipsInRadius(lat, lng) {
+  if (typeof zipData === 'undefined' || !zipData.length) return [];
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  return zipData
+    .filter(z => haversineMi(lat, lng, z.lat, z.lng) <= RADIUS_MI)
+    .map(z => ({
+      zip: z.zip, city: z.city, state: z.state, total: z.total,
+      hitlist: hasHitlist && hitlistZips.includes(z.zip),
+      dist: Math.round(haversineMi(lat, lng, z.lat, z.lng) * 10) / 10,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+// Combined ZIPs across all placed radii (deduplicated), plus any hitlist ZIPs outside radii
+function getAllRadiusZips() {
+  if (!placedRadii.length) return [];
+  const zipMap = new Map();
+  placedRadii.forEach((r, idx) => {
+    const label = r.label || ('Radius ' + (idx + 1));
+    zipsInRadius(r.lat, r.lng).forEach(z => {
+      if (zipMap.has(z.zip)) {
+        const existing = zipMap.get(z.zip);
+        if (!existing.radii.includes(label)) existing.radii.push(label);
+        existing.dist = Math.min(existing.dist, z.dist);
+      } else {
+        zipMap.set(z.zip, Object.assign({}, z, { radii: [label] }));
+      }
+    });
+  });
+
+  // Ensure ALL hitlist ZIPs appear even if outside every radius
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  if (hasHitlist && typeof zipData !== 'undefined') {
+    hitlistZips.forEach(hlZip => {
+      if (!zipMap.has(hlZip)) {
+        const zd = zipData.find(z => z.zip === hlZip);
+        if (zd) {
+          zipMap.set(hlZip, {
+            zip: zd.zip, city: zd.city, state: zd.state, total: zd.total,
+            hitlist: true, dist: -1, radii: ['Outside Radii'],
+          });
+        }
+      }
+    });
+  }
+
+  return Array.from(zipMap.values()).sort((a, b) => b.total - a.total);
+}
+
+let lastRadiusCapture = [];
+let hitlistFilterActive = false;
+
+function toggleHitlistFilter() {
+  hitlistFilterActive = !hitlistFilterActive;
+  const btn = document.getElementById('hitlist-filter-btn');
+  if (hitlistFilterActive) {
+    btn.classList.add('active');
+    btn.textContent = 'Show All ZIPs';
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = 'Show Hitlist Only';
+  }
+  renderRadiusPanel();
+}
+
+function getDisplayCapture() {
+  return hitlistFilterActive ? lastRadiusCapture.filter(z => z.hitlist) : lastRadiusCapture;
+}
+
+function renderRadiusPanel() {
+  const panel = document.getElementById('radius-results');
+  const list = document.getElementById('radius-zip-list');
+  const display = getDisplayCapture();
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  const hitlistCount = lastRadiusCapture.filter(z => z.hitlist).length;
+
+  if (!lastRadiusCapture.length) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+  const totalSearches = display.reduce((s, z) => s + z.total, 0);
+
+  document.getElementById('radius-zip-count').textContent = display.length + ' ZIPs';
+  document.getElementById('radius-total-searches').textContent = totalSearches.toLocaleString();
+  document.getElementById('radius-hitlist-count').textContent =
+    hitlistFilterActive
+      ? hitlistCount + ' of ' + hitlistCount
+      : hitlistCount + ' of ' + lastRadiusCapture.length;
+
+  // Show hitlist filter toggle when hitlist data exists
+  const filterRow = document.getElementById('hitlist-filter-row');
+  if (filterRow) filterRow.style.display = hasHitlist ? 'block' : 'none';
+
+  // Sort: hitlist ZIPs first when filter is off and hitlist exists
+  const sorted = hasHitlist && !hitlistFilterActive
+    ? [...display].sort((a, b) => (b.hitlist ? 1 : 0) - (a.hitlist ? 1 : 0) || b.total - a.total)
+    : display;
+
+  list.innerHTML =
+    `<div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
+      <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
+    </div>` +
+    sorted.map(z =>
+      `<div class="rz-row${z.hitlist ? ' rz-hitlist' : ''}">
+        <span class="rz-zip">${z.zip}</span>
+        <span class="rz-city">${z.city}, ${z.state}</span>
+        <span class="rz-vol">${z.total.toLocaleString()}</span>
+        <span class="rz-hl">${z.hitlist ? '★' : ''}</span>
+      </div>`
+    ).join('');
+}
+
+function updateAllRadiusResults() {
+  lastRadiusCapture = getAllRadiusZips();
+
+  // Update panel title for multi-radius
+  const titleEl = document.getElementById('radius-title');
+  if (titleEl) titleEl.textContent = placedRadii.length > 1 ? 'ZIPs in ' + placedRadii.length + ' Radii' : 'ZIPs in Radius';
+
+  renderRadiusPanel();
+}
+
+function copyRadiusTable() {
+  const data = getDisplayCapture();
+  if (!data.length) return;
+  const multi = placedRadii.length > 1;
+  const header = multi ? 'ZIP\tCity\tState\tSearches\tHitlist\tRadius' : 'ZIP\tCity\tState\tSearches\tHitlist';
+  const rows = data.map(z =>
+    multi
+      ? `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}\t${z.radii.join('; ')}`
+      : `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}`
+  );
+  const tsv = [header, ...rows].join('\n');
+  navigator.clipboard.writeText(tsv).then(() => {
+    setStatus('✓ Copied ' + data.length + ' ZIPs — paste into Sheets', 3000);
+  });
+}
+
+function downloadRadiusCsv() {
+  const data = getDisplayCapture();
+  if (!data.length) return;
+  const multi = placedRadii.length > 1;
+  const header = multi ? 'ZIP,City,State,Searches,Hitlist,Radius' : 'ZIP,City,State,Searches,Hitlist';
+  const rows = data.map(z =>
+    multi
+      ? `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''},"${z.radii.join('; ')}"`
+      : `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''}`
+  );
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'radius_zips_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('✓ Downloaded ' + data.length + ' ZIPs', 3000);
+}
+
+function makeBadgeIcon(searches, count) {
+  return L.divIcon({
+    html: `<div style="
+      background:rgba(55,11,85,0.88);color:#fff;
+      font-family:Inter,sans-serif;font-size:10px;font-weight:600;
+      padding:3px 8px;border-radius:10px;white-space:nowrap;
+      transform:translate(-50%, 14px);pointer-events:none;
+      box-shadow:0 2px 8px rgba(55,11,85,.35);letter-spacing:.2px;
+    ">${searches.toLocaleString()} searches · ${count} ${count === 1 ? 'city' : 'cities'}</div>`,
+    className: '',
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+}
+
+function makePinIcon() {
+  return L.divIcon({
+    html: `<div style="
+      width:12px;height:12px;background:#fff;
+      border:2.5px solid #8136B2;border-radius:50%;
+      cursor:grab;box-shadow:0 1px 5px rgba(55,11,85,.4);
+    "></div>`,
+    className: '',
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
+  });
+}
+
+function placeRadius(lat, lng, label) {
+  const ring = L.circle([lat, lng], {
+    radius: RADIUS_M,
+    color: '#8136B2',
+    weight: 2,
+    dashArray: '10 7',
+    fillColor: '#8136B2',
+    fillOpacity: 0.05,
+    interactive: false,
+  }).addTo(map);
+
+  const initial = searchesInRadius(lat, lng);
+
+  const badge = L.marker([lat, lng], {
+    icon: makeBadgeIcon(initial.searches, initial.count),
+    interactive: false,
+    zIndexOffset: -200,
+  }).addTo(map);
+
+  const pin = L.marker([lat, lng], {
+    draggable: true,
+    icon: makePinIcon(),
+    zIndexOffset: 500,
+  }).addTo(map);
+
+  const hintLine = `<div style="font-size:10px;color:#999;margin-top:2px;">30-mile radius · drag to reposition</div>`;
+  pin.bindTooltip(
+    `${label ? `<div class="tt-city">${label}</div>` : ''}${hintLine}`,
+    { className: 'cars-tooltip', sticky: false, offset: [12, 0] }
+  );
+
+  const radiusObj = { ring, badge, pin, lat, lng, label };
+  placedRadii.push(radiusObj);
+
+  // Show combined ZIP breakdown across all radii
+  updateAllRadiusResults();
+
+  pin.on('dragstart', function() {
+    map.getContainer().style.cursor = 'grabbing';
+    pin.closeTooltip();
+  });
+
+  pin.on('drag', function(e) {
+    const { lat: la, lng: ln } = e.latlng;
+    ring.setLatLng([la, ln]);
+    badge.setLatLng([la, ln]);
+    radiusObj.lat = la;
+    radiusObj.lng = ln;
+    const r = searchesInRadius(la, ln);
+    badge.setIcon(makeBadgeIcon(r.searches, r.count));
+  });
+
+  pin.on('dragend', function() {
+    map.getContainer().style.cursor = clickModeActive ? 'crosshair' : '';
+    const { lat: la, lng: ln } = pin.getLatLng();
+    radiusObj.lat = la;
+    radiusObj.lng = ln;
+    const r = searchesInRadius(la, ln);
+    setStatus(`✓ ${r.searches.toLocaleString()} searches · ${r.count} cities in radius`, 4000);
+    // Update combined ZIP breakdown after drag
+    updateAllRadiusResults();
+  });
+}
+
+function geocodeAndPlace() {
+  const addr = document.getElementById('radius-address').value.trim();
+  if (!addr) return;
+  setStatus('Searching…');
+
+  fetch(
+    'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(addr),
+    { headers: { 'Accept-Language': 'en' } }
+  )
+    .then(r => r.json())
+    .then(data => {
+      if (!data.length) { setStatus('Address not found.'); return; }
+      const lat = parseFloat(data[0].lat);
+      const lng = parseFloat(data[0].lon);
+      const label = data[0].display_name.split(',')[0];
+      placeRadius(lat, lng, label);
+      map.panTo([lat, lng]);
+      const result = searchesInRadius(lat, lng);
+      setStatus('✓ ' + result.searches.toLocaleString() + ' searches captured', 4000);
+    })
+    .catch(() => setStatus('Geocoding failed — check connection.'));
+}
+
+function toggleClickMode() {
+  clickModeActive = !clickModeActive;
+  const btn = document.getElementById('click-toggle');
+  if (clickModeActive) {
+    btn.classList.add('active');
+    map.getContainer().style.cursor = 'crosshair';
+    setStatus('Click anywhere on the map.');
+  } else {
+    btn.classList.remove('active');
+    map.getContainer().style.cursor = '';
+    setStatus('');
+  }
+}
+
+function clearRadii() {
+  placedRadii.forEach(r => { map.removeLayer(r.ring); map.removeLayer(r.badge); map.removeLayer(r.pin); });
+  placedRadii = [];
+  setStatus('');
+  document.getElementById('radius-results').style.display = 'none';
+}
+
+function setStatus(msg, clearAfterMs) {
+  const el = document.getElementById('radius-status');
+  el.textContent = msg;
+  if (clearAfterMs) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, clearAfterMs);
+}
+
+map.on('click', function(e) {
+  if (!clickModeActive) return;
+  placeRadius(e.latlng.lat, e.latlng.lng, null);
+  const result = searchesInRadius(e.latlng.lat, e.latlng.lng);
+  setStatus(result.searches.toLocaleString() + ' searches · drag to reposition');
+});
+
+document.getElementById('radius-address').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') geocodeAndPlace();
+});
+</script>
+</body>
+</html>
