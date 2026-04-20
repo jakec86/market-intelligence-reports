@@ -16,8 +16,8 @@ This audit compares the efficiency of agency-managed broad-reach Meta advertisin
 | **Total Monthly Spend** | $[INSERT ESTIMATED SPEND] | $6,993 |
 | **Total Sessions** | [INSERT SESSIONS] | 2,819 |
 | **Avg. Engagement Time** | [INSERT TIME] | 20s |
-| **Conversion Rate (Key Event)**| [INSERT %] | 0.21% |
-| **Effective CPL (Cost/Lead)** | [INSERT CPL] | [INSERT CPL] |
+| **Conversion Rate (Key Event)**| [INSERT %] | 7.91% |
+| **Effective CPL (Cost/Lead)** | [INSERT CPL] | $31.36 |
 
 ---
 
