@@ -2,15 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add unattended JumpCloud MFA handling to `/hendricks-pb-report` and `/nalley-pb-report` so launchd-scheduled runs don't stall on push-notification timeouts. Retrieve a current 6-digit TOTP code from the macOS Keychain via `oathtool`, and submit it into the JumpCloud SSO page via Playwright.
+**Goal:** Add unattended JumpCloud MFA handling to `/hendricks-pb-report` and `/nalley-pb-report` so launchd-scheduled runs don't stall on push-notification timeouts. Retrieve a current 6-digit TOTP code from the macOS Keychain via a small Python helper, and submit it into the JumpCloud SSO page via Playwright.
 
-**Architecture:** Three components. (1) One-time attended setup stores the TOTP seed in the login Keychain and installs `oathtool`. (2) A 6-line shell helper at `~/.claude/scripts/jumpcloud-totp.sh` reads the seed and prints the current code. (3) Both skill files gain a Step 0 pre-flight check (oathtool + Keychain) and a shared "JumpCloud MFA Sub-procedure" that detects the SSO page, calls the helper, fills the TOTP input, and retries once on rejection.
+**Architecture:** Three components. (1) One-time attended setup stores the TOTP seed in the login Keychain. (2) A ~25-line Python 3 helper at `~/.claude/scripts/jumpcloud-totp.py` reads the seed and prints the current code (RFC 6238, SHA-1, 30s window) using only `hmac`/`struct`/`base64`/`time` from the stdlib. (3) Both skill files gain a Step 0 pre-flight check (`python3` + Keychain) and a shared "JumpCloud MFA Sub-procedure" that detects the SSO page, calls the helper, fills the TOTP input, and retries once on rejection.
 
-**Tech Stack:** bash, macOS Keychain (`security` CLI), `oath-toolkit` (Homebrew), Playwright MCP, existing launchd user agents.
+**Tech Stack:** Python 3 stdlib (no new packages), macOS Keychain (`security` CLI), Playwright MCP, existing launchd user agents.
 
 **Spec:** `/Users/jcrawley/docs/superpowers/specs/2026-04-21-jumpcloud-totp-fallback-design.md`
 
-**Note on version control:** `~/.claude/` is intentionally untracked in git. For rollback safety, tasks back up modified files to `/tmp/totp-backups/` before editing rather than using git commits. The plan and spec documents themselves live under the tracked `~/docs/` tree and will be committed.
+**Note on version control:** `~/.claude/` is intentionally untracked in git. For rollback safety, tasks back up modified files to `/tmp/totp-backups/` before editing rather than using git commits. The plan and spec documents themselves live under the tracked `~/docs/` tree and are committed.
+
+**Pivot note (2026-04-21):** Original plan specified `oath-toolkit` via Homebrew. When implementation began, Homebrew was not installed on the target Mac. Rather than introduce a package-manager bootstrap as a prerequisite, the helper was rewritten in pure Python 3 stdlib — no new dependencies, and the system `/usr/bin/python3` is already present.
 
 ---
 
@@ -20,7 +22,7 @@
 
 | Path | Responsibility |
 |---|---|
-| `~/.claude/scripts/jumpcloud-totp.sh` | Read seed from Keychain, emit current 6-digit TOTP code, or exit 2/3 with actionable error |
+| `~/.claude/scripts/jumpcloud-totp.py` | Read seed from Keychain, emit current 6-digit TOTP code, or exit 2/3 with actionable error |
 
 **Modified files:**
 
@@ -38,45 +40,36 @@
 
 ### Task 0: User Prerequisites (attended, manual)
 
-**Purpose:** Install `oathtool`, reset TOTP at JumpCloud, store the base32 seed in the login Keychain. Must complete before any later task can be verified.
+**Purpose:** Reset TOTP at JumpCloud and store the base32 seed in the login Keychain. Must complete before any later task can be verified end-to-end.
 
 **Files:**
 - No code changes in this task. User executes the listed commands in Terminal.
 
-- [ ] **Step 1: Install oathtool via Homebrew**
+- [ ] **Step 1: Verify python3 is available**
 
 Run:
 ```bash
-brew install oath-toolkit
+command -v python3 && python3 --version
 ```
 
-Expected output: installation completes successfully. If `brew` is not installed, follow https://brew.sh first.
+Expected output: `/usr/bin/python3` and a version line like `Python 3.9.6`. If `command -v` fails (very unusual on modern macOS), install Xcode Command Line Tools first: `xcode-select --install`.
 
-- [ ] **Step 2: Verify oathtool is on PATH**
-
-Run:
-```bash
-command -v oathtool && oathtool --version | head -1
-```
-
-Expected output: a path like `/opt/homebrew/bin/oathtool` (or `/usr/local/bin/oathtool` on Intel Macs) followed by a version string.
-
-- [ ] **Step 3: Reset TOTP at JumpCloud and capture base32 seed**
+- [ ] **Step 2: Reset TOTP at JumpCloud and capture base32 seed**
 
 Navigate in a browser to https://console.jumpcloud.com/userconsole, open Security → Multi-Factor Authentication. Next to "Authenticator App", click **Reset**. A QR code appears.
 
 Click the "Can't scan?" or "Show secret key" link. Copy the base32 seed (typically a 26- or 32-character string of A–Z and 2–7). Also scan the QR into the 1Password app and/or your phone authenticator for redundancy — the same seed produces identical codes everywhere.
 
-- [ ] **Step 4: Store the seed in the login Keychain**
+- [ ] **Step 3: Store the seed in the login Keychain**
 
-Run (replace `<BASE32_SEED>` with the string from Step 3):
+Run (replace `<BASE32_SEED>` with the string from Step 2):
 ```bash
 security add-generic-password -s jumpcloud-totp -a jcrawley -w '<BASE32_SEED>' -U
 ```
 
 The `-U` flag updates an existing entry if one already exists, so this command is idempotent.
 
-- [ ] **Step 5: Verify the Keychain entry**
+- [ ] **Step 4: Verify the Keychain entry**
 
 Run:
 ```bash
@@ -85,29 +78,31 @@ security find-generic-password -s jumpcloud-totp -a jcrawley >/dev/null && echo 
 
 Expected output: `OK: entry found`
 
-- [ ] **Step 6: Confirm the seed produces valid codes**
+- [ ] **Step 5: Confirm the helper script produces valid codes**
 
 Run:
 ```bash
-seed=$(security find-generic-password -s jumpcloud-totp -a jcrawley -w) && oathtool --totp -b "$seed"
+~/.claude/scripts/jumpcloud-totp.py
 ```
 
-Expected output: a single line of exactly 6 digits (e.g. `482190`). If `oathtool` complains about the seed format (`Bad base32`), re-check Step 3 for copy-paste errors — base32 uses A-Z and 2-7 only, no lowercase, no `0`, `1`, `8`, `9`.
+Expected output: a single line of exactly 6 digits (e.g. `482190`). If Python complains about the seed format (`binascii.Error: Non-base32 digit found`), re-check Step 2 for copy-paste errors — base32 uses A-Z and 2-7 only, no lowercase, no `0`, `1`, `8`, `9`.
 
-- [ ] **Step 7: Confirm the code is currently accepted by JumpCloud**
+**Note:** This step requires Task 1 (helper script creation) to already be complete. If running Task 0 before Task 1, skip this step and verify via Step 6 instead.
+
+- [ ] **Step 6: Confirm the code is currently accepted by JumpCloud**
 
 While a Terminal window is showing the current code, log into any JumpCloud-protected resource (e.g. https://us-west-2b.online.tableau.com) and, when prompted for MFA, select "Authenticator App" / "Verification Code" and enter the 6-digit code from the Terminal. JumpCloud should accept it.
 
-If JumpCloud rejects it: (a) the seed was copied wrong — redo Step 3, or (b) the Mac's clock is skewed — run `sudo sntp -sS time.apple.com` and retry.
+If JumpCloud rejects it: (a) the seed was copied wrong — redo Step 2, or (b) the Mac's clock is skewed — run `sudo sntp -sS time.apple.com` and retry.
 
 ---
 
 ### Task 1: Create the TOTP helper script (TDD)
 
 **Files:**
-- Create: `~/.claude/scripts/jumpcloud-totp.sh`
+- Create: `~/.claude/scripts/jumpcloud-totp.py`
 
-**Dependencies:** Task 0 must be complete (Keychain entry present, `oathtool` installed).
+**Dependencies:** Task 0 should be complete for runtime verification (Steps 5–6), but the helper code itself can be created anytime.
 
 - [ ] **Step 1: Ensure scripts directory exists**
 
@@ -118,68 +113,115 @@ mkdir -p ~/.claude/scripts
 
 Expected output: (none; idempotent).
 
-- [ ] **Step 2: Write the failing test (inline)**
+- [ ] **Step 2: Write the failing test (inline) — BEFORE the helper exists**
 
-Run (before the helper exists, expected to FAIL):
+Run:
 ```bash
-~/.claude/scripts/jumpcloud-totp.sh 2>&1 | grep -E '^[0-9]{6}$'; echo "exit=$?"
+~/.claude/scripts/jumpcloud-totp.py 2>&1 | grep -E '^[0-9]{6}$'; echo "exit=$?"
 ```
 
-Expected output: a shell error like `bash: /Users/jcrawley/.claude/scripts/jumpcloud-totp.sh: No such file or directory` and `exit=1` (grep finds nothing).
+Expected output: a shell error like `No such file or directory` and `exit=1` (grep finds nothing).
 
 - [ ] **Step 3: Write the helper script**
 
-Write the file `~/.claude/scripts/jumpcloud-totp.sh` with contents:
+Write the file `~/.claude/scripts/jumpcloud-totp.py` with exactly these contents:
 
-```bash
-#!/bin/bash
-# Emit a current JumpCloud TOTP code to stdout.
-# Exit codes: 0 success, 2 missing dep or secret, 3 oathtool failure.
-set -euo pipefail
+```python
+#!/usr/bin/env python3
+"""Emit a current JumpCloud TOTP code to stdout.
 
-if ! command -v oathtool >/dev/null; then
-  echo "jumpcloud-totp: oathtool not found on PATH — run 'brew install oath-toolkit'" >&2
-  exit 2
-fi
+Reads the base32-encoded seed from the macOS login Keychain (service:
+jumpcloud-totp, account: jcrawley) and computes the current 6-digit
+RFC 6238 TOTP code (SHA-1, 30-second window).
 
-seed=$(security find-generic-password -s jumpcloud-totp -a jcrawley -w 2>/dev/null) || {
-  echo "jumpcloud-totp: Keychain entry jumpcloud-totp/jcrawley missing — see ~/docs/superpowers/specs/2026-04-21-jumpcloud-totp-fallback-design.md §One-time setup" >&2
-  exit 2
-}
+Exit codes:
+  0  success — 6 digits printed to stdout
+  2  Keychain entry missing (actionable operator error)
+  3  invalid seed or computation failure
+"""
+import base64
+import hmac
+import struct
+import subprocess
+import sys
+import time
 
-oathtool --totp -b "$seed" || exit 3
+
+def main() -> int:
+    try:
+        seed = subprocess.check_output(
+            ["security", "find-generic-password", "-s", "jumpcloud-totp", "-a", "jcrawley", "-w"],
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except subprocess.CalledProcessError:
+        sys.stderr.write(
+            "jumpcloud-totp: Keychain entry jumpcloud-totp/jcrawley missing — "
+            "see ~/docs/superpowers/specs/2026-04-21-jumpcloud-totp-fallback-design.md "
+            "§One-time setup\n"
+        )
+        return 2
+
+    try:
+        key = base64.b32decode(seed.upper().replace(" ", ""))
+    except Exception as e:
+        sys.stderr.write(f"jumpcloud-totp: invalid base32 seed in Keychain: {e}\n")
+        return 3
+
+    counter = int(time.time()) // 30
+    digest = hmac.new(key, struct.pack(">Q", counter), "sha1").digest()
+    offset = digest[-1] & 0x0F
+    code = struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF
+    print(f"{code % 1_000_000:06d}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
 ```
 
 - [ ] **Step 4: Make it executable**
 
 Run:
 ```bash
-chmod 755 ~/.claude/scripts/jumpcloud-totp.sh
+chmod 755 ~/.claude/scripts/jumpcloud-totp.py
 ```
 
-- [ ] **Step 5: Run the test — expect PASS**
+- [ ] **Step 5: Run missing-Keychain error path (works even before Task 0)**
+
+If Task 0 is not yet complete, run:
+```bash
+~/.claude/scripts/jumpcloud-totp.py; echo "exit=$?"
+```
+
+Expected output on stderr:
+```
+jumpcloud-totp: Keychain entry jumpcloud-totp/jcrawley missing — see ~/docs/superpowers/specs/2026-04-21-jumpcloud-totp-fallback-design.md §One-time setup
+```
+Exit code: `exit=2`.
+
+- [ ] **Step 6: Run the success path (requires Task 0 complete)**
 
 Run:
 ```bash
-~/.claude/scripts/jumpcloud-totp.sh | grep -E '^[0-9]{6}$'; echo "exit=$?"
+~/.claude/scripts/jumpcloud-totp.py | grep -E '^[0-9]{6}$'; echo "exit=$?"
 ```
 
 Expected output: a 6-digit code on one line, then `exit=0`.
 
-- [ ] **Step 6: Rotation sanity check**
+- [ ] **Step 7: Rotation sanity check (requires Task 0 complete)**
 
 Run:
 ```bash
-c1=$(~/.claude/scripts/jumpcloud-totp.sh); sleep 31; c2=$(~/.claude/scripts/jumpcloud-totp.sh); echo "c1=$c1 c2=$c2"
+c1=$(~/.claude/scripts/jumpcloud-totp.py); sleep 31; c2=$(~/.claude/scripts/jumpcloud-totp.py); echo "c1=$c1 c2=$c2"
 ```
 
-Expected output: two 6-digit codes. They will almost certainly differ (there's a ~1/1,000,000 chance they match by coincidence); if they do match, run the command again. If they consistently match, the script is broken.
+Expected output: two 6-digit codes. They will almost certainly differ; if they match, run once more to confirm the generator is working (a one-in-a-million collision is possible).
 
-- [ ] **Step 7: Back up and note completion**
+- [ ] **Step 8: Back up**
 
 Run:
 ```bash
-mkdir -p /tmp/totp-backups && cp ~/.claude/scripts/jumpcloud-totp.sh /tmp/totp-backups/jumpcloud-totp.sh.v1
+mkdir -p /tmp/totp-backups && cp ~/.claude/scripts/jumpcloud-totp.py /tmp/totp-backups/jumpcloud-totp.py.v1
 ```
 
 ---
@@ -205,7 +247,7 @@ Find in the file:
 
 Replace with:
 ```
-3. **TOTP helper ready** — verify `oathtool` is on PATH (`command -v oathtool`) and the Keychain entry exists (`security find-generic-password -s jumpcloud-totp -a jcrawley` returns 0). If either check fails, abort with the remediation command shown by the helper error (see JumpCloud MFA Sub-procedure).
+3. **TOTP helper ready** — verify `python3` is on PATH (`command -v python3`) and the Keychain entry exists (`security find-generic-password -s jumpcloud-totp -a jcrawley` returns 0). If either check fails, abort with the remediation command shown by the helper error (see JumpCloud MFA Sub-procedure).
 ```
 
 - [ ] **Step 3: Verify the edit**
@@ -222,8 +264,8 @@ Expected output: one matching line.
 ### Task 3: Hendrick skill — add JumpCloud MFA Sub-procedure + Step 1 reference
 
 **Files:**
-- Modify: `~/.claude/commands/hendricks-pb-report.md:41-47` (Step 1 — Tableau)
-- Modify: `~/.claude/commands/hendricks-pb-report.md:88-89` (before `## Defaults`) — insert new `## JumpCloud MFA Sub-procedure` section
+- Modify: `~/.claude/commands/hendricks-pb-report.md` Step 1 (add sub-procedure reference)
+- Modify: `~/.claude/commands/hendricks-pb-report.md` before `## Defaults` (insert new `## JumpCloud MFA Sub-procedure` section)
 
 - [ ] **Step 1: Add MFA sub-procedure reference to Step 1**
 
@@ -240,7 +282,7 @@ Replace with:
 
 - [ ] **Step 2: Insert the sub-procedure section**
 
-Find in the file:
+Find in the file (the blank line + dashes + blank line + Defaults heading block is unique):
 ```
 
 ---
@@ -248,7 +290,7 @@ Find in the file:
 ## Defaults
 ```
 
-Replace with (note: three dashes on their own line before and after the new section):
+Replace with:
 ```
 
 ---
@@ -261,7 +303,7 @@ Invoke whenever Playwright lands on a JumpCloud SSO challenge page (URL matches 
    - If a visible "Verification Code" input field is present → proceed to step 2.
    - If only a "Send Push" button is visible → click the "Try another way" / "Use authenticator code" link to reveal the TOTP input, then proceed.
    - If neither is available → abort with the error: `"JumpCloud MFA page shows no TOTP option — change default factor at console.jumpcloud.com/userconsole → Security → Multi-Factor Authentication"`.
-2. **Retrieve a current code.** Run `~/.claude/scripts/jumpcloud-totp.sh` as a subprocess. Capture stdout. If exit code is non-zero, abort and surface the helper's stderr verbatim (it includes the remediation command).
+2. **Retrieve a current code.** Run `~/.claude/scripts/jumpcloud-totp.py` as a subprocess. Capture stdout. If exit code is non-zero, abort and surface the helper's stderr verbatim (it includes the remediation command).
 3. **Submit.** Type the 6-digit code into the Verification Code input, then click the Submit/Verify button.
 4. **Verify success.** Wait up to 10 seconds for the page to redirect away from `sso.jumpcloud.com`.
 5. **Handle rejection (retry once).** If the page re-renders with an "invalid code" error:
@@ -280,10 +322,10 @@ Invoke whenever Playwright lands on a JumpCloud SSO challenge page (URL matches 
 
 Run:
 ```bash
-grep -n "JumpCloud MFA Sub-procedure\|JumpCloud SSO page" ~/.claude/commands/hendricks-pb-report.md
+grep -cn "JumpCloud MFA Sub-procedure\|JumpCloud SSO page" ~/.claude/commands/hendricks-pb-report.md
 ```
 
-Expected output: at least two matching lines (one in Step 1 reference, one in the sub-procedure header).
+Expected output: at least `2` (one Step 1 reference + one sub-procedure header).
 
 ---
 
@@ -308,7 +350,7 @@ Find in the file:
 
 Replace with:
 ```
-4. **TOTP helper ready** — verify `oathtool` is on PATH (`command -v oathtool`) and the Keychain entry exists (`security find-generic-password -s jumpcloud-totp -a jcrawley` returns 0). If either check fails, abort with the remediation command shown by the helper error (see JumpCloud MFA Sub-procedure).
+4. **TOTP helper ready** — verify `python3` is on PATH (`command -v python3`) and the Keychain entry exists (`security find-generic-password -s jumpcloud-totp -a jcrawley` returns 0). If either check fails, abort with the remediation command shown by the helper error (see JumpCloud MFA Sub-procedure).
 ```
 
 - [ ] **Step 3: Verify the edit**
@@ -325,9 +367,9 @@ Expected output: one matching line.
 ### Task 5: Nalley skill — add JumpCloud MFA Sub-procedure + Step 1 and Step 2 references
 
 **Files:**
-- Modify: `~/.claude/commands/nalley-pb-report.md:33-39` (Step 1 — Tableau)
-- Modify: `~/.claude/commands/nalley-pb-report.md:41-46` (Step 2 — admin.cars.com)
-- Modify: `~/.claude/commands/nalley-pb-report.md:88-89` (before `## Defaults`) — insert new `## JumpCloud MFA Sub-procedure` section
+- Modify: `~/.claude/commands/nalley-pb-report.md` Step 1 (add sub-procedure reference)
+- Modify: `~/.claude/commands/nalley-pb-report.md` Step 2 (add sub-procedure reference)
+- Modify: `~/.claude/commands/nalley-pb-report.md` before `## Defaults` (insert new sub-procedure section)
 
 - [ ] **Step 1: Add sub-procedure reference to Step 1 — Tableau**
 
@@ -378,7 +420,7 @@ Invoke whenever Playwright lands on a JumpCloud SSO challenge page (URL matches 
    - If a visible "Verification Code" input field is present → proceed to step 2.
    - If only a "Send Push" button is visible → click the "Try another way" / "Use authenticator code" link to reveal the TOTP input, then proceed.
    - If neither is available → abort with the error: `"JumpCloud MFA page shows no TOTP option — change default factor at console.jumpcloud.com/userconsole → Security → Multi-Factor Authentication"`.
-2. **Retrieve a current code.** Run `~/.claude/scripts/jumpcloud-totp.sh` as a subprocess. Capture stdout. If exit code is non-zero, abort and surface the helper's stderr verbatim (it includes the remediation command).
+2. **Retrieve a current code.** Run `~/.claude/scripts/jumpcloud-totp.py` as a subprocess. Capture stdout. If exit code is non-zero, abort and surface the helper's stderr verbatim (it includes the remediation command).
 3. **Submit.** Type the 6-digit code into the Verification Code input, then click the Submit/Verify button.
 4. **Verify success.** Wait up to 10 seconds for the page to redirect away from `sso.jumpcloud.com`.
 5. **Handle rejection (retry once).** If the page re-renders with an "invalid code" error:
@@ -467,12 +509,8 @@ Note the current `Hour`, `Minute`, and `Weekday` values. You will restore them i
 
 - [ ] **Step 2: Set a one-off trigger ~5 minutes in the future**
 
-Calculate the target time: current UTC + ~5 minutes rounded to next minute boundary.
-
-Run (replace `<HOUR>` and `<MINUTE>` with the target values, no leading zeros):
+Calculate the target time:
 ```bash
-# Example: if it's 14:23 local, set Minute=28.
-# Use `date -v +5M` to get +5 min, then note the hour/minute.
 date -v +5M "+%H %M"
 ```
 
@@ -558,7 +596,7 @@ Let the workflow continue through Step 3 QC and Step 4 Gmail draft. Confirm the 
 
 - [ ] **Step 5: Record the MFA count in a memory note**
 
-If the MFA fired **twice** (no cookie carryover), note this in a new memory entry — it affects the Nalley failure surface area. If it fired **once** (cookie carryover), note that too. Useful for the next time the workflow breaks:
+If the MFA fired **twice** (no cookie carryover), note this in a new memory entry. If it fired **once** (cookie carryover), note that too:
 
 ```bash
 cat <<'EOF' > ~/.claude/projects/-Users-jcrawley/memory/reference_nalley_mfa_count.md
@@ -600,7 +638,7 @@ Expected output: a "password has been deleted" confirmation.
 
 Run:
 ```bash
-~/.claude/scripts/jumpcloud-totp.sh; echo "exit=$?"
+~/.claude/scripts/jumpcloud-totp.py; echo "exit=$?"
 ```
 
 Expected output on stderr:
@@ -621,7 +659,7 @@ Expected: the skill reports Step 0 failure with the helper's error message, and 
 
 - [ ] **Step 4: Restore the Keychain entry**
 
-Run (replace `<BASE32_SEED>` with the seed from Task 0 Step 3; you should still have it in 1Password):
+Run (replace `<BASE32_SEED>` with the seed from Task 0 Step 2; you should still have it in 1Password):
 ```bash
 security add-generic-password -s jumpcloud-totp -a jcrawley -w '<BASE32_SEED>' -U
 ```
@@ -630,7 +668,7 @@ security add-generic-password -s jumpcloud-totp -a jcrawley -w '<BASE32_SEED>' -
 
 Run:
 ```bash
-~/.claude/scripts/jumpcloud-totp.sh | grep -E '^[0-9]{6}$' && echo "restored OK"
+~/.claude/scripts/jumpcloud-totp.py | grep -E '^[0-9]{6}$' && echo "restored OK"
 ```
 
 Expected output: a 6-digit code and `restored OK`.
@@ -641,18 +679,18 @@ Expected output: a 6-digit code and `restored OK`.
 
 | Spec section | Implementing task(s) |
 |---|---|
-| One-time setup (Reset + Keychain + brew) | Task 0 |
-| Helper script contract + pseudocode | Task 1 |
+| One-time setup (JumpCloud reset + Keychain) | Task 0 |
+| Helper script contract + Python implementation | Task 1 |
 | Skill Step 0 expansion (Hendrick) | Task 2 |
 | JumpCloud MFA Sub-procedure (Hendrick) | Task 3 |
 | Skill Step 0 expansion (Nalley) | Task 4 |
 | JumpCloud MFA Sub-procedure (Nalley), dual-reference | Task 5 |
 | launchd plists unchanged | (no task — spec says no changes) |
-| Testing Plan §1 (helper unit-ish) | Task 1 Step 5–6 |
+| Testing Plan §1 (helper unit-ish) | Task 1 Steps 6–7 |
 | Testing Plan §2 (live attended — Hendrick) | Task 6 |
 | Testing Plan §3 (unattended dry run) | Task 7 |
 | Testing Plan §4 (Nalley parity + double-MFA) | Task 8 |
 | Testing Plan §5 (rollback test) | Task 9 |
-| Rollback (file restore from /tmp backups) | Task 1 Step 7, Task 2 Step 1, Task 4 Step 1 |
+| Rollback (file restore from /tmp backups) | Task 1 Step 8, Task 2 Step 1, Task 4 Step 1 |
 
 No spec requirements are unassigned to a task.
