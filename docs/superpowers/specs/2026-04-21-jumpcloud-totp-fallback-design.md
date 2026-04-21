@@ -90,23 +90,27 @@ Step 2+ — normal workflow (CSV → sheet → Gmail draft)
 """Emit a current JumpCloud TOTP code to stdout."""
 import base64, hmac, struct, subprocess, sys, time
 
+_WHITESPACE = str.maketrans("", "", " \t\n\r")
+
 def main() -> int:
     try:
         seed = subprocess.check_output(
             ["security", "find-generic-password", "-s", "jumpcloud-totp", "-a", "jcrawley", "-w"],
             stderr=subprocess.DEVNULL,
         ).decode().strip()
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, FileNotFoundError):
         sys.stderr.write(
-            "jumpcloud-totp: Keychain entry jumpcloud-totp/jcrawley missing — "
+            "jumpcloud-totp: Keychain entry jumpcloud-totp/jcrawley missing (or `security` binary unavailable) — "
             "see ~/docs/superpowers/specs/2026-04-21-jumpcloud-totp-fallback-design.md "
             "§One-time setup\n"
         )
         return 2
     try:
-        key = base64.b32decode(seed.upper().replace(" ", ""))
-    except Exception as e:
-        sys.stderr.write(f"jumpcloud-totp: invalid base32 seed in Keychain: {e}\n")
+        key = base64.b32decode(seed.upper().translate(_WHITESPACE))
+    except Exception:
+        sys.stderr.write(
+            "jumpcloud-totp: invalid base32 seed in Keychain (check padding and that the seed contains only A-Z and 2-7)\n"
+        )
         return 3
     counter = int(time.time()) // 30
     digest = hmac.new(key, struct.pack(">Q", counter), "sha1").digest()
