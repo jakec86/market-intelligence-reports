@@ -79,10 +79,14 @@ Given the raw data below, produce a **Dealer Health Snapshot** using this format
 
 # ─── DATA SOURCES ────────────────────────────────────────────────────────────
 
-def fetch_salesforce(dealer_name: str) -> Optional[List[dict]]:
+SF_QUERY_BY_CCID = SF_QUERY.replace(
+    "WHERE Name LIKE '%{dealer}%'",
+    "WHERE CCID__c = '{ccid}'",
+).replace("LIMIT 20", "LIMIT 5")
+
+
+def _run_sf_query(query: str) -> Optional[List[dict]]:
     try:
-        safe_name = dealer_name.replace("'", "\\'")
-        query = SF_QUERY.format(dealer=safe_name)
         result = subprocess.run(
             [SF_CLI, "data", "query", "--query", query, "--json"],
             capture_output=True, text=True, timeout=30,
@@ -97,6 +101,16 @@ def fetch_salesforce(dealer_name: str) -> Optional[List[dict]]:
     except Exception as e:
         st.warning(f"Salesforce: {e}")
         return None
+
+
+def fetch_salesforce(dealer_name: str) -> Optional[List[dict]]:
+    safe_name = dealer_name.replace("'", "\\'")
+    return _run_sf_query(SF_QUERY.format(dealer=safe_name))
+
+
+def fetch_salesforce_by_ccid(ccid: str) -> Optional[List[dict]]:
+    safe_ccid = ccid.replace("'", "\\'")
+    return _run_sf_query(SF_QUERY_BY_CCID.format(ccid=safe_ccid))
 
 
 def build_data_context(
@@ -195,6 +209,11 @@ def _session_ok() -> bool:
 with st.sidebar:
     st.header("Configuration")
     dealer_name = st.text_input("Dealer Name", placeholder="e.g. Hendrick, Nalley Lexus Galleria")
+    ccid_override = st.text_input(
+        "CCID (optional)",
+        placeholder="Use when the name matches multiple accounts",
+        help="If provided, skips the name-based Salesforce lookup and uses this CCID directly.",
+    )
 
     st.subheader("Data Sources")
     use_sf = st.checkbox("Salesforce", value=True)
@@ -233,7 +252,7 @@ with st.sidebar:
     run = st.button(
         "Run Analysis",
         type="primary",
-        disabled=not dealer_name.strip() or not session_ok,
+        disabled=(not dealer_name.strip() and not ccid_override.strip()) or not session_ok,
     )
 
     st.divider()
@@ -244,34 +263,45 @@ with st.sidebar:
     )
 
 # Main area
-if run and dealer_name.strip():
+if run and (dealer_name.strip() or ccid_override.strip()):
     dealer_name = dealer_name.strip()
+    ccid_override = ccid_override.strip()
 
     sf_data = None
     perf_data = rep_data = mkt_data = None
     uuid = None
+
+    # Determine which CCID to use: override wins, otherwise derived from SF name lookup
+    effective_ccid = ccid_override or None
 
     status_cols = st.columns(2)
 
     with status_cols[0]:
         if use_sf:
             with st.spinner("Querying Salesforce..."):
-                sf_data = fetch_salesforce(dealer_name)
+                if effective_ccid:
+                    sf_data = fetch_salesforce_by_ccid(effective_ccid)
+                else:
+                    sf_data = fetch_salesforce(dealer_name)
                 if sf_data:
                     st.success(f"Salesforce: {len(sf_data)} account(s)")
                     ccids = [r.get("CCID__c") for r in sf_data if r.get("CCID__c")]
                     if ccids:
                         st.caption(f"CCIDs: {', '.join(ccids)}")
+                    # If no override, use the first CCID from the name lookup
+                    if not effective_ccid and ccids:
+                        effective_ccid = ccids[0]
+                    # Derive display name from the matched SF record
+                    if sf_data[0].get("Name"):
+                        dealer_name = sf_data[0]["Name"]
                 elif sf_data is not None:
                     st.info("Salesforce: no matches")
 
     with status_cols[1]:
         if use_admin:
-            # Resolve UUID from first CCID
-            ccids = [r.get("CCID__c") for r in (sf_data or []) if r.get("CCID__c")]
-            if ccids:
-                with st.spinner("Resolving dealer UUID..."):
-                    uuid = admin_cars.resolve_uuid(ccids[0])
+            if effective_ccid:
+                with st.spinner(f"Resolving dealer UUID for CCID {effective_ccid}..."):
+                    uuid = admin_cars.resolve_uuid(effective_ccid)
                 if not uuid:
                     st.warning("Dealer not found on admin.cars.com — analysis uses Salesforce data only.")
 
@@ -330,7 +360,7 @@ if run and dealer_name.strip():
 if "last_result" in st.session_state:
     result = st.session_state["last_result"]
 
-    if not (run and dealer_name.strip()):
+    if not (run and (dealer_name.strip() or ccid_override.strip())):
         st.subheader(f"Health Snapshot — {result['dealer']}")
         st.markdown(result["analysis"])
 
