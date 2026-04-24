@@ -91,6 +91,9 @@ class _Session:
     def fetch_sales_influence(self, uuid: str) -> Optional[dict]:
         return _fetch_sales_influence_on(self.page, uuid)
 
+    def fetch_roi_one_sheeter(self, uuid: str) -> Optional[dict]:
+        return _fetch_roi_one_sheeter_on(self.page, uuid)
+
 
 def check_session() -> bool:
     """Return True if admin.cars.com is reachable without SSO redirect.
@@ -755,4 +758,158 @@ def fetch_sales_influence(uuid: str) -> Optional[dict]:
     """One-shot fetch. Opens a tab, fetches, closes. Prefer `session()` for multi-fetch flows."""
     with session() as s:
         return _fetch_sales_influence_on(s.page, uuid)
+
+
+# ─── ROI One-Sheeter (lead source breakdown) ─────────────────────────────────
+# The "Connections" worksheet breaks out every connection type:
+# Website Transfers, Phone Lead - Used/New, Email Lead - *, Chat Event/Lead - Used/New,
+# Walk Ins, Map Views, Driving Directions, Instant Offer, etc.
+# We aggregate these into high-level categories for the dealer snapshot.
+
+_ROI_JS = """
+async () => {
+    const viz = document.querySelector('tableau-viz');
+    if (!viz || !viz.workbook) return null;
+    const sheet = viz.workbook.activeSheet;
+    const out = {};
+    for (const name of ['Connections', 'Impressions', 'Per VIN']) {
+        const ws = sheet.worksheets.find(w => w.name === name);
+        if (!ws) { out[name] = null; continue; }
+        try {
+            const d = await ws.getSummaryDataAsync({ maxRows: 100 });
+            out[name] = {
+                cols: d.columns.map(c => c.fieldName),
+                rows: d.data.map(r => r.map(c => c.formattedValue))
+            };
+        } catch(e) { out[name] = null; }
+    }
+    return out;
+}
+"""
+
+
+def _aggregate_lead_sources(entry) -> dict:
+    """Aggregate the fine-grained Connections worksheet into high-level lead-source buckets.
+    Returns {"phone", "email", "chat", "website_transfers", "walk_ins", "vdp_print",
+             "instant_offer", "total"} — all counts from the most-recent month."""
+    if not entry or not entry.get("rows"):
+        return {}
+    cols = entry["cols"]
+    try:
+        measure_idx = cols.index("Measure Names")
+        date_idx = cols.index("Begin date")
+        value_idx = cols.index("Measure Values")
+    except ValueError:
+        return {}
+
+    # Find the most-recent Begin date so we only aggregate the current month
+    from datetime import datetime
+    most_recent = None
+    for r in entry["rows"]:
+        if len(r) <= date_idx:
+            continue
+        try:
+            dt = datetime.strptime(r[date_idx], "%m/%d/%Y")
+        except (ValueError, TypeError):
+            continue
+        if most_recent is None or dt > most_recent:
+            most_recent = dt
+    if most_recent is None:
+        return {}
+    target_date = most_recent.strftime("%-m/%-d/%Y")
+
+    buckets = {"phone": 0.0, "email": 0.0, "chat": 0.0, "website_transfers": 0.0,
+               "walk_ins": 0.0, "vdp_print": 0.0, "instant_offer": 0.0, "other": 0.0}
+    for r in entry["rows"]:
+        if len(r) <= max(measure_idx, date_idx, value_idx):
+            continue
+        if r[date_idx] != target_date:
+            continue
+        measure = (r[measure_idx] or "").lower()
+        val = _parse_kpi(r[value_idx]) or 0.0
+        if val == 0:
+            continue
+        # Skip aggregated/subtotal rows (e.g. plain "Website Transfers" already summed)
+        # We want the leaf categories; de-duplicate by excluding the bare totals.
+        if measure == "website transfers":
+            # Use this as the total rather than summing sub-items to avoid double-counting
+            buckets["website_transfers"] = val
+        elif measure.startswith("website transfers -"):
+            continue  # already captured by 'website transfers' total
+        elif "phone lead" in measure:
+            buckets["phone"] += val
+        elif measure.startswith("email lead"):
+            # Avoid double-counting: 'Email Lead - Used' and 'Email Lead - New' are the top-level totals
+            # Sub-categories like 'Email Lead - Online Shopper - Used' are double-counted in Used; skip.
+            if measure in ("email lead - used", "email lead - new",
+                           "email lead - finance intent", "email lead - credit application",
+                           "email lead - prequalified"):
+                buckets["email"] += val
+        elif "chat lead" in measure or "chat event" in measure:
+            buckets["chat"] += val
+        elif "total walk ins" in measure or measure == "walk ins":
+            buckets["walk_ins"] = val
+        elif "vdp print" in measure:
+            buckets["vdp_print"] = val
+        elif "instant offer" in measure:
+            buckets["instant_offer"] += val
+        elif measure in ("map views", "driving directions"):
+            buckets["other"] += val
+
+    buckets["total"] = sum(v for k, v in buckets.items() if k != "total")
+    buckets["month"] = most_recent.strftime("%B %Y")
+    # Convert to ints for display tidiness
+    for k in list(buckets.keys()):
+        if k != "month" and isinstance(buckets[k], float):
+            buckets[k] = int(round(buckets[k]))
+    return buckets
+
+
+def _fetch_roi_one_sheeter_on(page, uuid: str) -> Optional[dict]:
+    """Navigate to ROI One-Sheeter and extract the lead-source breakdown + leads-per-VIN."""
+    try:
+        page.goto(
+            f"{ADMIN_URL}/dealers/{uuid}/reports/roi_one_sheeter",
+            timeout=TIMEOUT * 2,
+            wait_until="domcontentloaded",
+        )
+        if "admin.cars.com" not in page.url:
+            return None
+        page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
+        page.wait_for_timeout(12_000)
+
+        raw = page.evaluate(_ROI_JS)
+        if not raw:
+            return None
+
+        result: dict = {"lead_sources": _aggregate_lead_sources(raw.get("Connections"))}
+
+        # Pull Leads Per VIN (any non-null value; take the most recent)
+        per_vin = raw.get("Per VIN")
+        if per_vin and per_vin.get("rows"):
+            cols = per_vin["cols"]
+            try:
+                measure_idx = cols.index("Measure Names")
+                value_idx = cols.index("Measure Values")
+            except ValueError:
+                measure_idx = value_idx = None
+            if measure_idx is not None:
+                for row in per_vin["rows"]:
+                    if (row[measure_idx] or "").lower() == "leads per vin":
+                        val = _parse_kpi(row[value_idx])
+                        if val is not None:
+                            result["leads_per_vin"] = val
+                            break
+
+        if not result.get("lead_sources"):
+            return None
+        return result
+    except Exception:
+        return None
+
+
+def fetch_roi_one_sheeter(uuid: str) -> Optional[dict]:
+    """One-shot fetch. Opens a tab, fetches, closes. Prefer `session()` for multi-fetch flows."""
+    with session() as s:
+        return _fetch_roi_one_sheeter_on(s.page, uuid)
 

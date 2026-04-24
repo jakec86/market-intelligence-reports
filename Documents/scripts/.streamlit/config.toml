@@ -1,0 +1,10 @@
+[theme]
+# Cars.com brand palette
+primaryColor = "#5b2d8e"          # Cars.com purple
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F1F9"  # tinted purple for sidebar
+textColor = "#1A1A1A"
+font = "sans serif"
+
+[server]
+headless = true

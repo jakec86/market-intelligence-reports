@@ -67,14 +67,14 @@ Format each as a bold headline + one-line supporting data point. Max 4 findings.
 
 ### 🚀 Growth Opportunities
 
-Ranked by impact. Format each as a callout card:
+Up to 3 opportunities, ranked by impact. Keep each to 3 lines — no blockquote callouts, no headers within the bullet. Use this exact format:
 
-**1. [Opportunity headline in bold]**
-> **Action:** what to do (specific, vehicle/segment/price-range level when possible)
-> **Expected lift:** quantified outcome (e.g. "+X% VDPs" or "$Y additional revenue")
-> **How we'd measure:** the metric that should move
+**1. [Headline — one bold phrase]**
+- Action: specific move (name vehicles, stock numbers, price points)
+- Expected lift: quantified outcome ("+X% VDPs" or "$Y/mo additional revenue")
+- Measure: the metric that should move
 
-Repeat for up to 3 opportunities.
+Leave one blank line between opportunities.
 
 ---
 
@@ -88,7 +88,7 @@ Short bulleted list. For each, bold the metric and state the direction in plain 
 
 ### 📋 Data Gaps
 
-Bulleted list of what's missing that would strengthen the analysis. Keep it short.
+Only mention ONE thing here: **DMS connectivity status** (connected or not connected). If DMS is not connected, note it as the key gap that would unlock GROI/Turn Rate and influenced-sales data. If DMS IS connected, note nothing in this section or skip it entirely.
 
 ## Rules
 
@@ -101,11 +101,12 @@ Bulleted list of what's missing that would strengthen the analysis. Keep it shor
 - **Fair/Above Badge %** is the primary merchandising proxy (not SRP volume).
 - **Inventory metrics shown are monthly averages** (not point-in-time), so frame trend language accordingly ("average inventory rose by..." not "current inventory is...").
 - **Stock-type (Used/New) split** is in the Listings Optimizer Performance Snapshot — if one stock type is aging much faster than the other, that's a specific finding worth calling out.
-- **Data gap guidance — do NOT list these in the Data Gaps section, they're architectural/not available:**
-    - Review ratings by platform (Google/Facebook/DealerRater) — admin.cars.com only exposes Cars.com ratings
-    - GROI / Turn Rate — these require a DMS feed; if the Sales Influence section says "No DMS connected", note it once as context and move on
-    - Competitor pricing at the model/trim level — the Market Comparison we have IS that data; per-YMMT detail is in the raw Demand Signals Price Comparison CSV if needed, and the "Within $500 of [Good/Great] Badge" lists already surface the per-vehicle pricing opportunities
-    - Lead-source breakdown and competitive-set performance — available in the ROI One-Sheeter and Competitive Set reports but not pulled today (acceptable to mention these as future additions if truly needed to complete an opportunity)
+- **Data gap guidance — the ONLY allowable gap is DMS connectivity. Do NOT list these others as gaps (they're architectural limitations, not addressable data gaps):**
+    - Platform-specific review ratings (Google/Facebook/DealerRater) — admin.cars.com only exposes Cars.com ratings, by design
+    - Full badge distribution for New inventory — Cars.com does not badge New inventory, so Not-Badged counts for New vehicles are expected; do not treat as a gap
+    - Competitor pricing at the model/trim level — the Market Comparison data IS this, and the "Within $500 of Good/Great Badge" lists give per-vehicle pricing opportunities
+    - Monthly inventory trend — the MoM % delta captures month-over-month movement; don't ask for a 9-month chart
+    - Competitive-set performance — not pulled today; do not flag as a gap
 - If data is limited, score what you can and clearly note what's estimated vs. data-backed.
 - Be concise and direct — this is for busy account teams.
 - All MoM deltas are percentage changes vs. prior month."""
@@ -186,6 +187,7 @@ def build_data_context(
     sub_data: Optional[List[dict]] = None,
     lo_data: Optional[dict] = None,
     si_data: Optional[dict] = None,
+    roi_data: Optional[dict] = None,
 ) -> str:
     parts = [f"# Data for: {dealer_name}\n"]
 
@@ -343,6 +345,30 @@ def build_data_context(
                     else:
                         parts.append(f"- {metric_name}: {val:,.0f}")
 
+    # ROI One-Sheeter — lead source breakdown
+    if roi_data and roi_data.get("lead_sources"):
+        ls = roi_data["lead_sources"]
+        parts.append(f"\n## Lead Source Breakdown (ROI One-Sheeter — {ls.get('month', 'current month')})")
+        mapping = [
+            ("Phone leads", "phone"),
+            ("Email leads", "email"),
+            ("Chat (leads + events)", "chat"),
+            ("Website transfers (to DI site)", "website_transfers"),
+            ("Walk-ins", "walk_ins"),
+            ("Instant Offer (trade-in requests)", "instant_offer"),
+            ("VDP Print", "vdp_print"),
+            ("Map views / directions", "other"),
+        ]
+        total = ls.get("total") or 0
+        for label, key in mapping:
+            val = ls.get(key) or 0
+            if val:
+                share = (val / total * 100) if total else 0
+                parts.append(f"- {label}: **{val}** ({share:.0f}% of connections)")
+        parts.append(f"- **Total connections this month: {total}**")
+        if roi_data.get("leads_per_vin") is not None:
+            parts.append(f"- Leads per VIN: {roi_data['leads_per_vin']:.2f}")
+
     # Sales Influence Summary (DMS-backed GROI / Turn — only when DMS is connected)
     if si_data:
         parts.append("\n## Sales Influence Summary (admin.cars.com — DMS-backed)")
@@ -368,11 +394,31 @@ def build_data_context(
 
 # ─── UI ──────────────────────────────────────────────────────────────────────
 
-st.set_page_config(page_title="Dealer Health Dashboard", layout="wide")
+st.set_page_config(
+    page_title="Cars.com | Dealer Health Dashboard",
+    page_icon="🚗",
+    layout="wide",
+)
 
+# Cars.com-branded header with tighter spacing and purple accent
 st.markdown(
-    "<h1 style='margin-bottom:0'>Dealer Health Dashboard</h1>"
-    "<p style='color:#888; margin-top:0'>Self-serve health snapshots powered by the Dealer Growth Triangle</p>",
+    """
+    <style>
+      /* Tighten top padding so content starts near the header */
+      .block-container { padding-top: 2.2rem; }
+      /* Hide the default running-man / "Running…" toast to keep the page calm */
+      div[data-testid="stStatusWidget"] { visibility: hidden; }
+      /* Branded accent bar */
+      .cc-accent { height: 4px; background: linear-gradient(90deg, #5b2d8e 0%, #8b5fbf 100%); margin: -0.25rem 0 1rem 0; border-radius: 2px; }
+      .cc-brand { font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: #5b2d8e; font-weight: 700; }
+      .cc-title { font-size: 2.0rem; font-weight: 700; color: #1A1A1A; margin: 0; line-height: 1.15; }
+      .cc-sub { color: #6b6b6b; font-size: 0.95rem; margin: 0.15rem 0 0.25rem 0; }
+    </style>
+    <div class="cc-brand">Cars.com · Growth Insights</div>
+    <h1 class="cc-title">Dealer Health Dashboard</h1>
+    <p class="cc-sub">Health snapshots powered by the Dealer Growth Triangle</p>
+    <div class="cc-accent"></div>
+    """,
     unsafe_allow_html=True,
 )
 
@@ -444,99 +490,112 @@ if run and (dealer_name.strip() or ccid_override.strip()):
 
     sf_data = None
     sub_data = None
-    perf_data = rep_data = mkt_data = lo_data = si_data = None
+    perf_data = rep_data = mkt_data = lo_data = si_data = roi_data = None
     uuid = None
 
     # Determine which CCID to use: override wins, otherwise derived from SF name lookup
     effective_ccid = ccid_override or None
 
-    status_cols = st.columns(2)
+    # Single unified progress indicator — all status chatter goes into this one container,
+    # which we clear once the snapshot is ready so the user is not left with tiles they
+    # already scanned past.
+    progress = st.empty()
 
-    with status_cols[0]:
-        if use_sf:
-            with st.spinner("Querying Salesforce..."):
-                if effective_ccid:
-                    sf_data = fetch_salesforce_by_ccid(effective_ccid)
+    def _progress(msg):
+        progress.markdown(
+            f"<div style='color:#5b2d8e;font-size:0.9rem;'>⏳ {msg}</div>",
+            unsafe_allow_html=True,
+        )
+
+    source_summary = []  # populated while fetching, shown in a small expander below the snapshot
+
+    if use_sf:
+        _progress("Querying Salesforce…")
+        if effective_ccid:
+            sf_data = fetch_salesforce_by_ccid(effective_ccid)
+        else:
+            sf_data = fetch_salesforce(dealer_name)
+        if sf_data:
+            ccids = [r.get("CCID__c") for r in sf_data if r.get("CCID__c")]
+            if not effective_ccid and ccids:
+                effective_ccid = ccids[0]
+            if sf_data[0].get("Name"):
+                dealer_name = sf_data[0]["Name"]
+            source_summary.append(f"Salesforce: {len(sf_data)} account · CCID {effective_ccid}")
+        elif sf_data is not None:
+            source_summary.append("Salesforce: no matches")
+
+        if sf_data and sf_data[0].get("Id"):
+            _progress("Pulling active marketplace subscriptions…")
+            sub_data = fetch_subscriptions(sf_data[0]["Id"])
+            if sub_data:
+                total = sum(float(s.get("SBQQ__NetPrice__c") or 0) for s in sub_data)
+                source_summary.append(f"Subscriptions: {len(sub_data)} active · ${total:,.0f}/mo")
+            else:
+                source_summary.append("Subscriptions: none active")
+
+    if use_admin and effective_ccid:
+        _progress("Opening admin.cars.com (single tab) and resolving dealer UUID…")
+        with admin_cars.session() as admin:
+            uuid = admin.resolve_uuid(effective_ccid)
+            if not uuid:
+                source_summary.append("admin.cars.com: dealer UUID not found")
+            else:
+                _progress("Pulling Performance Trends…")
+                perf_data = admin.fetch_performance_trends(uuid)
+                if perf_data:
+                    metric_count = sum(1 for v in perf_data.values() if v is not None)
+                    source_summary.append(f"Performance Trends: {metric_count} metrics")
+
+                _progress("Pulling Reputation Health…")
+                rep_data = admin.fetch_reputation(uuid)
+                if rep_data and rep_data.get("rating"):
+                    source_summary.append(f"Reputation: {rep_data['rating']}★")
+
+                _progress("Pulling Market Comparison (Demand Signals)…")
+                mkt_data = admin.fetch_market_comparison(uuid)
+                if mkt_data:
+                    source_summary.append(f"Market Comparison: {mkt_data['at_pct']}% at market")
+
+                _progress("Pulling Listings Optimizer (badge impact + pricing ops)…")
+                lo_data = admin.fetch_listings_optimizer(uuid)
+                if lo_data:
+                    n_ops = len(lo_data.get("within_500_good", [])) + len(lo_data.get("within_500_great", []))
+                    source_summary.append(f"Listings Optimizer: {n_ops} pricing opps")
+
+                _progress("Pulling ROI One-Sheeter (lead source breakdown)…")
+                roi_data = admin.fetch_roi_one_sheeter(uuid)
+                if roi_data and roi_data.get("lead_sources"):
+                    source_summary.append(
+                        f"Lead sources: {roi_data['lead_sources'].get('total', 0)} connections"
+                    )
+
+                _progress("Checking Sales Influence / DMS connectivity…")
+                si_data = admin.fetch_sales_influence(uuid)
+                if si_data and si_data.get("dms_connected"):
+                    source_summary.append("DMS: connected (influenced-sales data available)")
                 else:
-                    sf_data = fetch_salesforce(dealer_name)
-                if sf_data:
-                    st.success(f"Salesforce: {len(sf_data)} account(s)")
-                    ccids = [r.get("CCID__c") for r in sf_data if r.get("CCID__c")]
-                    if ccids:
-                        st.caption(f"CCIDs: {', '.join(ccids)}")
-                    # If no override, use the first CCID from the name lookup
-                    if not effective_ccid and ccids:
-                        effective_ccid = ccids[0]
-                    # Derive display name from the matched SF record
-                    if sf_data[0].get("Name"):
-                        dealer_name = sf_data[0]["Name"]
-                elif sf_data is not None:
-                    st.info("Salesforce: no matches")
+                    source_summary.append("DMS: not connected")
 
-            # Pull Live Products / marketplace subscriptions for the matched account
-            if sf_data and sf_data[0].get("Id"):
-                with st.spinner("Fetching Live Products (subscriptions)..."):
-                    sub_data = fetch_subscriptions(sf_data[0]["Id"])
-                if sub_data:
-                    total = sum(float(s.get("SBQQ__NetPrice__c") or 0) for s in sub_data)
-                    st.success(f"Subscriptions: {len(sub_data)} active (${total:,.0f})")
-                else:
-                    st.info("Subscriptions: no active products")
-
-    with status_cols[1]:
-        if use_admin and effective_ccid:
-            # Single session = single browser tab reused across all admin.cars.com fetches
-            with admin_cars.session() as admin:
-                with st.spinner(f"Resolving dealer UUID for CCID {effective_ccid}..."):
-                    uuid = admin.resolve_uuid(effective_ccid)
-                if not uuid:
-                    st.warning("Dealer not found on admin.cars.com — analysis uses Salesforce data only.")
-                else:
-                    with st.spinner("Fetching Performance Trends..."):
-                        perf_data = admin.fetch_performance_trends(uuid)
-                    if perf_data:
-                        metric_count = sum(1 for v in perf_data.values() if v is not None)
-                        st.success(f"Performance Trends: ✓ {metric_count} metrics")
-                    else:
-                        st.warning("Performance Trends: no data")
-
-                    with st.spinner("Fetching Reputation..."):
-                        rep_data = admin.fetch_reputation(uuid)
-                    if rep_data and rep_data.get("rating"):
-                        st.success(f"Reputation: ✓ {rep_data['rating']}★")
-                    else:
-                        st.info("Reputation: skipped")
-
-                    with st.spinner("Fetching Market Comparison..."):
-                        mkt_data = admin.fetch_market_comparison(uuid)
-                    if mkt_data:
-                        st.success(f"Market Comparison: ✓ {mkt_data['at_pct']}% At Market")
-                    else:
-                        st.info("Market Comparison: skipped")
-
-                    with st.spinner("Fetching Listings Optimizer (badge impact + pricing ops)..."):
-                        lo_data = admin.fetch_listings_optimizer(uuid)
-                    if lo_data:
-                        n_ops = len(lo_data.get("within_500_good", [])) + len(lo_data.get("within_500_great", []))
-                        st.success(f"Listings Optimizer: ✓ {n_ops} pricing opportunities")
-                    else:
-                        st.info("Listings Optimizer: skipped")
-
-                    with st.spinner("Fetching Sales Influence Summary (DMS-backed)..."):
-                        si_data = admin.fetch_sales_influence(uuid)
-                    if si_data and si_data.get("dms_connected"):
-                        st.success(f"Sales Influence: ✓ DMS connected")
-                    else:
-                        st.info("Sales Influence: no DMS feed")
-
-    st.divider()
+    _progress("Generating health snapshot…")
 
     data_context = build_data_context(
-        dealer_name, sf_data, perf_data, rep_data, mkt_data, sub_data, lo_data, si_data
+        dealer_name=dealer_name,
+        sf_data=sf_data,
+        perf_data=perf_data,
+        rep_data=rep_data,
+        mkt_data=mkt_data,
+        sub_data=sub_data,
+        lo_data=lo_data,
+        si_data=si_data,
+        roi_data=roi_data,
     )
 
     # Note: Claude's output renders its own "### 📊 Health Snapshot — [Dealer]" heading
     # per the system prompt, so no st.subheader() here to avoid duplication.
+    # Clear the progress indicator and show the snapshot
+    progress.empty()
+
     client = anthropic.Anthropic()
     with st.container():
         response_text = ""
@@ -551,6 +610,12 @@ if run and (dealer_name.strip() or ccid_override.strip()):
                 response_text += text
                 placeholder.markdown(response_text)
 
+    # Compact data-source summary — collapsed by default so the snapshot is the hero
+    if source_summary:
+        with st.expander(f"Data sources pulled · {len(source_summary)} checks", expanded=False):
+            for line in source_summary:
+                st.markdown(f"- {line}")
+
     st.session_state["last_result"] = {
         "dealer": dealer_name,
         "analysis": response_text,
@@ -561,6 +626,8 @@ if run and (dealer_name.strip() or ccid_override.strip()):
         "mkt_data": mkt_data,
         "lo_data": lo_data,
         "si_data": si_data,
+        "roi_data": roi_data,
+        "source_summary": source_summary,
     }
 
 # Show raw data from last run
@@ -596,13 +663,16 @@ if "last_result" in st.session_state:
         with col3:
             st.caption("Market Comparison")
             st.json(result.get("mkt_data") or {})
-        col4, col5 = st.columns(2)
+        col4, col5, col6 = st.columns(3)
         with col4:
             st.caption("Listings Optimizer")
             st.json(result.get("lo_data") or {})
         with col5:
             st.caption("Sales Influence")
             st.json(result.get("si_data") or {})
+        with col6:
+            st.caption("ROI One-Sheeter")
+            st.json(result.get("roi_data") or {})
 
 elif not run:
     st.info("Enter a dealer name in the sidebar and click **Run Analysis** to generate a health snapshot.")
