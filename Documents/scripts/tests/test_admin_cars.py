@@ -44,15 +44,23 @@ def test_resolve_uuid_returns_none_when_not_found():
     assert result is None
 
 
-def test_resolve_uuid_returns_none_when_redirected_off_admin_cars():
-    """resolve_uuid() returns None when the search redirects off admin.cars.com."""
-    with patch("admin_cars._get_context") as mock_ctx:
-        mock_page = MagicMock()
-        mock_page.url = "https://console.jumpcloud.com/userconsole#/?error=policyDenial"
-        mock_page.content.return_value = "<html>denied</html>"
-        mock_ctx.return_value.__enter__ = lambda s: MagicMock(new_page=lambda: mock_page)
-        mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
-        assert admin_cars.resolve_uuid("109754") is None
+def test_resolve_uuid_on_returns_none_when_redirected_off_admin_cars():
+    """_resolve_uuid_on() returns None when the search page redirects off admin.cars.com."""
+    mock_page = MagicMock()
+    mock_page.url = "https://console.jumpcloud.com/userconsole#/?error=policyDenial"
+    mock_page.content.return_value = "<html>denied</html>"
+    assert admin_cars._resolve_uuid_on(mock_page, "109754") is None
+
+
+def test_resolve_uuid_on_returns_uuid_from_valid_page():
+    """_resolve_uuid_on() extracts the UUID when admin.cars.com responds normally."""
+    mock_page = MagicMock()
+    mock_page.url = "https://admin.cars.com/dealers/all/reports?query=109754"
+    mock_page.content.return_value = (
+        '<a href="/dealers/156f9bb7-3c44-549c-b16b-0c3af73fdb1f/reports/performance_trends">'
+        'Nalley Lexus Galleria</a>'
+    )
+    assert admin_cars._resolve_uuid_on(mock_page, "109754") == "156f9bb7-3c44-549c-b16b-0c3af73fdb1f"
 
 
 def test_parse_kpi_value_strips_currency_and_percent():

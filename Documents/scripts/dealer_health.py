@@ -398,35 +398,35 @@ if run and (dealer_name.strip() or ccid_override.strip()):
                     st.info("Subscriptions: no active products")
 
     with status_cols[1]:
-        if use_admin:
-            if effective_ccid:
+        if use_admin and effective_ccid:
+            # Single session = single browser tab reused across all admin.cars.com fetches
+            with admin_cars.session() as admin:
                 with st.spinner(f"Resolving dealer UUID for CCID {effective_ccid}..."):
-                    uuid = admin_cars.resolve_uuid(effective_ccid)
+                    uuid = admin.resolve_uuid(effective_ccid)
                 if not uuid:
                     st.warning("Dealer not found on admin.cars.com — analysis uses Salesforce data only.")
-
-            if uuid:
-                with st.spinner("Fetching Performance Trends..."):
-                    perf_data = admin_cars.fetch_performance_trends(uuid)
-                if perf_data:
-                    metric_count = sum(1 for v in perf_data.values() if v is not None)
-                    st.success(f"Performance Trends: ✓ {metric_count} metrics")
                 else:
-                    st.warning("Performance Trends: no data")
+                    with st.spinner("Fetching Performance Trends..."):
+                        perf_data = admin.fetch_performance_trends(uuid)
+                    if perf_data:
+                        metric_count = sum(1 for v in perf_data.values() if v is not None)
+                        st.success(f"Performance Trends: ✓ {metric_count} metrics")
+                    else:
+                        st.warning("Performance Trends: no data")
 
-                with st.spinner("Fetching Reputation..."):
-                    rep_data = admin_cars.fetch_reputation(uuid)
-                if rep_data and rep_data.get("rating"):
-                    st.success(f"Reputation: ✓ {rep_data['rating']}★")
-                else:
-                    st.info("Reputation: skipped")
+                    with st.spinner("Fetching Reputation..."):
+                        rep_data = admin.fetch_reputation(uuid)
+                    if rep_data and rep_data.get("rating"):
+                        st.success(f"Reputation: ✓ {rep_data['rating']}★")
+                    else:
+                        st.info("Reputation: skipped")
 
-                with st.spinner("Fetching Market Comparison..."):
-                    mkt_data = admin_cars.fetch_market_comparison(uuid)
-                if mkt_data:
-                    st.success(f"Market Comparison: ✓ {mkt_data['at_pct']}% At Market")
-                else:
-                    st.info("Market Comparison: skipped")
+                    with st.spinner("Fetching Market Comparison..."):
+                        mkt_data = admin.fetch_market_comparison(uuid)
+                    if mkt_data:
+                        st.success(f"Market Comparison: ✓ {mkt_data['at_pct']}% At Market")
+                    else:
+                        st.info("Market Comparison: skipped")
 
     st.divider()
 

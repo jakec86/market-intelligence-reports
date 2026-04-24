@@ -29,7 +29,11 @@ TIMEOUT = 20_000  # ms
 
 @contextmanager
 def _get_context():
-    """Connect to the user's running Chrome via CDP and yield its default context."""
+    """Connect to the user's running Chrome via CDP and yield its default context.
+
+    Kept for the one-shot `check_session()` probe — multi-step flows should
+    use `session()` instead so all navigations reuse a single tab.
+    """
     with sync_playwright() as pw:
         browser = pw.chromium.connect_over_cdp(CDP_ENDPOINT)
         try:
@@ -40,13 +44,66 @@ def _get_context():
             browser.close()
 
 
+@contextmanager
+def session():
+    """Yield a single reusable Playwright page connected via CDP.
+
+    All fetches inside a `with session() as s:` block reuse the same tab —
+    the tab opens once at the start, navigates between admin.cars.com
+    reports, and closes when the block exits. Gives a single-interruption UX
+    instead of one new tab per fetch.
+    """
+    with sync_playwright() as pw:
+        browser = pw.chromium.connect_over_cdp(CDP_ENDPOINT)
+        ctx = browser.contexts[0] if browser.contexts else browser.new_context()
+        page = ctx.new_page()
+        try:
+            yield _Session(page)
+        finally:
+            try:
+                page.close()
+            except Exception:
+                pass
+            browser.close()
+
+
+class _Session:
+    """Thin wrapper exposing the fetch functions as methods sharing one page."""
+
+    def __init__(self, page):
+        self.page = page
+
+    def resolve_uuid(self, ccid: str) -> Optional[str]:
+        return _resolve_uuid_on(self.page, ccid)
+
+    def fetch_performance_trends(self, uuid: str) -> Optional[dict]:
+        return _fetch_performance_trends_on(self.page, uuid)
+
+    def fetch_reputation(self, uuid: str) -> Optional[dict]:
+        return _fetch_reputation_on(self.page, uuid)
+
+    def fetch_market_comparison(self, uuid: str) -> Optional[dict]:
+        return _fetch_market_comparison_on(self.page, uuid)
+
+
 def check_session() -> bool:
-    """Return True if admin.cars.com is reachable without SSO redirect."""
+    """Return True if admin.cars.com is reachable without SSO redirect.
+
+    Uses a one-shot page because this is called on every Streamlit rerender
+    (through an `@st.cache_data(ttl=300)` wrapper) and we don't want the
+    session check to hold the tab open.
+    """
     try:
         with _get_context() as ctx:
             page = ctx.new_page()
-            page.goto(f"{ADMIN_URL}/dealers/all/reports", timeout=TIMEOUT, wait_until="domcontentloaded")
-            return "admin.cars.com" in page.url
+            try:
+                page.goto(f"{ADMIN_URL}/dealers/all/reports", timeout=TIMEOUT, wait_until="domcontentloaded")
+                return "admin.cars.com" in page.url
+            finally:
+                try:
+                    page.close()
+                except Exception:
+                    pass
     except Exception:
         return False
 
@@ -57,21 +114,25 @@ def _extract_uuid_from_html(html: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def resolve_uuid(ccid: str) -> Optional[str]:
-    """Resolve a CCID to an admin.cars.com dealer UUID via search."""
+def _resolve_uuid_on(page, ccid: str) -> Optional[str]:
+    """Navigate an existing page to search for the CCID and extract the UUID."""
     try:
-        with _get_context() as ctx:
-            page = ctx.new_page()
-            page.goto(
-                f"{ADMIN_URL}/dealers/all/reports?{urlencode({'query': ccid})}",
-                timeout=TIMEOUT,
-                wait_until="domcontentloaded",
-            )
-            if "admin.cars.com" not in page.url:
-                return None
-            return _extract_uuid_from_html(page.content())
+        page.goto(
+            f"{ADMIN_URL}/dealers/all/reports?{urlencode({'query': ccid})}",
+            timeout=TIMEOUT,
+            wait_until="domcontentloaded",
+        )
+        if "admin.cars.com" not in page.url:
+            return None
+        return _extract_uuid_from_html(page.content())
     except Exception:
         return None
+
+
+def resolve_uuid(ccid: str) -> Optional[str]:
+    """One-shot CCID → UUID resolver. Opens a tab, closes it when done."""
+    with session() as s:
+        return s.resolve_uuid(ccid)
 
 
 def _parse_kpi(raw: Optional[str]) -> Optional[float]:
@@ -205,52 +266,53 @@ def _extract_avg_days_live(cols, rows) -> dict:
     return {"cp": cp, "delta_pct": delta_pct}
 
 
-def fetch_performance_trends(uuid: str) -> Optional[dict]:
-    """
-    Navigate to Performance Trends for dealer UUID.
-    Returns flat dict with _cp and _delta_pct keys per KPI, or None on failure.
-    """
+def _fetch_performance_trends_on(page, uuid: str) -> Optional[dict]:
+    """Navigate an existing page to Performance Trends and extract KPI data."""
     try:
-        with _get_context() as ctx:
-            page = ctx.new_page()
-            page.goto(
-                f"{ADMIN_URL}/dealers/{uuid}/reports/performance_trends",
-                timeout=TIMEOUT * 2,
-                wait_until="domcontentloaded",
-            )
-            if "admin.cars.com" not in page.url:
-                return None
-            page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
-            page.wait_for_timeout(12_000)  # viz needs time to load workbook + worksheets
+        page.goto(
+            f"{ADMIN_URL}/dealers/{uuid}/reports/performance_trends",
+            timeout=TIMEOUT * 2,
+            wait_until="domcontentloaded",
+        )
+        if "admin.cars.com" not in page.url:
+            return None
+        page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
+        page.wait_for_timeout(12_000)  # viz needs time to load workbook + worksheets
 
-            raw = page.evaluate(_PERF_JS, list(_PT_KEY_MAP.keys()))
-            if not raw:
-                return None
+        raw = page.evaluate(_PERF_JS, list(_PT_KEY_MAP.keys()))
+        if not raw:
+            return None
 
-            result = {}
-            for ws_name, key in _PT_KEY_MAP.items():
-                entry = raw.get(ws_name)
-                if not entry:
-                    result[f"{key}_cp"] = None
-                    result[f"{key}_delta_pct"] = None
-                    continue
-                kpi = _extract_kpi(entry["cols"], entry["rows"])
-                result[f"{key}_cp"] = kpi["cp"]
-                result[f"{key}_delta_pct"] = kpi["delta_pct"]
+        result = {}
+        for ws_name, key in _PT_KEY_MAP.items():
+            entry = raw.get(ws_name)
+            if not entry:
+                result[f"{key}_cp"] = None
+                result[f"{key}_delta_pct"] = None
+                continue
+            kpi = _extract_kpi(entry["cols"], entry["rows"])
+            result[f"{key}_cp"] = kpi["cp"]
+            result[f"{key}_delta_pct"] = kpi["delta_pct"]
 
-            # Avg Days Live comes from a pivoted trend worksheet — separate extraction.
-            trend = page.evaluate(_TREND_JS, _PT_TREND_WORKSHEET)
-            if trend:
-                days = _extract_avg_days_live(trend["cols"], trend["rows"])
-                result["avg_days_live_cp"] = days["cp"]
-                result["avg_days_live_delta_pct"] = days["delta_pct"]
-            else:
-                result["avg_days_live_cp"] = None
-                result["avg_days_live_delta_pct"] = None
+        # Avg Days Live comes from a pivoted trend worksheet — separate extraction.
+        trend = page.evaluate(_TREND_JS, _PT_TREND_WORKSHEET)
+        if trend:
+            days = _extract_avg_days_live(trend["cols"], trend["rows"])
+            result["avg_days_live_cp"] = days["cp"]
+            result["avg_days_live_delta_pct"] = days["delta_pct"]
+        else:
+            result["avg_days_live_cp"] = None
+            result["avg_days_live_delta_pct"] = None
 
-            return result if any(v is not None for v in result.values()) else None
+        return result if any(v is not None for v in result.values()) else None
     except Exception:
         return None
+
+
+def fetch_performance_trends(uuid: str) -> Optional[dict]:
+    """One-shot fetch. Opens a tab, fetches, closes. Prefer `session()` for multi-fetch flows."""
+    with session() as s:
+        return s.fetch_performance_trends(uuid)
 
 
 _REP_JS = """
@@ -292,65 +354,59 @@ def _find_val(cols, row, keyword: str) -> Optional[float]:
     return None
 
 
-def fetch_reputation(uuid: str) -> Optional[dict]:
-    """
-    Navigate to Reputation Health for dealer UUID.
-    Returns dict with rating, review_count, dma_avg_rating, national_avg_rating,
-    pricing_transparency, lead_response_rate_pct, lead_handling_rating, or None.
-    """
+def _fetch_reputation_on(page, uuid: str) -> Optional[dict]:
+    """Navigate an existing page to Reputation Health and extract the rating panel."""
     try:
-        with _get_context() as ctx:
-            page = ctx.new_page()
-            page.goto(
-                f"{ADMIN_URL}/dealers/{uuid}/reports/reputation_health",
-                timeout=TIMEOUT * 2,
-                wait_until="domcontentloaded",
-            )
-            if "admin.cars.com" not in page.url:
-                return None
-            page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
-            page.wait_for_timeout(12_000)
+        page.goto(
+            f"{ADMIN_URL}/dealers/{uuid}/reports/reputation_health",
+            timeout=TIMEOUT * 2,
+            wait_until="domcontentloaded",
+        )
+        if "admin.cars.com" not in page.url:
+            return None
+        page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
+        page.wait_for_timeout(12_000)
 
-            raw = page.evaluate(_REP_JS, _REP_WORKSHEETS)
-            if not raw:
-                return None
+        raw = page.evaluate(_REP_JS, _REP_WORKSHEETS)
+        if not raw:
+            return None
 
-            def get(ws_name, keyword, exclude=None):
-                """Find value in a worksheet row by keyword, optionally excluding columns
-                containing `exclude` (useful to skip DMA/market-avg variants)."""
-                entry = raw.get(ws_name)
-                if not entry or not entry["rows"]:
-                    return None
-                kw = keyword.lower()
-                ex = exclude.lower() if exclude else None
-                for col, val in zip(entry["cols"], entry["rows"][0]):
-                    c = col.lower()
-                    if kw in c and (ex is None or ex not in c):
-                        return _parse_kpi(val)
+        def get(ws_name, keyword, exclude=None):
+            """Find value in a worksheet row by keyword, optionally excluding columns
+            containing `exclude` (useful to skip DMA/market-avg variants)."""
+            entry = raw.get(ws_name)
+            if not entry or not entry["rows"]:
                 return None
+            kw = keyword.lower()
+            ex = exclude.lower() if exclude else None
+            for col, val in zip(entry["cols"], entry["rows"][0]):
+                c = col.lower()
+                if kw in c and (ex is None or ex not in c):
+                    return _parse_kpi(val)
+            return None
 
-            # Dealer KPI row: the rating is the AVG(Cars.com) column
-            dealer_kpi = raw.get("Dealer KPI") or {}
-            dealer_rows = dealer_kpi.get("rows") or []
-            rating = review_count = None
-            if dealer_rows:
-                rating = _find_val(dealer_kpi["cols"], dealer_rows[0], "cars.com")
-                rev = _find_val(dealer_kpi["cols"], dealer_rows[0], "number of reviews")
-                review_count = int(rev) if rev is not None else None
+        # Dealer KPI row: the rating is the AVG(Cars.com) column
+        dealer_kpi = raw.get("Dealer KPI") or {}
+        dealer_rows = dealer_kpi.get("rows") or []
+        rating = review_count = None
+        if dealer_rows:
+            rating = _find_val(dealer_kpi["cols"], dealer_rows[0], "cars.com")
+            rev = _find_val(dealer_kpi["cols"], dealer_rows[0], "number of reviews")
+            review_count = int(rev) if rev is not None else None
 
-            result = {
-                "rating": rating,
-                "review_count": review_count,
-                "dma_avg_rating": get("Market KPI", "market average"),
-                "national_avg_rating": get("Market KPI", "national oem"),
-                "pricing_transparency": get("Pricing KPI", "pricing transparency", exclude="dma"),
-                "lead_response_rate_pct": get("Lead Response Rate KPI", "response leads"),
-                "lead_handling_rating": get("Lead Survey Response", "lead handling"),
-            }
-            # Return None if we couldn't find even the primary rating
-            if result["rating"] is None:
-                return None
-            return result
+        result = {
+            "rating": rating,
+            "review_count": review_count,
+            "dma_avg_rating": get("Market KPI", "market average"),
+            "national_avg_rating": get("Market KPI", "national oem"),
+            "pricing_transparency": get("Pricing KPI", "pricing transparency", exclude="dma"),
+            "lead_response_rate_pct": get("Lead Response Rate KPI", "response leads"),
+            "lead_handling_rating": get("Lead Survey Response", "lead handling"),
+        }
+        # Return None if we couldn't find even the primary rating
+        if result["rating"] is None:
+            return None
+        return result
     except Exception:
         return None
 
@@ -375,51 +431,58 @@ async () => {
 """
 
 
-def fetch_market_comparison(uuid: str) -> Optional[dict]:
-    """
-    Navigate to Demand Signals → Price Comparison → Pricing Summary for dealer UUID.
-    Returns dict with above_pct, at_pct, under_pct (ints) and counts, or None.
-    """
+def _fetch_market_comparison_on(page, uuid: str) -> Optional[dict]:
+    """Navigate an existing page to Demand Signals → Price Comparison and extract the bucket totals."""
     try:
-        with _get_context() as ctx:
-            page = ctx.new_page()
-            page.goto(
-                f"{ADMIN_URL}/dealers/{uuid}/reports/demand_signals",
-                timeout=TIMEOUT * 2,
-                wait_until="domcontentloaded",
-            )
-            if "admin.cars.com" not in page.url:
-                return None
-            page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
-            page.wait_for_timeout(12_000)
+        page.goto(
+            f"{ADMIN_URL}/dealers/{uuid}/reports/demand_signals",
+            timeout=TIMEOUT * 2,
+            wait_until="domcontentloaded",
+        )
+        if "admin.cars.com" not in page.url:
+            return None
+        page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
+        page.wait_for_timeout(12_000)
 
-            raw = page.evaluate(_MC_JS)
-            if not raw or not raw.get("rows"):
-                return None
+        raw = page.evaluate(_MC_JS)
+        if not raw or not raw.get("rows"):
+            return None
 
-            # Pricing Summary columns: ["Market price", "AGG(Vehicles)" (pct), "AGG(Vehicles)" (count)]
-            # Each row: [category_label, "70.4142%", "119"]
-            buckets = {"above_pct": 0, "at_pct": 0, "under_pct": 0,
-                       "above_count": 0, "at_count": 0, "under_count": 0}
-            for row in raw["rows"]:
-                if len(row) < 3:
-                    continue
-                label = (row[0] or "").lower()
-                pct = _parse_kpi(row[1])
-                count = _parse_kpi(row[2])
-                if "above" in label:
-                    buckets["above_pct"] = round(pct) if pct is not None else 0
-                    buckets["above_count"] = int(count) if count is not None else 0
-                elif "under" in label or "below" in label:
-                    buckets["under_pct"] = round(pct) if pct is not None else 0
-                    buckets["under_count"] = int(count) if count is not None else 0
-                elif "at market" in label or label.strip() == "at":
-                    buckets["at_pct"] = round(pct) if pct is not None else 0
-                    buckets["at_count"] = int(count) if count is not None else 0
+        # Pricing Summary columns: ["Market price", "AGG(Vehicles)" (pct), "AGG(Vehicles)" (count)]
+        # Each row: [category_label, "70.4142%", "119"]
+        buckets = {"above_pct": 0, "at_pct": 0, "under_pct": 0,
+                   "above_count": 0, "at_count": 0, "under_count": 0}
+        for row in raw["rows"]:
+            if len(row) < 3:
+                continue
+            label = (row[0] or "").lower()
+            pct = _parse_kpi(row[1])
+            count = _parse_kpi(row[2])
+            if "above" in label:
+                buckets["above_pct"] = round(pct) if pct is not None else 0
+                buckets["above_count"] = int(count) if count is not None else 0
+            elif "under" in label or "below" in label:
+                buckets["under_pct"] = round(pct) if pct is not None else 0
+                buckets["under_count"] = int(count) if count is not None else 0
+            elif "at market" in label or label.strip() == "at":
+                buckets["at_pct"] = round(pct) if pct is not None else 0
+                buckets["at_count"] = int(count) if count is not None else 0
 
-            if buckets["above_count"] + buckets["at_count"] + buckets["under_count"] == 0:
-                return None
-            return buckets
+        if buckets["above_count"] + buckets["at_count"] + buckets["under_count"] == 0:
+            return None
+        return buckets
     except Exception:
         return None
+
+
+def fetch_market_comparison(uuid: str) -> Optional[dict]:
+    """One-shot fetch. Opens a tab, fetches, closes. Prefer `session()` for multi-fetch flows."""
+    with session() as s:
+        return s.fetch_market_comparison(uuid)
+
+
+def fetch_reputation(uuid: str) -> Optional[dict]:
+    """One-shot fetch. Opens a tab, fetches, closes. Prefer `session()` for multi-fetch flows."""
+    with session() as s:
+        return s.fetch_reputation(uuid)
 
