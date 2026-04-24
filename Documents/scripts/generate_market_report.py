@@ -429,6 +429,8 @@ def main():
             searches = float(str(row[search_col]).replace(",", "").replace("%", ""))
         except (ValueError, TypeError):
             continue
+        if pd.isna(searches):
+            continue
         info = nomi.query_postal_code(z)
         if pd.isna(info.place_name) or pd.isna(info.latitude):
             continue

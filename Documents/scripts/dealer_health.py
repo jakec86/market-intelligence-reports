@@ -1,0 +1,358 @@
+import streamlit as st
+import anthropic
+import pandas as pd
+import subprocess
+import json
+import admin_cars
+from typing import Optional, List
+
+# ─── CONFIG ──────────────────────────────────────────────────────────────────
+
+SF_CLI = "/Users/jcrawley/.npm-global/bin/sf"
+
+SF_QUERY = """SELECT
+    Name, Type, Industry, OEM__c, Account_Status__c, DI_Package__c,
+    BillingCity, BillingState, Phone, Website, CCID__c,
+    OEM_Deal__c, Product_Amount__c, Cancelled_Product_Amount__c,
+    Account_Live_Date__c, Performance_Onboarding_Date__c,
+    Dealer_Code__c, Account_Notes__c
+FROM Account
+WHERE Name LIKE '%{dealer}%'
+ORDER BY Name
+LIMIT 20"""
+
+SYSTEM_PROMPT = """You are a Cars Commerce dealer health analyst. You use the Dealer Growth Triangle framework to assess dealer performance.
+
+## Dealer Growth Triangle
+
+Three forces drive dealer performance:
+
+    Pricing Position
+       /        \\
+      /          \\
+Days on Lot ---- Market Share
+
+- Pricing too high → increases DOL → erodes margins → costs market share
+- Pricing too aggressive → moves metal but sacrifices profitability
+- Right-priced inventory → earns badges → drives VDPs → generates leads → wins share
+
+GROI (Gross Return on Investment) = Gross % of Sale × Turn Rate. Target: minimum 120.
+
+## Your Task
+
+Given the raw data below, produce a **Dealer Health Snapshot** using this format:
+
+### Health Snapshot — [Dealer Name]
+
+| Dimension | Score (0-100) | Trend | Key Driver |
+|-----------|--------------|-------|------------|
+| Inventory Health | | ↑↓→ | |
+| Pricing Position | | ↑↓→ | |
+| Engagement | | ↑↓→ | |
+| Reputation | | ↑↓→ | |
+| Lead Performance | | ↑↓→ | |
+| Market Position | | ↑↓→ | |
+
+### Key Findings
+[2-4 bullets, each with a supporting data point and source]
+
+### Growth Opportunities
+[Ranked by estimated impact]
+1. **What to do** — Expected impact — How to measure success
+
+### Risks / Watch Items
+[Anything trending negatively or requiring monitoring]
+
+### Data Gaps
+[What additional data would strengthen this analysis]
+
+## Rules
+- Be specific: name vehicles, price ranges, market segments
+- Frame findings in revenue impact, not just metric changes
+- Say "dealer-friendly" language — "price to earn a Great Deal badge" not "optimize pricing distribution"
+- If data is limited, score what you can and clearly note what's estimated vs. data-backed
+- Use the KPI benchmarks: Turn <30 days used, Aging <15% over 60 days, GROI 120+, SRP→VDP 33%+, Reputation 4.5+ rating and 50+ reviews/month
+- CPV and CPC: surface values and flag if they appear high relative to product tier and market size; no fixed benchmark
+- Be concise and direct — this is for busy account teams
+- Health metrics include CP (current period) vs PP (prior period) with Delta = % change"""
+
+
+# ─── DATA SOURCES ────────────────────────────────────────────────────────────
+
+def fetch_salesforce(dealer_name: str) -> Optional[List[dict]]:
+    try:
+        safe_name = dealer_name.replace("'", "\\'")
+        query = SF_QUERY.format(dealer=safe_name)
+        result = subprocess.run(
+            [SF_CLI, "data", "query", "--query", query, "--json"],
+            capture_output=True, text=True, timeout=30,
+        )
+        data = json.loads(result.stdout[result.stdout.index("{"):])
+        if data.get("status") == 0 and data["result"]["totalSize"] > 0:
+            records = data["result"]["records"]
+            for r in records:
+                r.pop("attributes", None)
+            return records
+        return []
+    except Exception as e:
+        st.warning(f"Salesforce: {e}")
+        return None
+
+
+def build_data_context(
+    dealer_name: str,
+    sf_data,
+    perf_data: Optional[dict],
+    rep_data: Optional[dict],
+    mkt_data: Optional[dict],
+) -> str:
+    parts = [f"# Data for: {dealer_name}\n"]
+
+    # Salesforce
+    if sf_data is not None:
+        parts.append("## Salesforce Account Data")
+        if sf_data:
+            for i, rec in enumerate(sf_data, 1):
+                parts.append(f"\n### Account {i}")
+                for k, v in rec.items():
+                    if v is not None:
+                        parts.append(f"- **{k}**: {v}")
+        else:
+            parts.append("No matching accounts found.")
+
+    # Performance Trends (current month value + MoM % change)
+    if perf_data:
+        parts.append("\n## Performance Trends (admin.cars.com)")
+        labels = {
+            "avg_inventory":      "Avg Inventory",
+            "vdps":               "VDPs",
+            "connections":        "Connections (Total Leads)",
+            "fair_above_badges":  "Fair/Above Badge vehicles",
+            "reviews":            "New Reviews (this month)",
+        }
+        for key, label in labels.items():
+            cp = perf_data.get(f"{key}_cp")
+            delta = perf_data.get(f"{key}_delta_pct")
+            if cp is not None:
+                delta_str = f" ({delta:+.1f}% MoM)" if delta is not None else ""
+                parts.append(f"- {label}: {cp:,.0f}{delta_str}")
+
+    # Reputation
+    if rep_data:
+        parts.append("\n## Reputation Health")
+        rating = rep_data.get("rating")
+        count = rep_data.get("review_count")
+        dma = rep_data.get("dma_avg_rating")
+        nat = rep_data.get("national_avg_rating")
+        pricing_tr = rep_data.get("pricing_transparency")
+        lead_resp = rep_data.get("lead_response_rate_pct")
+        lead_hand = rep_data.get("lead_handling_rating")
+        if rating is not None:
+            parts.append(f"- Overall Rating: {rating}★ ({count or 'N/A'} total reviews)")
+        if dma is not None and nat is not None:
+            parts.append(f"- Market context: DMA avg {dma}★ | National OEM avg {nat}★")
+        if pricing_tr is not None:
+            parts.append(f"- Pricing Transparency rating: {pricing_tr}★")
+        if lead_resp is not None:
+            parts.append(f"- Lead response rate: {lead_resp}%")
+        if lead_hand is not None:
+            parts.append(f"- Lead handling rating: {lead_hand}★")
+
+    # Market Comparison (Demand Signals — Price Comparison)
+    if mkt_data:
+        parts.append("\n## Market Comparison (Demand Signals — Price Comparison)")
+        parts.append(
+            f"- Above Market (>105%): {mkt_data.get('above_pct', 0)}% ({mkt_data.get('above_count', 0)} vehicles)"
+        )
+        parts.append(
+            f"- At Market: {mkt_data.get('at_pct', 0)}% ({mkt_data.get('at_count', 0)} vehicles)"
+        )
+        parts.append(
+            f"- Under Market (<95%): {mkt_data.get('under_pct', 0)}% ({mkt_data.get('under_count', 0)} vehicles)"
+        )
+
+    if sf_data is None and not any([perf_data, rep_data, mkt_data]):
+        parts.append("\n*No data sources returned results. Analysis will be limited.*")
+
+    return "\n".join(parts)
+
+
+# ─── UI ──────────────────────────────────────────────────────────────────────
+
+st.set_page_config(page_title="Dealer Health Dashboard", layout="wide")
+
+st.markdown(
+    "<h1 style='margin-bottom:0'>Dealer Health Dashboard</h1>"
+    "<p style='color:#888; margin-top:0'>Self-serve health snapshots powered by the Dealer Growth Triangle</p>",
+    unsafe_allow_html=True,
+)
+
+@st.cache_data(ttl=300)
+def _session_ok() -> bool:
+    return admin_cars.check_session()
+
+
+with st.sidebar:
+    st.header("Configuration")
+    dealer_name = st.text_input("Dealer Name", placeholder="e.g. Hendrick, Nalley Lexus Galleria")
+
+    st.subheader("Data Sources")
+    use_sf = st.checkbox("Salesforce", value=True)
+    use_admin = st.checkbox("admin.cars.com — Performance Trends", value=True)
+
+    # Session status — computed once, reused for indicator and button disabled state
+    session_ok = _session_ok() if use_admin else True
+    if use_admin:
+        if session_ok:
+            st.success("● admin.cars.com connected")
+            if st.button("Refresh session status", use_container_width=True):
+                st.cache_data.clear()
+                st.rerun()
+        else:
+            st.error("✗ Not connected to Chrome / not signed in")
+            st.caption(
+                "Launch Chrome with remote debugging and sign in to admin.cars.com. "
+                "Run this in Terminal (close existing Chrome first):"
+            )
+            st.code(
+                'mkdir -p ~/.chrome-dealer-health && '
+                '"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" '
+                '--remote-debugging-port=9222 '
+                '--user-data-dir="$HOME/.chrome-dealer-health"',
+                language="bash",
+            )
+            st.caption(
+                "A dedicated profile is required — company policy blocks "
+                "remote debugging on the default Chrome profile. Sign in to "
+                "admin.cars.com in the new Chrome window once, then click Re-check."
+            )
+            if st.button("Re-check", use_container_width=True):
+                st.cache_data.clear()
+                st.rerun()
+
+    run = st.button(
+        "Run Analysis",
+        type="primary",
+        disabled=not dealer_name.strip() or not session_ok,
+    )
+
+    st.divider()
+    st.caption(
+        "Pulls account data from Salesforce and performance data from "
+        "admin.cars.com Performance Trends, Reputation Health, and "
+        "Market Comparison, then generates a health snapshot using Claude."
+    )
+
+# Main area
+if run and dealer_name.strip():
+    dealer_name = dealer_name.strip()
+
+    sf_data = None
+    perf_data = rep_data = mkt_data = None
+    uuid = None
+
+    status_cols = st.columns(2)
+
+    with status_cols[0]:
+        if use_sf:
+            with st.spinner("Querying Salesforce..."):
+                sf_data = fetch_salesforce(dealer_name)
+                if sf_data:
+                    st.success(f"Salesforce: {len(sf_data)} account(s)")
+                    ccids = [r.get("CCID__c") for r in sf_data if r.get("CCID__c")]
+                    if ccids:
+                        st.caption(f"CCIDs: {', '.join(ccids)}")
+                elif sf_data is not None:
+                    st.info("Salesforce: no matches")
+
+    with status_cols[1]:
+        if use_admin:
+            # Resolve UUID from first CCID
+            ccids = [r.get("CCID__c") for r in (sf_data or []) if r.get("CCID__c")]
+            if ccids:
+                with st.spinner("Resolving dealer UUID..."):
+                    uuid = admin_cars.resolve_uuid(ccids[0])
+                if not uuid:
+                    st.warning("Dealer not found on admin.cars.com — analysis uses Salesforce data only.")
+
+            if uuid:
+                with st.spinner("Fetching Performance Trends..."):
+                    perf_data = admin_cars.fetch_performance_trends(uuid)
+                if perf_data:
+                    metric_count = sum(1 for v in perf_data.values() if v is not None)
+                    st.success(f"Performance Trends: ✓ {metric_count} metrics")
+                else:
+                    st.warning("Performance Trends: no data")
+
+                with st.spinner("Fetching Reputation..."):
+                    rep_data = admin_cars.fetch_reputation(uuid)
+                if rep_data and rep_data.get("rating"):
+                    st.success(f"Reputation: ✓ {rep_data['rating']}★")
+                else:
+                    st.info("Reputation: skipped")
+
+                with st.spinner("Fetching Market Comparison..."):
+                    mkt_data = admin_cars.fetch_market_comparison(uuid)
+                if mkt_data:
+                    st.success(f"Market Comparison: ✓ {mkt_data['at_pct']}% At Market")
+                else:
+                    st.info("Market Comparison: skipped")
+
+    st.divider()
+
+    data_context = build_data_context(dealer_name, sf_data, perf_data, rep_data, mkt_data)
+
+    st.subheader(f"Health Snapshot — {dealer_name}")
+    client = anthropic.Anthropic()
+    with st.container():
+        response_text = ""
+        placeholder = st.empty()
+        with client.messages.stream(
+            model="claude-sonnet-4-6",
+            max_tokens=4096,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": f"Generate a dealer health snapshot for this dealer.\n\n{data_context}"}],
+        ) as stream:
+            for text in stream.text_stream:
+                response_text += text
+                placeholder.markdown(response_text)
+
+    st.session_state["last_result"] = {
+        "dealer": dealer_name,
+        "analysis": response_text,
+        "sf_data": sf_data,
+        "perf_data": perf_data,
+        "rep_data": rep_data,
+        "mkt_data": mkt_data,
+    }
+
+# Show raw data from last run
+if "last_result" in st.session_state:
+    result = st.session_state["last_result"]
+
+    if not (run and dealer_name.strip()):
+        st.subheader(f"Health Snapshot — {result['dealer']}")
+        st.markdown(result["analysis"])
+
+    st.divider()
+
+    with st.expander("Raw Salesforce Data", expanded=False):
+        if result.get("sf_data"):
+            st.dataframe(pd.DataFrame(result["sf_data"]), use_container_width=True)
+        else:
+            st.info("No Salesforce data")
+
+    with st.expander("Raw admin.cars.com Data", expanded=False):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.caption("Performance Trends")
+            st.json(result.get("perf_data") or {})
+        with col2:
+            st.caption("Reputation")
+            st.json(result.get("rep_data") or {})
+        with col3:
+            st.caption("Market Comparison")
+            st.json(result.get("mkt_data") or {})
+
+elif not run:
+    st.info("Enter a dealer name in the sidebar and click **Run Analysis** to generate a health snapshot.")
