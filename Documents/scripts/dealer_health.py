@@ -96,9 +96,16 @@ Bulleted list of what's missing that would strengthen the analysis. Keep it shor
 - **Frame findings in revenue impact** — not just metric changes. "$X lost/gained per month" beats "down 7%".
 - **Use dealer-friendly language** — "price to earn a Great Deal badge" not "optimize pricing distribution".
 - **Marketplace spend matters** — call out current products (Franchise Premium Listings, Cars Social, AccuTrade Connected, etc.) and tie opportunities to product tier. A dealer on Basic has different levers than one on Premium.
-- **KPI benchmarks:** Turn <30 days used, Aging <15% over 60 days, GROI 120+, Reputation 4.5+ rating and 50+ reviews/month. SRPs are not a current focus — do not build findings around them.
+- **When Listings Optimizer data is present, USE IT.** The Badge impact table shows the real VDPs/VIN and Connections/VIN delta between badge tiers — this is the concrete engagement lift from re-pricing. Cite specific vehicles from the "Within $500 of Good Badge" / "Within $500 of Great Badge" lists as your top Growth Opportunities (they're the highest-ROI pricing moves).
+- **KPI benchmarks:** Turn <30 days used, Aging <15% over 60 days, GROI 120+ (only when DMS is connected), Reputation 4.5+ rating and 50+ reviews/month. SRPs are not a current focus — do not build findings around them.
 - **Fair/Above Badge %** is the primary merchandising proxy (not SRP volume).
 - **Inventory metrics shown are monthly averages** (not point-in-time), so frame trend language accordingly ("average inventory rose by..." not "current inventory is...").
+- **Stock-type (Used/New) split** is in the Listings Optimizer Performance Snapshot — if one stock type is aging much faster than the other, that's a specific finding worth calling out.
+- **Data gap guidance — do NOT list these in the Data Gaps section, they're architectural/not available:**
+    - Review ratings by platform (Google/Facebook/DealerRater) — admin.cars.com only exposes Cars.com ratings
+    - GROI / Turn Rate — these require a DMS feed; if the Sales Influence section says "No DMS connected", note it once as context and move on
+    - Competitor pricing at the model/trim level — the Market Comparison we have IS that data; per-YMMT detail is in the raw Demand Signals Price Comparison CSV if needed, and the "Within $500 of [Good/Great] Badge" lists already surface the per-vehicle pricing opportunities
+    - Lead-source breakdown and competitive-set performance — available in the ROI One-Sheeter and Competitive Set reports but not pulled today (acceptable to mention these as future additions if truly needed to complete an opportunity)
 - If data is limited, score what you can and clearly note what's estimated vs. data-backed.
 - Be concise and direct — this is for busy account teams.
 - All MoM deltas are percentage changes vs. prior month."""
@@ -177,6 +184,8 @@ def build_data_context(
     rep_data: Optional[dict],
     mkt_data: Optional[dict],
     sub_data: Optional[List[dict]] = None,
+    lo_data: Optional[dict] = None,
+    si_data: Optional[dict] = None,
 ) -> str:
     parts = [f"# Data for: {dealer_name}\n"]
 
@@ -274,7 +283,84 @@ def build_data_context(
             f"- Under Market (<95%): {mkt_data.get('under_pct', 0)}% ({mkt_data.get('under_count', 0)} vehicles)"
         )
 
-    if sf_data is None and not any([perf_data, rep_data, mkt_data]):
+    # Listings Optimizer — badge impact, specific pricing opportunities, Used/New split
+    if lo_data:
+        parts.append("\n## Listings Optimizer (admin.cars.com)")
+        if lo_data.get("merch_complete_pct") is not None:
+            parts.append(
+                f"- Merchandising: {lo_data['merch_complete_pct']:.1f}% complete "
+                f"({int(lo_data.get('merch_needs_attention_count') or 0)} vehicles need attention)"
+            )
+        # Badge impact table — shows the concrete value of badge tier changes
+        badges = lo_data.get("badge_details") or []
+        if badges:
+            parts.append("\n### Badge impact (engagement per badge tier)")
+            parts.append("| Badge | Vehicles | % of inv | VDPs / VIN | Connections / VIN |")
+            parts.append("|---|---|---|---|---|")
+            for b in badges:
+                parts.append(
+                    f"| {b['badge']} | {int(b.get('vehicles') or 0)} | "
+                    f"{b.get('pct_of_inventory', 0):.1f}% | "
+                    f"{b.get('vdps_per_vin', 0):.1f} | "
+                    f"{b.get('connections_per_vin', 0):.2f} |"
+                )
+
+        # Pricing opportunities with specific stock numbers
+        good_ops = lo_data.get("within_500_good") or []
+        great_ops = lo_data.get("within_500_great") or []
+        if good_ops:
+            parts.append("\n### Vehicles within $500 of earning the Good Badge")
+            for v in good_ops:
+                parts.append(
+                    f"- **{v['ymmt']}** (stock {v['stock_num']}) — "
+                    f"priced ${v['price']:,.0f}, {int(v.get('days_live') or 0)} days live, "
+                    f"reduce by **${v['reduce_by']:,.0f}**"
+                )
+        if great_ops:
+            parts.append("\n### Vehicles within $500 of earning the Great Badge")
+            for v in great_ops:
+                parts.append(
+                    f"- **{v['ymmt']}** (stock {v['stock_num']}) — "
+                    f"priced ${v['price']:,.0f}, {int(v.get('days_live') or 0)} days live, "
+                    f"reduce by **${v['reduce_by']:,.0f}**"
+                )
+
+        # Used / New inventory breakdown
+        stock_split = lo_data.get("stock_type_breakdown") or {}
+        if stock_split:
+            parts.append("\n### Used vs. New inventory performance (last 7 days)")
+            for stype, metrics in stock_split.items():
+                if not metrics:
+                    continue
+                parts.append(f"\n**{stype}:**")
+                for metric_name, val in metrics.items():
+                    if val is None:
+                        continue
+                    if "Price" in metric_name or "price" in metric_name:
+                        parts.append(f"- {metric_name}: ${val:,.2f}")
+                    elif "Photos" in metric_name or "Days" in metric_name:
+                        parts.append(f"- {metric_name}: {val:.1f}")
+                    else:
+                        parts.append(f"- {metric_name}: {val:,.0f}")
+
+    # Sales Influence Summary (DMS-backed GROI / Turn — only when DMS is connected)
+    if si_data:
+        parts.append("\n## Sales Influence Summary (admin.cars.com — DMS-backed)")
+        if si_data.get("dms_connected"):
+            if si_data.get("leads") is not None:
+                parts.append(f"- Leads (attributed): {si_data['leads']:,.0f}")
+            if si_data.get("connections") is not None:
+                parts.append(f"- Connections (attributed): {si_data['connections']:,.0f}")
+            if si_data.get("influenced_sales") is not None:
+                parts.append(f"- Cars.com-influenced sales: {si_data['influenced_sales']:,.0f}")
+            if si_data.get("influenced_sales_pct") is not None:
+                parts.append(f"- % of sales influenced by Cars.com: {si_data['influenced_sales_pct']:.1f}%")
+            if si_data.get("vehicle_gross_sales") is not None:
+                parts.append(f"- Total vehicle gross sales: {si_data['vehicle_gross_sales']:,.0f}")
+        else:
+            parts.append("- No DMS feed connected for this dealer — GROI/Turn and influenced-sales data unavailable.")
+
+    if sf_data is None and not any([perf_data, rep_data, mkt_data, lo_data]):
         parts.append("\n*No data sources returned results. Analysis will be limited.*")
 
     return "\n".join(parts)
@@ -358,7 +444,7 @@ if run and (dealer_name.strip() or ccid_override.strip()):
 
     sf_data = None
     sub_data = None
-    perf_data = rep_data = mkt_data = None
+    perf_data = rep_data = mkt_data = lo_data = si_data = None
     uuid = None
 
     # Determine which CCID to use: override wins, otherwise derived from SF name lookup
@@ -428,11 +514,29 @@ if run and (dealer_name.strip() or ccid_override.strip()):
                     else:
                         st.info("Market Comparison: skipped")
 
+                    with st.spinner("Fetching Listings Optimizer (badge impact + pricing ops)..."):
+                        lo_data = admin.fetch_listings_optimizer(uuid)
+                    if lo_data:
+                        n_ops = len(lo_data.get("within_500_good", [])) + len(lo_data.get("within_500_great", []))
+                        st.success(f"Listings Optimizer: ✓ {n_ops} pricing opportunities")
+                    else:
+                        st.info("Listings Optimizer: skipped")
+
+                    with st.spinner("Fetching Sales Influence Summary (DMS-backed)..."):
+                        si_data = admin.fetch_sales_influence(uuid)
+                    if si_data and si_data.get("dms_connected"):
+                        st.success(f"Sales Influence: ✓ DMS connected")
+                    else:
+                        st.info("Sales Influence: no DMS feed")
+
     st.divider()
 
-    data_context = build_data_context(dealer_name, sf_data, perf_data, rep_data, mkt_data, sub_data)
+    data_context = build_data_context(
+        dealer_name, sf_data, perf_data, rep_data, mkt_data, sub_data, lo_data, si_data
+    )
 
-    st.subheader(f"Health Snapshot — {dealer_name}")
+    # Note: Claude's output renders its own "### 📊 Health Snapshot — [Dealer]" heading
+    # per the system prompt, so no st.subheader() here to avoid duplication.
     client = anthropic.Anthropic()
     with st.container():
         response_text = ""
@@ -455,6 +559,8 @@ if run and (dealer_name.strip() or ccid_override.strip()):
         "perf_data": perf_data,
         "rep_data": rep_data,
         "mkt_data": mkt_data,
+        "lo_data": lo_data,
+        "si_data": si_data,
     }
 
 # Show raw data from last run
@@ -462,7 +568,7 @@ if "last_result" in st.session_state:
     result = st.session_state["last_result"]
 
     if not (run and (dealer_name.strip() or ccid_override.strip())):
-        st.subheader(f"Health Snapshot — {result['dealer']}")
+        # Claude's output already contains the "📊 Health Snapshot — …" heading
         st.markdown(result["analysis"])
 
     st.divider()
@@ -490,6 +596,13 @@ if "last_result" in st.session_state:
         with col3:
             st.caption("Market Comparison")
             st.json(result.get("mkt_data") or {})
+        col4, col5 = st.columns(2)
+        with col4:
+            st.caption("Listings Optimizer")
+            st.json(result.get("lo_data") or {})
+        with col5:
+            st.caption("Sales Influence")
+            st.json(result.get("si_data") or {})
 
 elif not run:
     st.info("Enter a dealer name in the sidebar and click **Run Analysis** to generate a health snapshot.")

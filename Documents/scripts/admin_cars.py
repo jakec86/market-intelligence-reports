@@ -85,6 +85,12 @@ class _Session:
     def fetch_market_comparison(self, uuid: str) -> Optional[dict]:
         return _fetch_market_comparison_on(self.page, uuid)
 
+    def fetch_listings_optimizer(self, uuid: str) -> Optional[dict]:
+        return _fetch_listings_optimizer_on(self.page, uuid)
+
+    def fetch_sales_influence(self, uuid: str) -> Optional[dict]:
+        return _fetch_sales_influence_on(self.page, uuid)
+
 
 def check_session() -> bool:
     """Return True if admin.cars.com is reachable without SSO redirect.
@@ -485,4 +491,268 @@ def fetch_reputation(uuid: str) -> Optional[dict]:
     """One-shot fetch. Opens a tab, fetches, closes. Prefer `session()` for multi-fetch flows."""
     with session() as s:
         return s.fetch_reputation(uuid)
+
+
+# ─── Listings Optimizer ──────────────────────────────────────────────────────
+# The Listings Optimizer report (admin.cars.com/dealers/{uuid}/reports/listings_optimizer)
+# has vehicle-level pricing opportunities, badge-impact data, and Used/New breakdowns.
+
+_LO_JS = """
+async () => {
+    const viz = document.querySelector('tableau-viz');
+    if (!viz || !viz.workbook) return null;
+    const sheet = viz.workbook.activeSheet;
+    const out = {};
+    const target = ['Merchandising Completion', 'Badge Details',
+                    'Within $500 of Good Badge', 'Within $500 of Great Badge',
+                    'Performance Snapshot'];
+    for (const name of target) {
+        const ws = sheet.worksheets.find(w => w.name === name);
+        if (!ws) { out[name] = null; continue; }
+        try {
+            const d = await ws.getSummaryDataAsync({ maxRows: 50 });
+            out[name] = {
+                cols: d.columns.map(c => c.fieldName),
+                rows: d.data.map(r => r.map(c => c.formattedValue))
+            };
+        } catch(e) { out[name] = null; }
+    }
+    return out;
+}
+"""
+
+
+def _parse_within_500_vehicles(entry) -> list:
+    """Parse the 'Within $500 of [Good/Great] Badge' worksheet — rows are pivoted by
+    measure (Reduce by / Days live / Price), grouped by stock num. Returns a list of
+    dicts [{"stock_num", "ymmt", "reduce_by", "days_live", "price"}] sorted by reduce_by."""
+    if not entry or not entry.get("rows"):
+        return []
+    try:
+        cols = entry["cols"]
+        stock_idx = cols.index("Stock num")
+        ymmt_idx = cols.index("YMMT")
+        measure_idx = cols.index("Measure Names")
+        value_idx = cols.index("Measure Values")
+    except ValueError:
+        return []
+    by_stock: dict = {}
+    for row in entry["rows"]:
+        if len(row) <= max(stock_idx, ymmt_idx, measure_idx, value_idx):
+            continue
+        stock = row[stock_idx]
+        measure = (row[measure_idx] or "").strip().lower()
+        val = _parse_kpi(row[value_idx])
+        entry_d = by_stock.setdefault(stock, {"stock_num": stock, "ymmt": row[ymmt_idx]})
+        if "reduce" in measure:
+            entry_d["reduce_by"] = val
+        elif "days live" in measure:
+            entry_d["days_live"] = val
+        elif measure == "price":
+            entry_d["price"] = val
+    # Filter to entries that have all three measures populated, sorted by smallest reduction
+    ready = [e for e in by_stock.values() if e.get("reduce_by") is not None and e.get("price") is not None]
+    ready.sort(key=lambda e: e["reduce_by"])
+    return ready
+
+
+def _parse_badge_details(entry) -> list:
+    """Parse the Badge Details worksheet. Returns list of
+    [{"badge", "pct_of_inventory", "vehicles", "vdps_per_vin", "connections_per_vin"}]."""
+    if not entry or not entry.get("rows"):
+        return []
+    cols = entry["cols"]
+    try:
+        badge_idx = cols.index("Price badge")
+    except ValueError:
+        return []
+    # Find column indices via keyword matching
+    def idx_containing(keyword):
+        kw = keyword.lower()
+        for i, c in enumerate(cols):
+            if kw in c.lower():
+                return i
+        return None
+    conn_idx = idx_containing("connections per vin")
+    vdp_idx = idx_containing("vdps per vin")
+    # There are two AGG(Vehicles) columns — the first is the pct, the second is the count
+    veh_indices = [i for i, c in enumerate(cols) if c.lower() == "agg(vehicles)"]
+    pct_idx = veh_indices[0] if len(veh_indices) > 0 else None
+    count_idx = veh_indices[1] if len(veh_indices) > 1 else None
+
+    out = []
+    for row in entry["rows"]:
+        badge = row[badge_idx]
+        if not badge or badge.lower() in ("null", ""):
+            continue
+        entry_d = {"badge": badge}
+        if pct_idx is not None:
+            entry_d["pct_of_inventory"] = _parse_kpi(row[pct_idx])
+        if count_idx is not None:
+            entry_d["vehicles"] = _parse_kpi(row[count_idx])
+        if conn_idx is not None:
+            entry_d["connections_per_vin"] = _parse_kpi(row[conn_idx])
+        if vdp_idx is not None:
+            entry_d["vdps_per_vin"] = _parse_kpi(row[vdp_idx])
+        out.append(entry_d)
+    return out
+
+
+def _parse_performance_snapshot(entry) -> dict:
+    """Parse the Used/New breakdown from Performance Snapshot. Returns
+    {"Used": {metric: value, ...}, "New": {metric: value, ...}}."""
+    if not entry or not entry.get("rows"):
+        return {}
+    cols = entry["cols"]
+    try:
+        stock_idx = cols.index("Stock type")
+        measure_idx = cols.index("Measure Names")
+        value_idx = cols.index("Measure Values")
+    except ValueError:
+        return {}
+    out: dict = {}
+    for row in entry["rows"]:
+        stock = row[stock_idx]
+        measure = row[measure_idx]
+        val = _parse_kpi(row[value_idx])
+        if not stock or not measure:
+            continue
+        out.setdefault(stock, {})[measure] = val
+    return out
+
+
+def _fetch_listings_optimizer_on(page, uuid: str) -> Optional[dict]:
+    """Navigate an existing page to Listings Optimizer and extract vehicle-level
+    pricing opportunities, badge impact stats, and Used/New performance split."""
+    try:
+        page.goto(
+            f"{ADMIN_URL}/dealers/{uuid}/reports/listings_optimizer",
+            timeout=TIMEOUT * 2,
+            wait_until="domcontentloaded",
+        )
+        if "admin.cars.com" not in page.url:
+            return None
+        page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
+        page.wait_for_timeout(12_000)
+        raw = page.evaluate(_LO_JS)
+        if not raw:
+            return None
+
+        result: dict = {
+            "badge_details": _parse_badge_details(raw.get("Badge Details")),
+            "within_500_good": _parse_within_500_vehicles(raw.get("Within $500 of Good Badge"))[:5],
+            "within_500_great": _parse_within_500_vehicles(raw.get("Within $500 of Great Badge"))[:5],
+            "stock_type_breakdown": _parse_performance_snapshot(raw.get("Performance Snapshot")),
+            "merch_complete_pct": None,
+            "merch_needs_attention_count": None,
+        }
+        # Pull merchandising completion summary
+        mc = raw.get("Merchandising Completion")
+        if mc and mc.get("rows"):
+            for row in mc["rows"]:
+                if row and row[0] == "Complete" and len(row) > 4:
+                    result["merch_complete_pct"] = _parse_kpi(row[4])
+                elif row and row[0] == "Needs Attention" and len(row) > 5:
+                    result["merch_needs_attention_count"] = _parse_kpi(row[5])
+
+        # If we got nothing useful, return None
+        if (not result["badge_details"] and not result["within_500_good"]
+                and not result["within_500_great"] and not result["stock_type_breakdown"]):
+            return None
+        return result
+    except Exception:
+        return None
+
+
+def fetch_listings_optimizer(uuid: str) -> Optional[dict]:
+    """One-shot fetch. Opens a tab, fetches, closes. Prefer `session()` for multi-fetch flows."""
+    with session() as s:
+        return s._fetch_listings_optimizer(uuid) if hasattr(s, "_fetch_listings_optimizer") else _fetch_listings_optimizer_on(s.page, uuid)
+
+
+# ─── Sales Influence Summary (DMS-backed GROI / Turn data) ───────────────────
+
+_SIS_JS = """
+async () => {
+    const viz = document.querySelector('tableau-viz');
+    if (!viz || !viz.workbook) return null;
+    const sheet = viz.workbook.activeSheet;
+    // First check whether the 'No DMS' sentinel worksheet has the "no data" message
+    const noDms = sheet.worksheets.find(w => w.name === 'No DMS');
+    if (noDms) {
+        try {
+            const d = await noDms.getSummaryDataAsync({ maxRows: 3 });
+            const text = (d.data[0]?.[0]?.formattedValue || '').toLowerCase();
+            if (text.includes('no dms') || text.includes('not connected') || text.includes('dms connections')) {
+                return { no_dms: true };
+            }
+        } catch(e) {}
+    }
+    // Otherwise try to pull the summary worksheets
+    const out = { no_dms: false };
+    for (const name of ['Leads', 'Connections', 'Influenced Sales', 'Influenced Sales %', 'Vehicle Gross Sales']) {
+        const ws = sheet.worksheets.find(w => w.name === name);
+        if (!ws) { out[name] = null; continue; }
+        try {
+            const d = await ws.getSummaryDataAsync({ maxRows: 5 });
+            out[name] = {
+                cols: d.columns.map(c => c.fieldName),
+                rows: d.data.map(r => r.map(c => c.formattedValue))
+            };
+        } catch(e) { out[name] = null; }
+    }
+    return out;
+}
+"""
+
+
+def _fetch_sales_influence_on(page, uuid: str) -> Optional[dict]:
+    """Navigate to Sales Influence Summary and extract DMS-backed attribution.
+    Returns {"dms_connected": bool, ...metrics} — metrics will be empty/None if DMS is not connected."""
+    try:
+        page.goto(
+            f"{ADMIN_URL}/dealers/{uuid}/reports/sales_influence_summary",
+            timeout=TIMEOUT * 2,
+            wait_until="domcontentloaded",
+        )
+        if "admin.cars.com" not in page.url:
+            return None
+        page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
+        page.wait_for_timeout(12_000)
+        raw = page.evaluate(_SIS_JS)
+        if not raw:
+            return None
+
+        if raw.get("no_dms"):
+            return {"dms_connected": False}
+
+        # Extract headline numbers from each mini-summary worksheet. Each typically has
+        # one row with the aggregate figure.
+        def first_val(ws_name):
+            entry = raw.get(ws_name)
+            if not entry or not entry.get("rows") or not entry["rows"][0]:
+                return None
+            # Find the first numeric-looking cell
+            for val in entry["rows"][0]:
+                parsed = _parse_kpi(val)
+                if parsed is not None:
+                    return parsed
+            return None
+
+        return {
+            "dms_connected": True,
+            "leads": first_val("Leads"),
+            "connections": first_val("Connections"),
+            "influenced_sales": first_val("Influenced Sales"),
+            "influenced_sales_pct": first_val("Influenced Sales %"),
+            "vehicle_gross_sales": first_val("Vehicle Gross Sales"),
+        }
+    except Exception:
+        return None
+
+
+def fetch_sales_influence(uuid: str) -> Optional[dict]:
+    """One-shot fetch. Opens a tab, fetches, closes. Prefer `session()` for multi-fetch flows."""
+    with session() as s:
+        return _fetch_sales_influence_on(s.page, uuid)
 
