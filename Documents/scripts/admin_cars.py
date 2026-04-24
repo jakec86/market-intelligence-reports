@@ -112,12 +112,17 @@ async (targetWorksheets) => {
 
 # Map worksheet names (as they appear in Performance Trends) to output key prefix
 _PT_KEY_MAP = {
-    "Avg Inventory KPI":     "avg_inventory",
-    "VDPs KPI":              "vdps",
-    "Connections KPI":       "connections",
-    "Fair/Above Badge KPI":  "fair_above_badges",
-    "Review KPI":            "reviews",
+    "Avg Inventory KPI":      "avg_inventory",
+    "VDPs KPI":               "vdps",
+    "Connections KPI":        "connections",
+    "Fair/Above Badge KPI":   "fair_above_badges",
+    "Review KPI":             "reviews",
+    "Incomplete Vehicles KPI": "under_merch",
 }
+
+# The Vehicle Summary AVG Days Trend worksheet has pivoted measure rows —
+# only rows where Measure Names == "Avg days live" carry the AVG(Avg days live) value.
+_PT_TREND_WORKSHEET = "Vehicle Summary AVG Days Trend"
 
 
 def _extract_kpi(cols, rows) -> dict:
@@ -142,6 +147,62 @@ def _extract_kpi(cols, rows) -> dict:
                 delta = parsed if "%" in (val or "") else parsed * 100
             break
     return {"cp": cp, "delta_pct": delta}
+
+
+_TREND_JS = """
+async (worksheetName) => {
+    const viz = document.querySelector('tableau-viz');
+    if (!viz || !viz.workbook) return null;
+    const sheet = viz.workbook.activeSheet;
+    const ws = sheet.worksheets.find(w => w.name === worksheetName);
+    if (!ws) return null;
+    try {
+        const d = await ws.getSummaryDataAsync({ maxRows: 200 });
+        return {
+            cols: d.columns.map(c => c.fieldName),
+            rows: d.data.map(r => r.map(c => c.formattedValue))
+        };
+    } catch(e) { return null; }
+}
+"""
+
+
+def _extract_avg_days_live(cols, rows) -> dict:
+    """Find the most-recent and prior-month Avg Days Live values from the trend worksheet.
+    Returns {"cp": float|None, "delta_pct": float|None}."""
+    if not rows:
+        return {"cp": None, "delta_pct": None}
+    try:
+        month_idx = cols.index("MONTH(Activity Date)")
+        measure_idx = cols.index("Measure Names")
+        days_idx = cols.index("AVG(Avg days live)")
+    except ValueError:
+        return {"cp": None, "delta_pct": None}
+
+    from datetime import datetime
+    entries = []
+    for r in rows:
+        if len(r) <= max(month_idx, measure_idx, days_idx):
+            continue
+        if (r[measure_idx] or "").strip().lower() != "avg days live":
+            continue
+        val = _parse_kpi(r[days_idx])
+        if val is None:
+            continue
+        try:
+            dt = datetime.strptime(r[month_idx], "%B %Y")
+        except (ValueError, TypeError):
+            continue
+        entries.append((dt, val))
+
+    if not entries:
+        return {"cp": None, "delta_pct": None}
+    entries.sort(key=lambda t: t[0], reverse=True)
+    cp = entries[0][1]
+    delta_pct = None
+    if len(entries) > 1 and entries[1][1] not in (None, 0):
+        delta_pct = ((cp - entries[1][1]) / entries[1][1]) * 100
+    return {"cp": cp, "delta_pct": delta_pct}
 
 
 def fetch_performance_trends(uuid: str) -> Optional[dict]:
@@ -176,6 +237,16 @@ def fetch_performance_trends(uuid: str) -> Optional[dict]:
                 kpi = _extract_kpi(entry["cols"], entry["rows"])
                 result[f"{key}_cp"] = kpi["cp"]
                 result[f"{key}_delta_pct"] = kpi["delta_pct"]
+
+            # Avg Days Live comes from a pivoted trend worksheet — separate extraction.
+            trend = page.evaluate(_TREND_JS, _PT_TREND_WORKSHEET)
+            if trend:
+                days = _extract_avg_days_live(trend["cols"], trend["rows"])
+                result["avg_days_live_cp"] = days["cp"]
+                result["avg_days_live_delta_pct"] = days["delta_pct"]
+            else:
+                result["avg_days_live_cp"] = None
+                result["avg_days_live_delta_pct"] = None
 
             return result if any(v is not None for v in result.values()) else None
     except Exception:

@@ -224,6 +224,8 @@ def build_data_context(
         parts.append("\n## Performance Trends (admin.cars.com — monthly averages vs. prior month)")
         labels = {
             "avg_inventory":      "Monthly Avg Inventory",
+            "avg_days_live":      "Avg Days Live (days on lot)",
+            "under_merch":        "Under-Merchandised vehicles",
             "vdps":               "VDPs (monthly total)",
             "connections":        "Connections / Total Leads (monthly)",
             "fair_above_badges":  "Fair/Above Badge vehicles (monthly)",
@@ -234,7 +236,9 @@ def build_data_context(
             delta = perf_data.get(f"{key}_delta_pct")
             if cp is not None:
                 delta_str = f" ({delta:+.1f}% MoM)" if delta is not None else ""
-                parts.append(f"- {label}: {cp:,.0f}{delta_str}")
+                # Avg Days Live is typically small and fractional — no comma formatting needed
+                value_str = f"{cp:.1f}" if key == "avg_days_live" else f"{cp:,.0f}"
+                parts.append(f"- {label}: {value_str}{delta_str}")
 
     # Reputation
     if rep_data:
