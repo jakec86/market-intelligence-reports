@@ -14,6 +14,7 @@ over CDP and reuse the existing authenticated session.
 
 No Streamlit imports. All public functions return dicts or None.
 """
+import logging
 import re
 from contextlib import contextmanager
 from typing import Optional
@@ -21,10 +22,42 @@ from urllib.parse import urlencode
 
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
+log = logging.getLogger("admin_cars")
+
 ADMIN_URL = "https://admin.cars.com"
 CDP_ENDPOINT = "http://localhost:9222"
 UUID_PATTERN = re.compile(r"dealers/([a-f0-9\-]{36})/reports")
-TIMEOUT = 20_000  # ms
+TIMEOUT = 20_000            # ms — single-page navigation timeout
+NAV_TIMEOUT = TIMEOUT * 2   # ms — report-page navigation (heavier, includes tableau-viz iframe)
+VIZ_LOAD_MS = 12_000        # ms — wait after tableau-viz selector appears so the workbook API is ready
+
+# Registry of the report slugs we fetch + the worksheets each one depends on. If any
+# required worksheet is missing from a live page, the fetcher logs a WARNING and the
+# missing set is surfaced back to the caller so the UI can show a "dashboard changed"
+# warning. Updating Cars.com dashboards should update this manifest.
+REQUIRED_WORKSHEETS: dict = {
+    "performance_trends": [
+        "Avg Inventory KPI", "VDPs KPI", "Connections KPI",
+        "Fair/Above Badge KPI", "Review KPI", "Incomplete Vehicles KPI",
+        "Vehicle Summary AVG Days Trend",
+    ],
+    "reputation_health": [
+        "Dealer KPI", "Market KPI", "Pricing KPI",
+        "Lead Response Rate KPI", "Lead Survey Response",
+    ],
+    "demand_signals": ["Pricing Summary"],
+    "listings_optimizer": [
+        "Merchandising Completion", "Badge Details",
+        "Within $500 of Good Badge", "Within $500 of Great Badge",
+        "Performance Snapshot",
+    ],
+    "sales_influence_summary": [],  # no strict requirements — DMS absence is the common case
+    "roi_one_sheeter": ["Connections", "Impressions", "Per VIN"],
+}
+
+# Track which worksheets were missing on the most recent fetch, keyed by report slug.
+# Populated by `_load_report` and consumed by `get_last_missing_worksheets()`.
+_last_missing: dict = {}
 
 
 @contextmanager
@@ -53,6 +86,7 @@ def session():
     reports, and closes when the block exits. Gives a single-interruption UX
     instead of one new tab per fetch.
     """
+    _last_missing.clear()  # reset per-session so the UI shows a clean slate
     with sync_playwright() as pw:
         browser = pw.chromium.connect_over_cdp(CDP_ENDPOINT)
         ctx = browser.contexts[0] if browser.contexts else browser.new_context()
@@ -65,6 +99,59 @@ def session():
             except Exception:
                 pass
             browser.close()
+
+
+def _load_report(page, uuid: str, report_slug: str) -> bool:
+    """Navigate `page` to /dealers/{uuid}/reports/{report_slug} and wait for the
+    tableau-viz workbook to be ready. Also records any missing REQUIRED_WORKSHEETS
+    against `_last_missing[report_slug]` so callers can surface 'dashboard changed'
+    warnings. Returns True if the page loaded on admin.cars.com, False otherwise."""
+    try:
+        page.goto(
+            f"{ADMIN_URL}/dealers/{uuid}/reports/{report_slug}",
+            timeout=NAV_TIMEOUT,
+            wait_until="domcontentloaded",
+        )
+    except Exception:
+        log.exception("report load failed: slug=%s uuid=%s", report_slug, uuid)
+        return False
+    if "admin.cars.com" not in page.url:
+        log.warning("redirected off admin.cars.com: slug=%s url=%s", report_slug, page.url)
+        return False
+    try:
+        page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
+    except Exception:
+        log.exception("tableau-viz selector timeout: slug=%s uuid=%s", report_slug, uuid)
+        return False
+    page.wait_for_timeout(VIZ_LOAD_MS)
+
+    # Probe required worksheets and record any that are missing
+    required = REQUIRED_WORKSHEETS.get(report_slug, [])
+    if required:
+        try:
+            present = page.evaluate("""() => {
+                const viz = document.querySelector('tableau-viz');
+                if (!viz || !viz.workbook) return [];
+                const s = viz.workbook.activeSheet;
+                return s.worksheets ? s.worksheets.map(w => w.name) : [];
+            }""")
+            missing = [w for w in required if w not in (present or [])]
+            _last_missing[report_slug] = missing
+            if missing:
+                log.warning(
+                    "worksheets missing on %s for uuid=%s: %s",
+                    report_slug, uuid, missing,
+                )
+        except Exception:
+            log.exception("worksheet probe failed: slug=%s uuid=%s", report_slug, uuid)
+            _last_missing[report_slug] = []
+    return True
+
+
+def get_last_missing_worksheets() -> dict:
+    """Return a copy of {report_slug: [missing_worksheet_names]} from the most recent
+    session. UI can check this to show a 'dashboard layout changed' warning."""
+    return {k: list(v) for k, v in _last_missing.items() if v}
 
 
 class _Session:
@@ -277,17 +364,9 @@ def _extract_avg_days_live(cols, rows) -> dict:
 
 def _fetch_performance_trends_on(page, uuid: str) -> Optional[dict]:
     """Navigate an existing page to Performance Trends and extract KPI data."""
+    if not _load_report(page, uuid, "performance_trends"):
+        return None
     try:
-        page.goto(
-            f"{ADMIN_URL}/dealers/{uuid}/reports/performance_trends",
-            timeout=TIMEOUT * 2,
-            wait_until="domcontentloaded",
-        )
-        if "admin.cars.com" not in page.url:
-            return None
-        page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
-        page.wait_for_timeout(12_000)  # viz needs time to load workbook + worksheets
-
         raw = page.evaluate(_PERF_JS, list(_PT_KEY_MAP.keys()))
         if not raw:
             return None
@@ -315,6 +394,7 @@ def _fetch_performance_trends_on(page, uuid: str) -> Optional[dict]:
 
         return result if any(v is not None for v in result.values()) else None
     except Exception:
+        log.exception("fetch_performance_trends parse failed for uuid=%s", uuid)
         return None
 
 
@@ -365,17 +445,9 @@ def _find_val(cols, row, keyword: str) -> Optional[float]:
 
 def _fetch_reputation_on(page, uuid: str) -> Optional[dict]:
     """Navigate an existing page to Reputation Health and extract the rating panel."""
+    if not _load_report(page, uuid, "reputation_health"):
+        return None
     try:
-        page.goto(
-            f"{ADMIN_URL}/dealers/{uuid}/reports/reputation_health",
-            timeout=TIMEOUT * 2,
-            wait_until="domcontentloaded",
-        )
-        if "admin.cars.com" not in page.url:
-            return None
-        page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
-        page.wait_for_timeout(12_000)
-
         raw = page.evaluate(_REP_JS, _REP_WORKSHEETS)
         if not raw:
             return None
@@ -417,6 +489,7 @@ def _fetch_reputation_on(page, uuid: str) -> Optional[dict]:
             return None
         return result
     except Exception:
+        log.exception("fetch_reputation parse failed for uuid=%s", uuid)
         return None
 
 
@@ -442,17 +515,9 @@ async () => {
 
 def _fetch_market_comparison_on(page, uuid: str) -> Optional[dict]:
     """Navigate an existing page to Demand Signals → Price Comparison and extract the bucket totals."""
+    if not _load_report(page, uuid, "demand_signals"):
+        return None
     try:
-        page.goto(
-            f"{ADMIN_URL}/dealers/{uuid}/reports/demand_signals",
-            timeout=TIMEOUT * 2,
-            wait_until="domcontentloaded",
-        )
-        if "admin.cars.com" not in page.url:
-            return None
-        page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
-        page.wait_for_timeout(12_000)
-
         raw = page.evaluate(_MC_JS)
         if not raw or not raw.get("rows"):
             return None
@@ -481,6 +546,7 @@ def _fetch_market_comparison_on(page, uuid: str) -> Optional[dict]:
             return None
         return buckets
     except Exception:
+        log.exception("fetch_market_comparison parse failed for uuid=%s", uuid)
         return None
 
 
@@ -627,16 +693,9 @@ def _parse_performance_snapshot(entry) -> dict:
 def _fetch_listings_optimizer_on(page, uuid: str) -> Optional[dict]:
     """Navigate an existing page to Listings Optimizer and extract vehicle-level
     pricing opportunities, badge impact stats, and Used/New performance split."""
+    if not _load_report(page, uuid, "listings_optimizer"):
+        return None
     try:
-        page.goto(
-            f"{ADMIN_URL}/dealers/{uuid}/reports/listings_optimizer",
-            timeout=TIMEOUT * 2,
-            wait_until="domcontentloaded",
-        )
-        if "admin.cars.com" not in page.url:
-            return None
-        page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
-        page.wait_for_timeout(12_000)
         raw = page.evaluate(_LO_JS)
         if not raw:
             return None
@@ -664,13 +723,14 @@ def _fetch_listings_optimizer_on(page, uuid: str) -> Optional[dict]:
             return None
         return result
     except Exception:
+        log.exception("fetch_listings_optimizer parse failed for uuid=%s", uuid)
         return None
 
 
 def fetch_listings_optimizer(uuid: str) -> Optional[dict]:
     """One-shot fetch. Opens a tab, fetches, closes. Prefer `session()` for multi-fetch flows."""
     with session() as s:
-        return s._fetch_listings_optimizer(uuid) if hasattr(s, "_fetch_listings_optimizer") else _fetch_listings_optimizer_on(s.page, uuid)
+        return s.fetch_listings_optimizer(uuid)
 
 
 # ─── Sales Influence Summary (DMS-backed GROI / Turn data) ───────────────────
@@ -712,16 +772,9 @@ async () => {
 def _fetch_sales_influence_on(page, uuid: str) -> Optional[dict]:
     """Navigate to Sales Influence Summary and extract DMS-backed attribution.
     Returns {"dms_connected": bool, ...metrics} — metrics will be empty/None if DMS is not connected."""
+    if not _load_report(page, uuid, "sales_influence_summary"):
+        return None
     try:
-        page.goto(
-            f"{ADMIN_URL}/dealers/{uuid}/reports/sales_influence_summary",
-            timeout=TIMEOUT * 2,
-            wait_until="domcontentloaded",
-        )
-        if "admin.cars.com" not in page.url:
-            return None
-        page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
-        page.wait_for_timeout(12_000)
         raw = page.evaluate(_SIS_JS)
         if not raw:
             return None
@@ -751,6 +804,7 @@ def _fetch_sales_influence_on(page, uuid: str) -> Optional[dict]:
             "vehicle_gross_sales": first_val("Vehicle Gross Sales"),
         }
     except Exception:
+        log.exception("fetch_sales_influence parse failed for uuid=%s", uuid)
         return None
 
 
@@ -867,17 +921,9 @@ def _aggregate_lead_sources(entry) -> dict:
 
 def _fetch_roi_one_sheeter_on(page, uuid: str) -> Optional[dict]:
     """Navigate to ROI One-Sheeter and extract the lead-source breakdown + leads-per-VIN."""
+    if not _load_report(page, uuid, "roi_one_sheeter"):
+        return None
     try:
-        page.goto(
-            f"{ADMIN_URL}/dealers/{uuid}/reports/roi_one_sheeter",
-            timeout=TIMEOUT * 2,
-            wait_until="domcontentloaded",
-        )
-        if "admin.cars.com" not in page.url:
-            return None
-        page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
-        page.wait_for_timeout(12_000)
-
         raw = page.evaluate(_ROI_JS)
         if not raw:
             return None
@@ -905,6 +951,7 @@ def _fetch_roi_one_sheeter_on(page, uuid: str) -> Optional[dict]:
             return None
         return result
     except Exception:
+        log.exception("fetch_roi_one_sheeter parse failed for uuid=%s", uuid)
         return None
 
 

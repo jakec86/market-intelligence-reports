@@ -596,6 +596,16 @@ if run and (dealer_name.strip() or ccid_override.strip()):
     # Clear the progress indicator and show the snapshot
     progress.empty()
 
+    # Fail-loud if the admin.cars.com dashboard layout has drifted
+    missing = admin_cars.get_last_missing_worksheets()
+    if missing:
+        lines = [f"**{slug}**: missing `{', '.join(ws)}`" for slug, ws in missing.items()]
+        st.warning(
+            "⚠️ **admin.cars.com dashboard layout has changed** — some worksheets we rely on "
+            "were not found. Numbers for the affected reports may be stale or incomplete.\n\n"
+            + "\n\n".join(lines)
+        )
+
     client = anthropic.Anthropic()
     with st.container():
         response_text = ""

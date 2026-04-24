@@ -168,3 +168,224 @@ def test_pricing_kpi_exclude_dma_picks_dealer_value():
             dealer_val = admin_cars._parse_kpi(val)
             break
     assert dealer_val == 4.8
+
+
+# ═══ Fixture-based parser tests for the newer fetchers ═══
+# All fixtures captured from a live smoke run against Land Rover Newport Beach
+# (UUID 217494e4-…, CCID 6071013) on 2026-04-24. Locks in parser behavior so a
+# Cars.com worksheet-column rename produces a loud test failure instead of a
+# silent wrong number in a dealer email.
+
+
+# ── Listings Optimizer ──────────────────────────────────────────────────────
+
+_LO_BADGE_DETAILS = {
+    "cols": [
+        "Price badge", "FALSE", "TRUE",
+        "AGG(Connections per VIN)", "AGG(VDPs per VIN)",
+        "AGG(Vehicles)", "AGG(Vehicles)",
+        "ATTR(Dealer Name & Id)", "ATTR(Price badge desc)",
+    ],
+    "rows": [
+        ["Not Badged", "False", "True", "0.00000", "0.3333", "7.8947%", "3",
+         "Land Rover Newport Beach (6071013)", "desc"],
+        ["Great", "False", "True", "1.00000", "39.3333", "15.7895%", "6",
+         "Land Rover Newport Beach (6071013)", "desc"],
+        ["Good", "False", "True", "0.45000", "27.4500", "52.6316%", "20",
+         "Land Rover Newport Beach (6071013)", "desc"],
+        ["Fair", "False", "True", "1.77778", "47.2222", "23.6842%", "9",
+         "Land Rover Newport Beach (6071013)", "desc"],
+    ],
+}
+
+_LO_WITHIN_500 = {
+    "cols": ["Dealer Name & Id", "Stock num", "YMMT", "Measure Names",
+             "FALSE", "TRUE", "Measure Values"],
+    "rows": [
+        ["LRNB (6071013)", "TNA233572", "2022 Range Rover Sport HST MHEV",
+         "Reduce by", "False", "True", "385.00"],
+        ["LRNB (6071013)", "TNA233572", "2022 Range Rover Sport HST MHEV",
+         "Days live", "False", "True", "4.00"],
+        ["LRNB (6071013)", "TNA233572", "2022 Range Rover Sport HST MHEV",
+         "Price", "False", "True", "54,999.00"],
+        ["LRNB (6071013)", "SN0410801", "2022 Cadillac CT4-V Blackwing",
+         "Reduce by", "False", "True", "472.00"],
+        ["LRNB (6071013)", "SN0410801", "2022 Cadillac CT4-V Blackwing",
+         "Days live", "False", "True", "18.00"],
+        ["LRNB (6071013)", "SN0410801", "2022 Cadillac CT4-V Blackwing",
+         "Price", "False", "True", "52,499.00"],
+    ],
+}
+
+_LO_PERF_SNAPSHOT = {
+    "cols": ["Dealer name (dynamic)", "Measure Names", "Stock type", "Measure Values"],
+    "rows": [
+        ["LRNB", "VDPs (07 days)", "Used", "504.00"],
+        ["LRNB", "Connections (07 days)", "Used", "11.00"],
+        ["LRNB", "Avg. Price", "Used", "48,404.42"],
+        ["LRNB", "Avg. Days live", "Used", "15.61"],
+        ["LRNB", "VDPs (07 days)", "New", "186.00"],
+        ["LRNB", "Avg. Days live", "New", "60.83"],
+    ],
+}
+
+
+def test_parse_badge_details_extracts_all_tiers():
+    """Badge Details parser pulls vehicles, pct, VDPs/VIN, Connections/VIN per tier."""
+    badges = admin_cars._parse_badge_details(_LO_BADGE_DETAILS)
+    assert len(badges) == 4
+    by_name = {b["badge"]: b for b in badges}
+    assert by_name["Great"]["vdps_per_vin"] == 39.3333
+    assert by_name["Great"]["connections_per_vin"] == 1.0
+    assert by_name["Great"]["vehicles"] == 6.0
+    assert by_name["Not Badged"]["vdps_per_vin"] == 0.3333
+    assert by_name["Not Badged"]["vehicles"] == 3.0
+
+
+def test_parse_within_500_groups_rows_by_stock_num():
+    """Within-$500 parser pivots the per-measure rows into one dict per vehicle."""
+    ops = admin_cars._parse_within_500_vehicles(_LO_WITHIN_500)
+    assert len(ops) == 2
+    # Sorted by smallest reduction first
+    assert ops[0]["reduce_by"] == 385.0
+    assert ops[0]["stock_num"] == "TNA233572"
+    assert ops[0]["ymmt"] == "2022 Range Rover Sport HST MHEV"
+    assert ops[0]["price"] == 54999.0
+    assert ops[0]["days_live"] == 4.0
+
+
+def test_parse_performance_snapshot_splits_by_stock_type():
+    """Performance Snapshot parser returns {Used: {...}, New: {...}}."""
+    split = admin_cars._parse_performance_snapshot(_LO_PERF_SNAPSHOT)
+    assert "Used" in split and "New" in split
+    assert split["Used"]["VDPs (07 days)"] == 504.0
+    assert split["Used"]["Avg. Days live"] == 15.61
+    assert split["New"]["Avg. Days live"] == 60.83  # 4x Used — the aging insight
+
+
+# ── Reputation (_find_val) already covered above; add dealer-KPI test ────────
+
+_REP_DEALER = {
+    "cols": ["'1'", "'1'", "AVG(Cars.com)", "AVG(Total Number of Reviews)"],
+    "rows": [["1", "1", "4.8", "911"]],
+}
+
+
+def test_reputation_dealer_kpi_columns_parse_cleanly():
+    """Dealer KPI worksheet: rating in AVG(Cars.com) col, count in AVG(Total Number of Reviews)."""
+    rating = admin_cars._find_val(_REP_DEALER["cols"], _REP_DEALER["rows"][0], "cars.com")
+    reviews = admin_cars._find_val(_REP_DEALER["cols"], _REP_DEALER["rows"][0], "number of reviews")
+    assert rating == 4.8
+    assert reviews == 911.0
+
+
+# ── ROI One-Sheeter lead-source aggregation ─────────────────────────────────
+
+_ROI_CONNECTIONS = {
+    "cols": ["Measure Names", "Begin date", "Measure Values"],
+    "rows": [
+        ["Phone Lead - Used",           "4/1/2026", "11"],
+        ["Phone Lead - New",            "4/1/2026", "0"],
+        ["Email Lead - Used",           "4/1/2026", "11"],
+        ["Email Lead - New",            "4/1/2026", "1"],
+        ["Email Lead - Finance Intent", "4/1/2026", "1"],
+        ["Email Lead - Credit Application", "4/1/2026", "2"],
+        ["Chat Lead - Used",            "4/1/2026", "1"],
+        ["Chat Event - Used",           "4/1/2026", "1"],
+        ["Website Transfers",           "4/1/2026", "13"],
+        ["Website Transfers - Deep Link", "4/1/2026", "29"],  # sub-category — should NOT double-count
+        ["Total Walk Ins",              "4/1/2026", "1"],
+        ["Map Views",                   "4/1/2026", "3"],
+        ["VDP Print",                   "4/1/2026", "0"],
+        # Older month — should be ignored
+        ["Phone Lead - Used",           "3/1/2026", "999"],
+    ],
+}
+
+
+def test_aggregate_lead_sources_picks_most_recent_month():
+    """Only current-month rows should be included; older months are dropped."""
+    agg = admin_cars._aggregate_lead_sources(_ROI_CONNECTIONS)
+    assert agg["phone"] == 11  # NOT 11 + 999
+    assert agg["month"] == "April 2026"
+
+
+def test_aggregate_lead_sources_avoids_double_counting_website_transfers():
+    """The bare 'Website Transfers' is the top-level total; sub-categories like
+    'Website Transfers - Deep Link' must NOT be added on top of it."""
+    agg = admin_cars._aggregate_lead_sources(_ROI_CONNECTIONS)
+    # Top-level 'Website Transfers' = 13 → use that; ignore the 29 sub-line.
+    assert agg["website_transfers"] == 13
+
+
+def test_aggregate_lead_sources_buckets_email_subcategories_correctly():
+    """Only the whitelisted email sub-categories contribute, no double-counting."""
+    agg = admin_cars._aggregate_lead_sources(_ROI_CONNECTIONS)
+    # email = Used (11) + New (1) + Finance Intent (1) + Credit App (2) = 15
+    assert agg["email"] == 15
+
+
+def test_aggregate_lead_sources_total_matches_sum_of_buckets():
+    """The 'total' field must equal the sum of all bucket counts."""
+    agg = admin_cars._aggregate_lead_sources(_ROI_CONNECTIONS)
+    bucket_keys = ["phone", "email", "chat", "website_transfers",
+                   "walk_ins", "vdp_print", "instant_offer", "other"]
+    assert agg["total"] == sum(agg[k] for k in bucket_keys)
+
+
+# ── Market Comparison pricing-bucket aggregation ────────────────────────────
+# This logic lives inline in _fetch_market_comparison_on, but the per-row
+# classification is easy to drive via a minimal mock page.
+
+def test_market_comparison_bucket_classification():
+    """Above/At/Under classification keyed on the label column."""
+    mock_page = MagicMock()
+    mock_page.url = "https://admin.cars.com/dealers/217494e4-.../reports/demand_signals"
+    # Stub _load_report to succeed so the fetcher falls through to page.evaluate
+    with patch("admin_cars._load_report", return_value=True), \
+         patch.object(mock_page, "evaluate", return_value={
+             "cols": ["Market price", "AGG(Vehicles) pct", "AGG(Vehicles) count"],
+             "rows": [
+                 ["Under Market (<95%)",  "1.7751%",  "3"],
+                 ["At Market",            "70.4142%", "119"],
+                 ["Above Market (>105%)", "27.8107%", "47"],
+             ],
+         }):
+        result = admin_cars._fetch_market_comparison_on(mock_page, "fake-uuid")
+    assert result is not None
+    assert result["above_pct"] == 28 and result["above_count"] == 47
+    assert result["at_pct"] == 70 and result["at_count"] == 119
+    assert result["under_pct"] == 2 and result["under_count"] == 3
+
+
+# ── Sales Influence — DMS-absent short circuit ──────────────────────────────
+
+def test_sales_influence_returns_dms_false_when_sentinel_present():
+    """When the 'No DMS' sentinel worksheet is returned, we short-circuit to
+    {dms_connected: False} and do not try to parse the mini-trend worksheets."""
+    mock_page = MagicMock()
+    mock_page.url = "https://admin.cars.com/dealers/x/reports/sales_influence_summary"
+    with patch("admin_cars._load_report", return_value=True), \
+         patch.object(mock_page, "evaluate", return_value={"no_dms": True}):
+        result = admin_cars._fetch_sales_influence_on(mock_page, "fake-uuid")
+    assert result == {"dms_connected": False}
+
+
+# ── REQUIRED_WORKSHEETS manifest sanity ─────────────────────────────────────
+
+def test_required_worksheets_manifest_covers_every_report_slug():
+    """Every slug we pass to _load_report must be in REQUIRED_WORKSHEETS."""
+    expected_slugs = {
+        "performance_trends", "reputation_health", "demand_signals",
+        "listings_optimizer", "sales_influence_summary", "roi_one_sheeter",
+    }
+    assert set(admin_cars.REQUIRED_WORKSHEETS.keys()) >= expected_slugs
+
+
+def test_get_last_missing_worksheets_returns_only_nonempty_entries():
+    """Slugs with an empty missing-list should not appear in the returned dict."""
+    admin_cars._last_missing.clear()
+    admin_cars._last_missing["a"] = ["Missing WS"]
+    admin_cars._last_missing["b"] = []  # should be excluded
+    result = admin_cars.get_last_missing_worksheets()
+    assert result == {"a": ["Missing WS"]}
