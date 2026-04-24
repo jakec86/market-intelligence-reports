@@ -11,7 +11,7 @@ from typing import Optional, List
 SF_CLI = "/Users/jcrawley/.npm-global/bin/sf"
 
 SF_QUERY = """SELECT
-    Name, Type, Industry, OEM__c, Account_Status__c, DI_Package__c,
+    Id, Name, Type, Industry, OEM__c, Account_Status__c, DI_Package__c,
     BillingCity, BillingState, Phone, Website, CCID__c,
     OEM_Deal__c, Product_Amount__c, Cancelled_Product_Amount__c,
     Account_Live_Date__c, Performance_Onboarding_Date__c,
@@ -40,41 +40,68 @@ GROI (Gross Return on Investment) = Gross % of Sale × Turn Rate. Target: minimu
 
 ## Your Task
 
-Given the raw data below, produce a **Dealer Health Snapshot** using this format:
+Produce a **Dealer Health Snapshot** in this exact format. Use emojis for trend indicators (🟢 healthy, 🟡 watch, 🔴 action needed) and keep each section tight.
 
-### Health Snapshot — [Dealer Name]
+### 📊 Health Snapshot — [Dealer Name]
 
-| Dimension | Score (0-100) | Trend | Key Driver |
-|-----------|--------------|-------|------------|
-| Inventory Health | | ↑↓→ | |
-| Pricing Position | | ↑↓→ | |
-| Engagement | | ↑↓→ | |
-| Reputation | | ↑↓→ | |
-| Lead Performance | | ↑↓→ | |
-| Market Position | | ↑↓→ | |
+| Dimension | Score | Trend | Key Driver |
+|---|---|---|---|
+| Inventory Health | X/100 | 🟢/🟡/🔴 ↑↓→ | one short phrase |
+| Pricing Position | X/100 | 🟢/🟡/🔴 ↑↓→ | one short phrase |
+| Engagement (VDPs) | X/100 | 🟢/🟡/🔴 ↑↓→ | one short phrase |
+| Reputation | X/100 | 🟢/🟡/🔴 ↑↓→ | one short phrase |
+| Lead Performance | X/100 | 🟢/🟡/🔴 ↑↓→ | one short phrase |
+| Marketplace Investment | X/100 | 🟢/🟡/🔴 ↑↓→ | one short phrase |
 
-### Key Findings
-[2-4 bullets, each with a supporting data point and source]
+---
 
-### Growth Opportunities
-[Ranked by estimated impact]
-1. **What to do** — Expected impact — How to measure success
+### 🔑 Key Findings
 
-### Risks / Watch Items
-[Anything trending negatively or requiring monitoring]
+Format each as a bold headline + one-line supporting data point. Max 4 findings.
 
-### Data Gaps
-[What additional data would strengthen this analysis]
+- **🟢 [Strong positive pattern]** — supporting number + source
+- **🟡 [Watch item]** — supporting number + source
+- **🔴 [Concern]** — supporting number + source
+
+---
+
+### 🚀 Growth Opportunities
+
+Ranked by impact. Format each as a callout card:
+
+**1. [Opportunity headline in bold]**
+> **Action:** what to do (specific, vehicle/segment/price-range level when possible)
+> **Expected lift:** quantified outcome (e.g. "+X% VDPs" or "$Y additional revenue")
+> **How we'd measure:** the metric that should move
+
+Repeat for up to 3 opportunities.
+
+---
+
+### ⚠️ Risks / Watch Items
+
+Short bulleted list. For each, bold the metric and state the direction in plain language.
+
+- **Metric name** — plain-English risk statement + the data point
+
+---
+
+### 📋 Data Gaps
+
+Bulleted list of what's missing that would strengthen the analysis. Keep it short.
 
 ## Rules
-- Be specific: name vehicles, price ranges, market segments
-- Frame findings in revenue impact, not just metric changes
-- Say "dealer-friendly" language — "price to earn a Great Deal badge" not "optimize pricing distribution"
-- If data is limited, score what you can and clearly note what's estimated vs. data-backed
-- Use the KPI benchmarks: Turn <30 days used, Aging <15% over 60 days, GROI 120+, SRP→VDP 33%+, Reputation 4.5+ rating and 50+ reviews/month
-- CPV and CPC: surface values and flag if they appear high relative to product tier and market size; no fixed benchmark
-- Be concise and direct — this is for busy account teams
-- Health metrics include CP (current period) vs PP (prior period) with Delta = % change"""
+
+- **Be specific** — name vehicles, price ranges, market segments, product names.
+- **Frame findings in revenue impact** — not just metric changes. "$X lost/gained per month" beats "down 7%".
+- **Use dealer-friendly language** — "price to earn a Great Deal badge" not "optimize pricing distribution".
+- **Marketplace spend matters** — call out current products (Franchise Premium Listings, Cars Social, AccuTrade Connected, etc.) and tie opportunities to product tier. A dealer on Basic has different levers than one on Premium.
+- **KPI benchmarks:** Turn <30 days used, Aging <15% over 60 days, GROI 120+, Reputation 4.5+ rating and 50+ reviews/month. SRPs are not a current focus — do not build findings around them.
+- **Fair/Above Badge %** is the primary merchandising proxy (not SRP volume).
+- **Inventory metrics shown are monthly averages** (not point-in-time), so frame trend language accordingly ("average inventory rose by..." not "current inventory is...").
+- If data is limited, score what you can and clearly note what's estimated vs. data-backed.
+- Be concise and direct — this is for busy account teams.
+- All MoM deltas are percentage changes vs. prior month."""
 
 
 # ─── DATA SOURCES ────────────────────────────────────────────────────────────
@@ -113,35 +140,93 @@ def fetch_salesforce_by_ccid(ccid: str) -> Optional[List[dict]]:
     return _run_sf_query(SF_QUERY_BY_CCID.format(ccid=safe_ccid))
 
 
+SF_SUBSCRIPTIONS_QUERY = """SELECT
+    Name,
+    SBQQ__Product__r.Name,
+    SBQQ__SubscriptionStartDate__c,
+    SBQQ__SubscriptionEndDate__c,
+    SBQQ__Quantity__c,
+    SBQQ__NetPrice__c,
+    SBQQ__ListPrice__c,
+    Line_of_Business__c
+FROM SBQQ__Subscription__c
+WHERE SBQQ__Account__c = '{account_id}'
+  AND (SBQQ__SubscriptionEndDate__c = NULL OR SBQQ__SubscriptionEndDate__c >= TODAY)
+ORDER BY SBQQ__NetPrice__c DESC NULLS LAST
+LIMIT 50"""
+
+
+def fetch_subscriptions(account_id: str) -> Optional[List[dict]]:
+    """Fetch active marketplace subscriptions (Live Products) for an SF Account."""
+    safe_id = account_id.replace("'", "\\'")
+    records = _run_sf_query(SF_SUBSCRIPTIONS_QUERY.format(account_id=safe_id))
+    if not records:
+        return records
+    # Flatten the SBQQ__Product__r.Name reference
+    for r in records:
+        prod_ref = r.pop("SBQQ__Product__r", None) or {}
+        if isinstance(prod_ref, dict):
+            r["Product_Name"] = prod_ref.get("Name")
+    return records
+
+
 def build_data_context(
     dealer_name: str,
     sf_data,
     perf_data: Optional[dict],
     rep_data: Optional[dict],
     mkt_data: Optional[dict],
+    sub_data: Optional[List[dict]] = None,
 ) -> str:
     parts = [f"# Data for: {dealer_name}\n"]
 
-    # Salesforce
+    # Salesforce account
     if sf_data is not None:
         parts.append("## Salesforce Account Data")
         if sf_data:
             for i, rec in enumerate(sf_data, 1):
                 parts.append(f"\n### Account {i}")
                 for k, v in rec.items():
-                    if v is not None:
+                    if v is not None and k != "Id":  # Id is for internal lookup only
                         parts.append(f"- **{k}**: {v}")
         else:
             parts.append("No matching accounts found.")
 
-    # Performance Trends (current month value + MoM % change)
+    # Marketplace subscriptions (Live Products from Customer360 tab)
+    if sub_data:
+        parts.append("\n## Active Marketplace Subscriptions (Salesforce → Customer360 → Live Products)")
+        total_mrr = 0.0
+        for sub in sub_data:
+            prod = sub.get("Product_Name") or sub.get("Name") or "Unknown product"
+            qty = sub.get("SBQQ__Quantity__c")
+            price = sub.get("SBQQ__NetPrice__c")
+            start = sub.get("SBQQ__SubscriptionStartDate__c")
+            lob = sub.get("Line_of_Business__c")
+            line = f"- **{prod}**"
+            if qty:
+                line += f" × {qty:g}"
+            if price is not None:
+                line += f" — ${price:,.2f}"
+                try:
+                    total_mrr += float(price)
+                except (TypeError, ValueError):
+                    pass
+            if lob:
+                line += f" ({lob})"
+            if start:
+                line += f" — active since {start}"
+            parts.append(line)
+        if total_mrr > 0:
+            parts.append(f"- **Total active subscription value: ${total_mrr:,.2f}**")
+
+    # Performance Trends (monthly averages + MoM % change)
     if perf_data:
-        parts.append("\n## Performance Trends (admin.cars.com)")
+        parts.append("\n## Performance Trends (admin.cars.com — monthly averages vs. prior month)")
         labels = {
-            "avg_inventory":      "Avg Inventory",
-            "vdps":               "VDPs",
-            "connections":        "Connections (Total Leads)",
-            "fair_above_badges":  "Fair/Above Badge vehicles",
+            "avg_inventory":      "Monthly Avg Inventory",
+            "vdps":               "VDPs (monthly total)",
+            "connections":        "Connections / Total Leads (monthly)",
+            "fair_above_badges":  "Fair/Above Badge vehicles (monthly)",
             "reviews":            "New Reviews (this month)",
         }
         for key, label in labels.items():
@@ -268,6 +353,7 @@ if run and (dealer_name.strip() or ccid_override.strip()):
     ccid_override = ccid_override.strip()
 
     sf_data = None
+    sub_data = None
     perf_data = rep_data = mkt_data = None
     uuid = None
 
@@ -296,6 +382,16 @@ if run and (dealer_name.strip() or ccid_override.strip()):
                         dealer_name = sf_data[0]["Name"]
                 elif sf_data is not None:
                     st.info("Salesforce: no matches")
+
+            # Pull Live Products / marketplace subscriptions for the matched account
+            if sf_data and sf_data[0].get("Id"):
+                with st.spinner("Fetching Live Products (subscriptions)..."):
+                    sub_data = fetch_subscriptions(sf_data[0]["Id"])
+                if sub_data:
+                    total = sum(float(s.get("SBQQ__NetPrice__c") or 0) for s in sub_data)
+                    st.success(f"Subscriptions: {len(sub_data)} active (${total:,.0f})")
+                else:
+                    st.info("Subscriptions: no active products")
 
     with status_cols[1]:
         if use_admin:
@@ -330,7 +426,7 @@ if run and (dealer_name.strip() or ccid_override.strip()):
 
     st.divider()
 
-    data_context = build_data_context(dealer_name, sf_data, perf_data, rep_data, mkt_data)
+    data_context = build_data_context(dealer_name, sf_data, perf_data, rep_data, mkt_data, sub_data)
 
     st.subheader(f"Health Snapshot — {dealer_name}")
     client = anthropic.Anthropic()
@@ -351,6 +447,7 @@ if run and (dealer_name.strip() or ccid_override.strip()):
         "dealer": dealer_name,
         "analysis": response_text,
         "sf_data": sf_data,
+        "sub_data": sub_data,
         "perf_data": perf_data,
         "rep_data": rep_data,
         "mkt_data": mkt_data,
@@ -371,6 +468,12 @@ if "last_result" in st.session_state:
             st.dataframe(pd.DataFrame(result["sf_data"]), use_container_width=True)
         else:
             st.info("No Salesforce data")
+
+    with st.expander("Active Marketplace Subscriptions (Live Products)", expanded=False):
+        if result.get("sub_data"):
+            st.dataframe(pd.DataFrame(result["sub_data"]), use_container_width=True)
+        else:
+            st.info("No active subscriptions")
 
     with st.expander("Raw admin.cars.com Data", expanded=False):
         col1, col2, col3 = st.columns(3)
