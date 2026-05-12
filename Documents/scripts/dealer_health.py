@@ -719,24 +719,22 @@ if run and (dealer_name.strip() or ccid_override.strip()):
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as sys_f:
         sys_f.write(SYSTEM_PROMPT)
         sys_path = sys_f.name
-    try:
-        proc = subprocess.Popen(
-            [
-                "claude", "-p",
-                f"Generate a dealer health snapshot for this dealer.\n\n{data_context}",
-                "--system-prompt-file", sys_path,
-                "--model", "claude-sonnet-4-6",
-                "--output-format", "text",
-                "--mcp-config", '{"mcpServers":{}}',
-                "--strict-mcp-config",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env=_env,
-        )
-    finally:
-        os.unlink(sys_path)
+
+    proc = subprocess.Popen(
+        [
+            "claude", "-p",
+            f"Generate a dealer health snapshot for this dealer.\n\n{data_context}",
+            "--system-prompt-file", sys_path,
+            "--model", "claude-sonnet-4-6",
+            "--output-format", "text",
+            "--mcp-config", '{"mcpServers":{}}',
+            "--strict-mcp-config",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=_env,
+    )
 
     # Drain stderr in background so its buffer never blocks stdout
     stderr_lines: list = []
@@ -752,6 +750,7 @@ if run and (dealer_name.strip() or ccid_override.strip()):
         response_text += chunk
         placeholder.markdown(response_text)
     proc.wait()
+    os.unlink(sys_path)
     response_text = response_text.strip()
 
     if proc.returncode != 0 or not response_text:
