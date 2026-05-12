@@ -45,7 +45,7 @@ REQUIRED_WORKSHEETS: dict = {
         "Dealer KPI", "Market KPI", "Pricing KPI",
         "Lead Response Rate KPI", "Lead Survey Response",
     ],
-    "demand_signals": [],  # worksheet name changed; diagnostic logged via _MC_JS __available
+    "demand_signals": [],  # Pricing Summary lives in Price Comparison sub-tab, not the main sheet
     "listings_optimizer": [
         "Merchandising Completion", "Badge Details",
         "Within $500 of Good Badge", "Within $500 of Great Badge",
@@ -53,8 +53,8 @@ REQUIRED_WORKSHEETS: dict = {
     ],
     "sales_influence_summary": [],  # no strict requirements — DMS absence is the common case
     "roi_one_sheeter": ["Connections", "Impressions", "Per VIN"],
-    "walk_in_demand": [],   # diagnostic-first: __available logged on first run
-    "vehicle_demand": [],   # diagnostic-first: __available logged on first run
+    "walk_in_demand": ["Monthly Walkins"],
+    "vehicle_demand": ["05-SearchedBars"],
 }
 
 # Track which worksheets were missing on the most recent fetch, keyed by report slug.
@@ -576,7 +576,7 @@ async () => {
     if (!viz || !viz.workbook) return null;
     const sheet = viz.workbook.activeSheet;
     const names = sheet.worksheets.map(w => w.name);
-    const ws = sheet.worksheets.find(w => w.name === 'Walk-In Demand');
+    const ws = sheet.worksheets.find(w => w.name === 'Monthly Walkins');
     if (!ws) return { __available: names };
     try {
         const data = await ws.getSummaryDataAsync({ maxRows: 50 });
@@ -598,7 +598,7 @@ def _fetch_walk_in_demand_on(page, uuid: str) -> Optional[dict]:
         if not raw:
             return None
         if "__available" in raw:
-            log.warning("Walk-In Demand worksheet not found. Available: %s", raw["__available"])
+            log.warning("Monthly Walkins not found. Available: %s", raw["__available"])
             return None
         if not raw.get("rows"):
             return None
@@ -620,7 +620,7 @@ async () => {
     if (!viz || !viz.workbook) return null;
     const sheet = viz.workbook.activeSheet;
     const names = sheet.worksheets.map(w => w.name);
-    const ws = sheet.worksheets.find(w => w.name === 'Vehicle Demand');
+    const ws = sheet.worksheets.find(w => w.name === '05-SearchedBars');
     if (!ws) return { __available: names };
     try {
         const data = await ws.getSummaryDataAsync({ maxRows: 10 });
@@ -642,7 +642,7 @@ def _fetch_vehicle_demand_on(page, uuid: str) -> Optional[dict]:
         if not raw:
             return None
         if "__available" in raw:
-            log.warning("Vehicle Demand worksheet not found. Available: %s", raw["__available"])
+            log.warning("05-SearchedBars not found. Available: %s", raw["__available"])
             return None
         if not raw.get("rows"):
             return None
