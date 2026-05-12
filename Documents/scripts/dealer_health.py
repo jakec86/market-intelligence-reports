@@ -1,6 +1,4 @@
 import os
-import tempfile
-import threading
 import streamlit as st
 import pandas as pd
 import subprocess
@@ -94,7 +92,7 @@ Then continue with the full snapshot:
 
 ### 🔑 Key Findings
 
-Format each as a bold headline + one-line supporting data point. Max 4 findings.
+Format each as a bold headline + one-line supporting data point. Max 6 findings. Lead with the most impactful.
 
 - **🟢 [Strong positive pattern]** — supporting number + source
 - **🟡 [Watch item]** — supporting number + source
@@ -104,14 +102,26 @@ Format each as a bold headline + one-line supporting data point. Max 4 findings.
 
 ### 🚀 Growth Opportunities
 
-Up to 3 opportunities, ranked by impact. Keep each to 3 lines — no blockquote callouts, no headers within the bullet. Use this exact format:
+Up to 5 opportunities, ranked by impact. Use this exact format with the callout block:
 
 **1. [Headline — one bold phrase]**
-- Action: specific move (name vehicles, stock numbers, price points)
-- Expected lift: quantified outcome ("+X% VDPs" or "$Y/mo additional revenue")
-- Measure: the metric that should move
+> **Action:** specific move (name vehicles, stock numbers, price points if available)
+> **Expected lift:** quantified outcome ("+X% VDPs", "$Y/mo additional revenue", or "X badge upgrades")
+> **Measure:** the metric that confirms success
 
 Leave one blank line between opportunities.
+
+---
+
+### 📈 Market Demand Analysis
+
+Only include this section if Walk-in Demand or Vehicle Demand data is present. Use it to connect DMA-level demand signals to the dealer's performance.
+
+**Walk-in Demand:** Interpret the OTL (On the Lot) vs NTL (Near the Lot) monthly index trend. Is foot traffic rising, falling, or seasonal? Does it match the dealer's connections trend? Flag divergence (strong market demand but weak connections = attribution or conversion issue).
+
+**Top Searched Segments:** Do the top searched makes/models in the DMA match this dealer's current inventory mix? Identify the single biggest mismatch as a specific stocking or pricing opportunity.
+
+If neither data source is available, omit this section entirely.
 
 ---
 
@@ -912,48 +922,26 @@ if run and (dealer_name.strip() or ccid_override.strip()):
             + "\n\n".join(lines)
         )
 
-    _env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as sys_f:
-        sys_f.write(SYSTEM_PROMPT)
-        sys_path = sys_f.name
-
-    proc = subprocess.Popen(
-        [
-            "claude", "-p",
-            f"Generate a dealer health snapshot for this dealer.\n\n{data_context}",
-            "--system-prompt-file", sys_path,
-            "--model", "claude-sonnet-4-6",
-            "--output-format", "text",
-            "--mcp-config", '{"mcpServers":{}}',
-            "--strict-mcp-config",
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env=_env,
-    )
-
-    # Drain stderr in background so its buffer never blocks stdout
-    stderr_lines: list = []
-    threading.Thread(target=lambda: stderr_lines.extend(proc.stderr.readlines()), daemon=True).start()
-
-    status_box = st.empty()
-    status_box.info("Connecting to Claude CLI… (startup takes ~20s, then text will stream in)")
+    import anthropic as _anthropic
+    _client = _anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
     placeholder = st.empty()
     response_text = ""
-    for chunk in iter(lambda: proc.stdout.read(64), ""):
-        if not response_text:
-            status_box.empty()
-        response_text += chunk
-        placeholder.markdown(response_text)
-    proc.wait()
-    os.unlink(sys_path)
-    response_text = response_text.strip()
+    try:
+        with _client.messages.stream(
+            model="claude-sonnet-4-6",
+            max_tokens=4096,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": f"Generate a dealer health snapshot for this dealer.\n\n{data_context}"}],
+        ) as stream:
+            for text in stream.text_stream:
+                response_text += text
+                placeholder.markdown(response_text)
+    except Exception as _e:
+        st.error(f"Claude API error: {_e}")
+        response_text = ""
 
-    if proc.returncode != 0 or not response_text:
-        status_box.empty()
-        st.error(f"Claude CLI error (exit {proc.returncode}):\n\n{''.join(stderr_lines)[:1000]}")
-    else:
+    response_text = response_text.strip()
+    if response_text:
         scores, narrative = _parse_scores(response_text)
         placeholder.empty()
         if scores:
@@ -989,10 +977,6 @@ if run and (dealer_name.strip() or ccid_override.strip()):
 if "last_result" in st.session_state:
     result = st.session_state["last_result"]
 
-    if not (run and (dealer_name.strip() or ccid_override.strip())):
-        # Claude's output already contains the "📊 Health Snapshot — …" heading
-        st.markdown(result["analysis"])
-
     # ── Google Doc export ──────────────────────────────────────────────────
     if st.button("📄 Export to Google Doc", key="export_doc"):
         with st.spinner("Creating Google Doc…"):
@@ -1010,6 +994,10 @@ if "last_result" in st.session_state:
                 st.success(f"Doc created — [Open in Google Docs]({doc_url})")
             except Exception as _e:
                 st.error(f"Doc creation failed: {_e}")
+
+    if not (run and (dealer_name.strip() or ccid_override.strip())):
+        # Claude's output already contains the "📊 Health Snapshot — …" heading
+        st.markdown(result["analysis"])
 
     st.divider()
 
