@@ -177,7 +177,10 @@ def _run_sf_query(query: str) -> Optional[List[dict]]:
             [SF_CLI, "data", "query", "--query", query, "--json"],
             capture_output=True, text=True, timeout=30,
         )
-        data = json.loads(result.stdout[result.stdout.index("{"):])
+        idx = result.stdout.find("{")
+        if idx == -1:
+            return []
+        data = json.loads(result.stdout[idx:])
         if data.get("status") == 0 and data["result"]["totalSize"] > 0:
             records = data["result"]["records"]
             for r in records:
@@ -941,8 +944,13 @@ if run and (dealer_name.strip() or ccid_override.strip()):
                 ],
                 capture_output=True, text=True, timeout=180, env=_env,
             )
-    finally:
+    except subprocess.TimeoutExpired:
         os.unlink(sys_path)
+        st.error("Claude timed out after 3 minutes. Try again or check your Claude CLI session.")
+        st.stop()
+    finally:
+        if os.path.exists(sys_path):
+            os.unlink(sys_path)
     response_text = result_proc.stdout.strip()
 
     if result_proc.returncode != 0 or not response_text:
