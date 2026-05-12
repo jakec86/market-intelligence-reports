@@ -423,6 +423,64 @@ def build_data_context(
     return "\n".join(parts)
 
 
+# ─── SCORE PARSING ───────────────────────────────────────────────────────────
+
+import re as _re
+
+def _parse_scores(text: str) -> tuple:
+    """Extract ---SCORES--- block from Claude output.
+    Returns (scores_list, narrative_text). scores_list is [] if block is absent.
+    """
+    m = _re.search(r"---SCORES---\n(.*?)\n---END SCORES---\n?", text, _re.DOTALL)
+    if not m:
+        return [], text
+    scores = []
+    for line in m.group(1).strip().splitlines():
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) >= 5:
+            try:
+                scores.append({
+                    "name":   parts[0],
+                    "score":  int(parts[1]),
+                    "color":  parts[2],
+                    "trend":  parts[3],
+                    "driver": parts[4],
+                })
+            except (ValueError, IndexError):
+                pass
+    narrative = (text[: m.start()] + text[m.end() :]).strip()
+    return scores, narrative
+
+
+_SCORE_GRADIENTS = {
+    "green":  ("linear-gradient(90deg,#22c55e,#16a34a)", "#166534"),
+    "yellow": ("linear-gradient(90deg,#f59e0b,#d97706)", "#92400e"),
+    "red":    ("linear-gradient(90deg,#f87171,#dc2626)", "#991b1b"),
+}
+
+def _render_score_bars(scores: list) -> str:
+    """Return an HTML string with one % fill bar per score dict."""
+    if not scores:
+        return ""
+    rows = []
+    for s in scores:
+        grad, text_color = _SCORE_GRADIENTS.get(s["color"], _SCORE_GRADIENTS["yellow"])
+        pct = max(0, min(100, s["score"]))
+        rows.append(
+            f'<div style="margin-bottom:10px">'
+            f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">'
+            f'<span style="font-size:13px;font-weight:600;color:#111827">{s["name"]}</span>'
+            f'<span style="font-size:13px;font-weight:700;color:{text_color}">{pct}%&nbsp;{s["trend"]}</span>'
+            f'</div>'
+            f'<div style="background:#f0ebf8;border-radius:4px;height:8px;overflow:hidden">'
+            f'<div style="width:{pct}%;height:100%;border-radius:4px;background:{grad}"></div>'
+            f'</div>'
+            f'<div style="font-size:11px;color:#6b7280;margin-top:2px">{s["driver"]}</div>'
+            f'</div>'
+        )
+    return f'<div style="margin-bottom:20px">{"".join(rows)}</div>'
+
+
 # ─── UI ──────────────────────────────────────────────────────────────────────
 
 st.set_page_config(
