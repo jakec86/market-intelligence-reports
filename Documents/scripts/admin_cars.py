@@ -45,7 +45,7 @@ REQUIRED_WORKSHEETS: dict = {
         "Dealer KPI", "Market KPI", "Pricing KPI",
         "Lead Response Rate KPI", "Lead Survey Response",
     ],
-    "demand_signals": ["Pricing Summary"],
+    "demand_signals": [],  # worksheet name changed; diagnostic logged via _MC_JS __available
     "listings_optimizer": [
         "Merchandising Completion", "Badge Details",
         "Within $500 of Good Badge", "Within $500 of Great Badge",
@@ -53,6 +53,8 @@ REQUIRED_WORKSHEETS: dict = {
     ],
     "sales_influence_summary": [],  # no strict requirements — DMS absence is the common case
     "roi_one_sheeter": ["Connections", "Impressions", "Per VIN"],
+    "walk_in_demand": [],   # diagnostic-first: __available logged on first run
+    "vehicle_demand": [],   # diagnostic-first: __available logged on first run
 }
 
 # Track which worksheets were missing on the most recent fetch, keyed by report slug.
@@ -180,6 +182,12 @@ class _Session:
 
     def fetch_roi_one_sheeter(self, uuid: str) -> Optional[dict]:
         return _fetch_roi_one_sheeter_on(self.page, uuid)
+
+    def fetch_walk_in_demand(self, uuid: str) -> Optional[dict]:
+        return _fetch_walk_in_demand_on(self.page, uuid)
+
+    def fetch_vehicle_demand(self, uuid: str) -> Optional[dict]:
+        return _fetch_vehicle_demand_on(self.page, uuid)
 
 
 def check_session() -> bool:
@@ -500,15 +508,16 @@ async () => {
     await viz.workbook.activateSheetAsync('Price Comparison');
     await new Promise(r => setTimeout(r, 3000));
     const sheet = viz.workbook.activeSheet;
+    const names = sheet.worksheets.map(w => w.name);
     const ws = sheet.worksheets.find(w => w.name === 'Pricing Summary');
-    if (!ws) return null;
+    if (!ws) return { __available: names };
     try {
         const data = await ws.getSummaryDataAsync({ maxRows: 20 });
         return {
             cols: data.columns.map(c => c.fieldName),
             rows: data.data.map(row => row.map(c => c.formattedValue))
         };
-    } catch(e) { return null; }
+    } catch(e) { return { __available: names }; }
 }
 """
 
@@ -519,7 +528,12 @@ def _fetch_market_comparison_on(page, uuid: str) -> Optional[dict]:
         return None
     try:
         raw = page.evaluate(_MC_JS)
-        if not raw or not raw.get("rows"):
+        if not raw:
+            return None
+        if "__available" in raw:
+            log.warning("Pricing Summary not found. Available worksheets: %s", raw["__available"])
+            return None
+        if not raw.get("rows"):
             return None
 
         # Pricing Summary columns: ["Market price", "AGG(Vehicles)" (pct), "AGG(Vehicles)" (count)]
@@ -554,6 +568,94 @@ def fetch_market_comparison(uuid: str) -> Optional[dict]:
     """One-shot fetch. Opens a tab, fetches, closes. Prefer `session()` for multi-fetch flows."""
     with session() as s:
         return s.fetch_market_comparison(uuid)
+
+
+_WID_JS = """
+async () => {
+    const viz = document.querySelector('tableau-viz');
+    if (!viz || !viz.workbook) return null;
+    const sheet = viz.workbook.activeSheet;
+    const names = sheet.worksheets.map(w => w.name);
+    const ws = sheet.worksheets.find(w => w.name === 'Walk-In Demand');
+    if (!ws) return { __available: names };
+    try {
+        const data = await ws.getSummaryDataAsync({ maxRows: 50 });
+        return {
+            cols: data.columns.map(c => c.fieldName),
+            rows: data.data.map(r => r.map(c => c.formattedValue))
+        };
+    } catch(e) { return { __available: names }; }
+}
+"""
+
+
+def _fetch_walk_in_demand_on(page, uuid: str) -> Optional[dict]:
+    """Navigate to walk_in_demand report and extract demand index data."""
+    if not _load_report(page, uuid, "walk_in_demand"):
+        return None
+    try:
+        raw = page.evaluate(_WID_JS)
+        if not raw:
+            return None
+        if "__available" in raw:
+            log.warning("Walk-In Demand worksheet not found. Available: %s", raw["__available"])
+            return None
+        if not raw.get("rows"):
+            return None
+        return {"cols": raw["cols"], "rows": raw["rows"]}
+    except Exception:
+        log.exception("fetch_walk_in_demand parse failed for uuid=%s", uuid)
+        return None
+
+
+def fetch_walk_in_demand(uuid: str) -> Optional[dict]:
+    """One-shot fetch. Prefer session() for multi-fetch flows."""
+    with session() as s:
+        return s.fetch_walk_in_demand(uuid)
+
+
+_VD_JS = """
+async () => {
+    const viz = document.querySelector('tableau-viz');
+    if (!viz || !viz.workbook) return null;
+    const sheet = viz.workbook.activeSheet;
+    const names = sheet.worksheets.map(w => w.name);
+    const ws = sheet.worksheets.find(w => w.name === 'Vehicle Demand');
+    if (!ws) return { __available: names };
+    try {
+        const data = await ws.getSummaryDataAsync({ maxRows: 10 });
+        return {
+            cols: data.columns.map(c => c.fieldName),
+            rows: data.data.map(r => r.map(c => c.formattedValue))
+        };
+    } catch(e) { return { __available: names }; }
+}
+"""
+
+
+def _fetch_vehicle_demand_on(page, uuid: str) -> Optional[dict]:
+    """Navigate to vehicle_demand report and extract top-searched segment data."""
+    if not _load_report(page, uuid, "vehicle_demand"):
+        return None
+    try:
+        raw = page.evaluate(_VD_JS)
+        if not raw:
+            return None
+        if "__available" in raw:
+            log.warning("Vehicle Demand worksheet not found. Available: %s", raw["__available"])
+            return None
+        if not raw.get("rows"):
+            return None
+        return {"cols": raw["cols"], "rows": raw["rows"]}
+    except Exception:
+        log.exception("fetch_vehicle_demand parse failed for uuid=%s", uuid)
+        return None
+
+
+def fetch_vehicle_demand(uuid: str) -> Optional[dict]:
+    """One-shot fetch. Prefer session() for multi-fetch flows."""
+    with session() as s:
+        return s.fetch_vehicle_demand(uuid)
 
 
 def fetch_reputation(uuid: str) -> Optional[dict]:

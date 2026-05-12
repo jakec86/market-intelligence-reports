@@ -389,3 +389,18 @@ def test_get_last_missing_worksheets_returns_only_nonempty_entries():
     admin_cars._last_missing["b"] = []  # should be excluded
     result = admin_cars.get_last_missing_worksheets()
     assert result == {"a": ["Missing WS"]}
+
+
+# ── Walk-in Demand + Vehicle Demand manifest ──────────────────────────────────
+
+def test_walk_in_demand_in_required_worksheets():
+    assert "walk_in_demand" in admin_cars.REQUIRED_WORKSHEETS
+
+def test_vehicle_demand_in_required_worksheets():
+    assert "vehicle_demand" in admin_cars.REQUIRED_WORKSHEETS
+
+def test_session_has_fetch_walk_in_demand():
+    assert hasattr(admin_cars._Session, "fetch_walk_in_demand")
+
+def test_session_has_fetch_vehicle_demand():
+    assert hasattr(admin_cars._Session, "fetch_vehicle_demand")
