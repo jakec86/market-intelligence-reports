@@ -1,4 +1,6 @@
 import os
+import re as _re
+import tempfile
 import streamlit as st
 import pandas as pd
 import subprocess
@@ -459,8 +461,6 @@ def build_data_context(
 
 # ─── SCORE PARSING ───────────────────────────────────────────────────────────
 
-import re as _re
-
 def _parse_scores(text: str) -> tuple:
     """Extract ---SCORES--- block from Claude output.
     Returns (scores_list, narrative_text). scores_list is [] if block is absent.
@@ -881,7 +881,7 @@ if run and (dealer_name.strip() or ccid_override.strip()):
                     if wid_data:
                         source_summary.append("Walk-in Demand: data available")
                     else:
-                        source_summary.append("Walk-in Demand: not available (worksheet TBD)")
+                        source_summary.append("Walk-in Demand: not available")
 
                 if use_vd:
                     _progress("Pulling Vehicle Demand…")
@@ -889,7 +889,7 @@ if run and (dealer_name.strip() or ccid_override.strip()):
                     if vd_data:
                         source_summary.append("Vehicle Demand: data available")
                     else:
-                        source_summary.append("Vehicle Demand: not available (worksheet TBD)")
+                        source_summary.append("Vehicle Demand: not available")
 
     _progress("Generating health snapshot…")
 
@@ -922,7 +922,6 @@ if run and (dealer_name.strip() or ccid_override.strip()):
             + "\n\n".join(lines)
         )
 
-    import tempfile
     _env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as sys_f:
         sys_f.write(SYSTEM_PROMPT)
@@ -950,7 +949,6 @@ if run and (dealer_name.strip() or ccid_override.strip()):
         st.error(f"Claude error (exit {result_proc.returncode}):\n\n{result_proc.stderr[:1000]}")
     else:
         scores, narrative = _parse_scores(response_text)
-        placeholder.empty()
         if scores:
             st.markdown(_render_score_bars(scores), unsafe_allow_html=True)
         st.markdown(narrative)
