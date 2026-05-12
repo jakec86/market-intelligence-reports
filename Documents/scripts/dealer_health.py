@@ -922,26 +922,33 @@ if run and (dealer_name.strip() or ccid_override.strip()):
             + "\n\n".join(lines)
         )
 
-    import anthropic as _anthropic
-    _client = _anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
-    placeholder = st.empty()
-    response_text = ""
-    try:
-        with _client.messages.stream(
-            model="claude-sonnet-4-6",
-            max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": f"Generate a dealer health snapshot for this dealer.\n\n{data_context}"}],
-        ) as stream:
-            for text in stream.text_stream:
-                response_text += text
-                placeholder.markdown(response_text)
-    except Exception as _e:
-        st.error(f"Claude API error: {_e}")
-        response_text = ""
+    import tempfile
+    _env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as sys_f:
+        sys_f.write(SYSTEM_PROMPT)
+        sys_path = sys_f.name
 
-    response_text = response_text.strip()
-    if response_text:
+    try:
+        with st.spinner("Generating health snapshot… (~30s)"):
+            result_proc = subprocess.run(
+                [
+                    "claude", "-p",
+                    f"Generate a dealer health snapshot for this dealer.\n\n{data_context}",
+                    "--system-prompt-file", sys_path,
+                    "--model", "claude-sonnet-4-6",
+                    "--output-format", "text",
+                    "--mcp-config", '{"mcpServers":{}}',
+                    "--strict-mcp-config",
+                ],
+                capture_output=True, text=True, timeout=180, env=_env,
+            )
+    finally:
+        os.unlink(sys_path)
+    response_text = result_proc.stdout.strip()
+
+    if result_proc.returncode != 0 or not response_text:
+        st.error(f"Claude error (exit {result_proc.returncode}):\n\n{result_proc.stderr[:1000]}")
+    else:
         scores, narrative = _parse_scores(response_text)
         placeholder.empty()
         if scores:
@@ -996,8 +1003,11 @@ if "last_result" in st.session_state:
                 st.error(f"Doc creation failed: {_e}")
 
     if not (run and (dealer_name.strip() or ccid_override.strip())):
-        # Claude's output already contains the "📊 Health Snapshot — …" heading
-        st.markdown(result["analysis"])
+        _cached_scores = result.get("scores", [])
+        if _cached_scores:
+            st.markdown(_render_score_bars(_cached_scores), unsafe_allow_html=True)
+        _, _cached_narrative = _parse_scores(result["analysis"])
+        st.markdown(_cached_narrative)
 
     st.divider()
 
