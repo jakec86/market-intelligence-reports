@@ -66,18 +66,23 @@ GROI (Gross Return on Investment) = Gross % of Sale × Turn Rate. Target: minimu
 
 ## Your Task
 
-Produce a **Dealer Health Snapshot** in this exact format. Use emojis for trend indicators (🟢 healthy, 🟡 watch, 🔴 action needed) and keep each section tight.
+**REQUIRED — start your response with this block, no text before it:**
+
+---SCORES---
+Inventory Health|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key driver phrase>
+Pricing Position|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key driver phrase>
+Engagement (VDPs)|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key driver phrase>
+Reputation|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key driver phrase>
+Lead Performance|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key driver phrase>
+Marketplace Investment|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key driver phrase>
+---END SCORES---
+
+Color thresholds: green = 75–100, yellow = 50–74, red = 0–49.
+Trend: ↑ improving MoM, ↓ declining MoM, → flat/mixed.
+
+Then continue with the full snapshot:
 
 ### 📊 Health Snapshot — [Dealer Name]
-
-| Dimension | Score | Trend | Key Driver |
-|---|---|---|---|
-| Inventory Health | X/100 | 🟢/🟡/🔴 ↑↓→ | one short phrase |
-| Pricing Position | X/100 | 🟢/🟡/🔴 ↑↓→ | one short phrase |
-| Engagement (VDPs) | X/100 | 🟢/🟡/🔴 ↑↓→ | one short phrase |
-| Reputation | X/100 | 🟢/🟡/🔴 ↑↓→ | one short phrase |
-| Lead Performance | X/100 | 🟢/🟡/🔴 ↑↓→ | one short phrase |
-| Marketplace Investment | X/100 | 🟢/🟡/🔴 ↑↓→ | one short phrase |
 
 ---
 
