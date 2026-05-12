@@ -219,6 +219,8 @@ def build_data_context(
     lo_data: Optional[dict] = None,
     si_data: Optional[dict] = None,
     roi_data: Optional[dict] = None,
+    wid_data: Optional[dict] = None,
+    vd_data: Optional[dict] = None,
 ) -> str:
     parts = [f"# Data for: {dealer_name}\n"]
 
@@ -420,6 +422,20 @@ def build_data_context(
     if sf_data is None and not any([perf_data, rep_data, mkt_data, lo_data]):
         parts.append("\n*No data sources returned results. Analysis will be limited.*")
 
+    # Walk-in Demand (raw rows — Claude interprets)
+    if wid_data and wid_data.get("rows"):
+        parts.append("\n## Walk-in Demand (admin.cars.com — DMA foot traffic index)")
+        cols = wid_data.get("cols", [])
+        for row in wid_data["rows"][:10]:
+            parts.append("- " + " | ".join(f"{c}: {v}" for c, v in zip(cols, row)))
+
+    # Vehicle Demand (raw rows — Claude interprets)
+    if vd_data and vd_data.get("rows"):
+        parts.append("\n## Vehicle Demand — Top Searched Segments (DMA)")
+        cols = vd_data.get("cols", [])
+        for row in vd_data["rows"][:5]:
+            parts.append("- " + " | ".join(f"{c}: {v}" for c, v in zip(cols, row)))
+
     return "\n".join(parts)
 
 
@@ -508,6 +524,9 @@ with st.sidebar:
     st.subheader("Data Sources")
     use_sf = st.checkbox("Salesforce", value=True)
     use_admin = st.checkbox("admin.cars.com — Performance Trends", value=True)
+    with st.expander("Extended Demand Signals", expanded=False):
+        use_wid = st.checkbox("Walk-in Demand Index", value=True)
+        use_vd  = st.checkbox("Vehicle Demand (top segments)", value=True)
 
     # Session status — computed once, reused for indicator and button disabled state
     session_ok = _session_ok() if use_admin else True
@@ -560,6 +579,7 @@ if run and (dealer_name.strip() or ccid_override.strip()):
     sf_data = None
     sub_data = None
     perf_data = rep_data = mkt_data = lo_data = si_data = roi_data = None
+    wid_data = vd_data = None
     uuid = None
 
     # Determine which CCID to use: override wins, otherwise derived from SF name lookup
@@ -646,6 +666,22 @@ if run and (dealer_name.strip() or ccid_override.strip()):
                 else:
                     source_summary.append("DMS: not connected")
 
+                if use_wid:
+                    _progress("Pulling Walk-in Demand…")
+                    wid_data = admin.fetch_walk_in_demand(uuid)
+                    if wid_data:
+                        source_summary.append("Walk-in Demand: data available")
+                    else:
+                        source_summary.append("Walk-in Demand: not available (worksheet TBD)")
+
+                if use_vd:
+                    _progress("Pulling Vehicle Demand…")
+                    vd_data = admin.fetch_vehicle_demand(uuid)
+                    if vd_data:
+                        source_summary.append("Vehicle Demand: data available")
+                    else:
+                        source_summary.append("Vehicle Demand: not available (worksheet TBD)")
+
     _progress("Generating health snapshot…")
 
     data_context = build_data_context(
@@ -658,6 +694,8 @@ if run and (dealer_name.strip() or ccid_override.strip()):
         lo_data=lo_data,
         si_data=si_data,
         roi_data=roi_data,
+        wid_data=wid_data,
+        vd_data=vd_data,
     )
 
     # Note: Claude's output renders its own "### 📊 Health Snapshot — [Dealer]" heading
