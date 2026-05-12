@@ -939,7 +939,6 @@ if run and (dealer_name.strip() or ccid_override.strip()):
                     "--system-prompt-file", sys_path,
                     "--model", "claude-sonnet-4-6",
                     "--output-format", "text",
-                    "--effort", "high",
                     "--mcp-config", '{"mcpServers":{}}',
                     "--strict-mcp-config",
                 ],
