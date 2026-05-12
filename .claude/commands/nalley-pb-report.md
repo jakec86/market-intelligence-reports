@@ -180,3 +180,5 @@ Invoke whenever Playwright lands on `sso.jumpcloud.com`.
 | DMA filter | Atlanta (click checkbox — Detroit stays checked; wait ~60s for tab-glass to clear) |
 
 > ⚠️ **Always compose HTML email** — use `Content-Type: text/html` and base64url-encode as RFC 2822 `raw` parameter.
+
+HTML fallback
