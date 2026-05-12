@@ -1,4 +1,5 @@
 from unittest.mock import patch, MagicMock
+import pytest
 import admin_cars
 
 
@@ -310,6 +311,7 @@ def test_aggregate_lead_sources_picks_most_recent_month():
     assert agg["month"] == "April 2026"
 
 
+@pytest.mark.regression
 def test_aggregate_lead_sources_avoids_double_counting_website_transfers():
     """The bare 'Website Transfers' is the top-level total; sub-categories like
     'Website Transfers - Deep Link' must NOT be added on top of it."""
