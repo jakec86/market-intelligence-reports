@@ -5,8 +5,14 @@ import streamlit as st
 import pandas as pd
 import subprocess
 import json
+import datetime
+import io
 import admin_cars
 from typing import Optional, List
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build as _gapi_build
+from googleapiclient.http import MediaIoBaseUpload
 
 # ─── BRANDING ─────────────────────────────────────────────────────────────────
 
@@ -499,6 +505,197 @@ def _render_score_bars(scores: list) -> str:
     return f'<div style="margin-bottom:20px">{"".join(rows)}</div>'
 
 
+# ─── GOOGLE DOC EXPORT ───────────────────────────────────────────────────────
+
+_GDOCS_TOKEN_PATH = os.path.expanduser("~/.claude/tokens/gdocs_credentials.json")
+_GDOCS_OAUTH_KEYS = os.path.expanduser("~/gcp-oauth.keys.json")
+_GDOCS_SCOPES = [
+    "https://www.googleapis.com/auth/documents",
+    "https://www.googleapis.com/auth/drive.file",
+]
+
+
+def _gdrive_service():
+    """Return an authenticated Google Drive service, refreshing token if needed."""
+    with open(_GDOCS_TOKEN_PATH) as f:
+        tok = json.load(f)
+    with open(_GDOCS_OAUTH_KEYS) as f:
+        keys = json.load(f)["installed"]
+    creds = Credentials(
+        token=tok.get("access_token"),
+        refresh_token=tok.get("refresh_token"),
+        token_uri=keys["token_uri"],
+        client_id=keys["client_id"],
+        client_secret=keys["client_secret"],
+        scopes=_GDOCS_SCOPES,
+    )
+    if not creds.valid:
+        creds.refresh(Request())
+        tok["access_token"] = creds.token
+        with open(_GDOCS_TOKEN_PATH, "w") as f:
+            json.dump(tok, f)
+    return _gapi_build("drive", "v3", credentials=creds)
+
+
+_SCORE_COLORS_HEX = {"green": "#1a5c33", "yellow": "#7a4210", "red": "#8b1a14"}
+_SCORE_BG_HEX = {"green": "#e8f7ee", "yellow": "#fef3c7", "red": "#fdecea"}
+
+
+def _build_health_html(
+    dealer_name: str,
+    scores: list,
+    narrative: str,
+    wid_data: Optional[dict],
+    vd_data: Optional[dict],
+    today: str,
+) -> str:
+    """Render all snapshot data as styled HTML for Google Doc conversion."""
+    parts = []
+
+    # ── Styles ────────────────────────────────────────────────────────────
+    parts.append("""<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11pt; color: #111827; margin: 40px 60px; }
+  .eyebrow { font-size: 9pt; letter-spacing: 0.12em; text-transform: uppercase;
+             color: #5B2D8E; font-weight: bold; margin-bottom: 4px; }
+  h1 { font-size: 20pt; font-weight: bold; color: #111827; margin: 4px 0 2px 0; }
+  .subtitle { font-size: 9pt; color: #6b7280; margin-bottom: 6px; }
+  .accent { height: 4px; background: linear-gradient(90deg,#5B2D8E,#a78bfa);
+            margin: 8px 0 18px 0; border-radius: 2px; }
+  h2 { font-size: 13pt; font-weight: bold; color: #111827; margin: 20px 0 6px 0;
+       border-bottom: 1px solid #e5e7eb; padding-bottom: 3px; }
+  h3 { font-size: 11pt; font-weight: bold; color: #111827; margin: 14px 0 4px 0; }
+  p, li { font-size: 11pt; line-height: 1.55; margin: 4px 0; }
+  ul { margin: 4px 0 8px 20px; padding: 0; }
+  .score-row { display: flex; align-items: center; margin-bottom: 8px; gap: 10px; }
+  .score-label { width: 180px; font-size: 10pt; font-weight: 600; flex-shrink: 0; }
+  .score-bar-wrap { flex: 1; background: #f0ebf8; border-radius: 4px; height: 10px; overflow: hidden; }
+  .score-bar { height: 100%; border-radius: 4px; }
+  .score-meta { width: 200px; font-size: 9pt; color: #6b7280; flex-shrink: 0; }
+  .score-pct { width: 55px; font-size: 10pt; font-weight: bold; text-align: right; flex-shrink: 0; }
+  .demand-table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-top: 6px; }
+  .demand-table th { background: #f3eeff; color: #5B2D8E; font-weight: bold; text-align: left;
+                     padding: 5px 8px; border: 1px solid #d8cff0; }
+  .demand-table td { padding: 5px 8px; border: 1px solid #e5e7eb; }
+  .demand-table tr:nth-child(even) td { background: #fafafa; }
+  .footer { font-size: 8pt; color: #9ca3af; margin-top: 24px; border-top: 1px solid #e5e7eb;
+            padding-top: 8px; }
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 14px 0; }
+</style></head><body>""")
+
+    # ── Header ────────────────────────────────────────────────────────────
+    parts.append(f'<div class="eyebrow">Cars.com · Growth Insights</div>')
+    parts.append(f'<h1>{dealer_name} — Dealer Health Snapshot</h1>')
+    parts.append(f'<div class="subtitle">Generated {today} &nbsp;·&nbsp; Powered by the Dealer Growth Triangle</div>')
+    parts.append('<div class="accent"></div>')
+
+    # ── Score Bars ────────────────────────────────────────────────────────
+    if scores:
+        _bg = {"green": "linear-gradient(90deg,#22c55e,#16a34a)",
+               "yellow": "linear-gradient(90deg,#f59e0b,#d97706)",
+               "red": "linear-gradient(90deg,#f87171,#dc2626)"}
+        parts.append('<h2>Health Scores</h2>')
+        for s in scores:
+            pct = max(0, min(100, s["score"]))
+            grad = _bg.get(s["color"], _bg["yellow"])
+            txt_col = _SCORE_COLORS_HEX.get(s["color"], "#7a4210")
+            parts.append(
+                f'<div class="score-row">'
+                f'<div class="score-label">{s["name"]}</div>'
+                f'<div class="score-bar-wrap"><div class="score-bar" style="width:{pct}%;background:{grad}"></div></div>'
+                f'<div class="score-pct" style="color:{txt_col}">{pct}% {s["trend"]}</div>'
+                f'<div class="score-meta">{s["driver"]}</div>'
+                f'</div>'
+            )
+
+    # ── Narrative (markdown → HTML) ───────────────────────────────────────
+    parts.append("")
+    in_ul = False
+    for line in narrative.splitlines():
+        s = line.strip()
+        if s.startswith("### "):
+            if in_ul: parts.append("</ul>"); in_ul = False
+            parts.append(f"<h3>{s[4:]}</h3>")
+        elif s.startswith("## "):
+            if in_ul: parts.append("</ul>"); in_ul = False
+            parts.append(f"<h2>{s[3:]}</h2>")
+        elif s.startswith("- ") or s.startswith("* "):
+            if not in_ul: parts.append("<ul>"); in_ul = True
+            # Bold leading **text**
+            item = s[2:].replace("**", "<b>", 1).replace("**", "</b>", 1)
+            parts.append(f"<li>{item}</li>")
+        elif s == "---":
+            if in_ul: parts.append("</ul>"); in_ul = False
+            parts.append("<hr>")
+        elif s:
+            if in_ul: parts.append("</ul>"); in_ul = False
+            txt = s.replace("**", "<b>", 1).replace("**", "</b>", 1)
+            parts.append(f"<p>{txt}</p>")
+        else:
+            if in_ul: parts.append("</ul>"); in_ul = False
+    if in_ul:
+        parts.append("</ul>")
+
+    # ── Walk-in Demand ────────────────────────────────────────────────────
+    if wid_data and wid_data.get("rows"):
+        cols = wid_data.get("cols", [])
+        parts.append('<h2>Walk-in Demand Index</h2>')
+        parts.append('<p style="font-size:9pt;color:#6b7280">DMA-level foot traffic demand index (admin.cars.com)</p>')
+        parts.append('<table class="demand-table"><tr>')
+        for c in cols:
+            parts.append(f"<th>{c}</th>")
+        parts.append("</tr>")
+        for row in wid_data["rows"][:10]:
+            parts.append("<tr>" + "".join(f"<td>{v}</td>" for v in row) + "</tr>")
+        parts.append("</table>")
+
+    # ── Vehicle Demand ────────────────────────────────────────────────────
+    if vd_data and vd_data.get("rows"):
+        cols = vd_data.get("cols", [])
+        parts.append('<h2>Vehicle Demand — Top Searched Segments</h2>')
+        parts.append('<p style="font-size:9pt;color:#6b7280">Top vehicle segments searched in the dealer\'s DMA (admin.cars.com)</p>')
+        parts.append('<table class="demand-table"><tr>')
+        for c in cols:
+            parts.append(f"<th>{c}</th>")
+        parts.append("</tr>")
+        for row in vd_data["rows"][:5]:
+            parts.append("<tr>" + "".join(f"<td>{v}</td>" for v in row) + "</tr>")
+        parts.append("</table>")
+
+    # ── Footer ────────────────────────────────────────────────────────────
+    parts.append(f'<div class="footer">Report generated by Cars.com Dealer Health Dashboard &nbsp;·&nbsp; {today}</div>')
+    parts.append("</body></html>")
+    return "\n".join(parts)
+
+
+def create_health_doc(
+    dealer_name: str,
+    scores: list,
+    narrative: str,
+    wid_data: Optional[dict],
+    vd_data: Optional[dict],
+    sf_data=None,
+    perf_data: Optional[dict] = None,
+) -> str:
+    """Upload an HTML snapshot to Drive, converting it to a Google Doc. Returns the Doc URL."""
+    today = datetime.date.today().strftime("%B %d, %Y")
+    title = f"Dealer Health Snapshot — {dealer_name} — {today}"
+    html = _build_health_html(dealer_name, scores, narrative, wid_data, vd_data, today)
+
+    drive = _gdrive_service()
+    media = MediaIoBaseUpload(
+        io.BytesIO(html.encode("utf-8")),
+        mimetype="text/html",
+        resumable=False,
+    )
+    file_meta = {
+        "name": title,
+        "mimeType": "application/vnd.google-apps.document",
+    }
+    f = drive.files().create(body=file_meta, media_body=media, fields="id").execute()
+    return f"https://docs.google.com/document/d/{f['id']}/edit"
+
+
 # ─── UI ──────────────────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -769,9 +966,12 @@ if run and (dealer_name.strip() or ccid_override.strip()):
             for line in source_summary:
                 st.markdown(f"- {line}")
 
+    # Parse + store scores for doc export
+    _scores_for_export, _ = _parse_scores(response_text)
     st.session_state["last_result"] = {
         "dealer": dealer_name,
         "analysis": response_text,
+        "scores": _scores_for_export,
         "sf_data": sf_data,
         "sub_data": sub_data,
         "perf_data": perf_data,
@@ -780,6 +980,8 @@ if run and (dealer_name.strip() or ccid_override.strip()):
         "lo_data": lo_data,
         "si_data": si_data,
         "roi_data": roi_data,
+        "wid_data": wid_data,
+        "vd_data": vd_data,
         "source_summary": source_summary,
     }
 
@@ -790,6 +992,24 @@ if "last_result" in st.session_state:
     if not (run and (dealer_name.strip() or ccid_override.strip())):
         # Claude's output already contains the "📊 Health Snapshot — …" heading
         st.markdown(result["analysis"])
+
+    # ── Google Doc export ──────────────────────────────────────────────────
+    if st.button("📄 Export to Google Doc", key="export_doc"):
+        with st.spinner("Creating Google Doc…"):
+            try:
+                _, _narrative = _parse_scores(result["analysis"])
+                doc_url = create_health_doc(
+                    dealer_name=result["dealer"],
+                    scores=result.get("scores", []),
+                    narrative=_narrative,
+                    wid_data=result.get("wid_data"),
+                    vd_data=result.get("vd_data"),
+                    sf_data=result.get("sf_data"),
+                    perf_data=result.get("perf_data"),
+                )
+                st.success(f"Doc created — [Open in Google Docs]({doc_url})")
+            except Exception as _e:
+                st.error(f"Doc creation failed: {_e}")
 
     st.divider()
 
