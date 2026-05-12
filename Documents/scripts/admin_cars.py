@@ -506,7 +506,7 @@ async () => {
     const viz = document.querySelector('tableau-viz');
     if (!viz || !viz.workbook) return null;
     await viz.workbook.activateSheetAsync('Price Comparison');
-    await new Promise(r => setTimeout(r, 3000));
+    await new Promise(r => setTimeout(r, 6000));
     const sheet = viz.workbook.activeSheet;
     const names = sheet.worksheets.map(w => w.name);
     const ws = sheet.worksheets.find(w => w.name === 'Pricing Summary');
