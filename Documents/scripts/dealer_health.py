@@ -140,7 +140,9 @@ Only mention ONE thing here: **DMS connectivity status** (connected or not conne
     - Competitive-set performance — not pulled today; do not flag as a gap
 - If data is limited, score what you can and clearly note what's estimated vs. data-backed.
 - Be concise and direct — this is for busy account teams.
-- All MoM deltas are percentage changes vs. prior month."""
+- All MoM deltas are percentage changes vs. prior month.
+- **Walk-in Demand data** (if present): the rows contain DMA-level foot traffic index values. Interpret them as a demand signal — a high index means the market is actively shopping, a low index is a warning that marketing should focus on creating demand. Cross-reference against the dealer's connections trend.
+- **Vehicle Demand data** (if present): shows the top-searched vehicle segments in the dealer's DMA. If the dealer's inventory mix doesn't match the top-searched segments, flag it as a specific growth opportunity (e.g., "DMA searches are 40% SUV but dealer is 70% sedan-heavy")."""
 
 
 # ─── DATA SOURCES ────────────────────────────────────────────────────────────
