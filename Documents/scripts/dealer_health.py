@@ -1,10 +1,36 @@
+import os
+import tempfile
+import threading
 import streamlit as st
-import anthropic
 import pandas as pd
 import subprocess
 import json
 import admin_cars
 from typing import Optional, List
+
+# ─── BRANDING ─────────────────────────────────────────────────────────────────
+
+CC_CSS = """
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700&display=swap');
+  html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
+  .block-container { padding-top: 2rem; }
+  div[data-testid="stStatusWidget"] { visibility: hidden; }
+  .cc-brand { font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase;
+               color: #5B2D8E; font-weight: 700; }
+  .cc-title { font-size: 2.0rem; font-weight: 700; color: #111827; margin: 0; line-height: 1.15; }
+  .cc-sub   { color: #6b7280; font-size: 0.95rem; margin: 0.15rem 0 0.25rem 0; }
+  .cc-accent { height: 4px; background: linear-gradient(90deg,#5B2D8E 0%,#a78bfa 100%);
+               margin: 0 0 1rem 0; border-radius: 2px; }
+  section[data-testid="stSidebar"] .stCheckbox label { font-size: 0.88rem; }
+  section[data-testid="stSidebar"] h2 { color: #5B2D8E; border-left: 3px solid #5B2D8E;
+                                         padding-left: 8px; }
+</style>
+<div class="cc-brand">Cars.com · Growth Insights</div>
+<h1 class="cc-title">Dealer Health Dashboard</h1>
+<p class="cc-sub">Health snapshots powered by the Dealer Growth Triangle</p>
+<div class="cc-accent"></div>
+"""
 
 # ─── CONFIG ──────────────────────────────────────────────────────────────────
 
@@ -400,27 +426,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# Cars.com-branded header with tighter spacing and purple accent
-st.markdown(
-    """
-    <style>
-      /* Tighten top padding so content starts near the header */
-      .block-container { padding-top: 2.2rem; }
-      /* Hide the default running-man / "Running…" toast to keep the page calm */
-      div[data-testid="stStatusWidget"] { visibility: hidden; }
-      /* Branded accent bar */
-      .cc-accent { height: 4px; background: linear-gradient(90deg, #5b2d8e 0%, #8b5fbf 100%); margin: -0.25rem 0 1rem 0; border-radius: 2px; }
-      .cc-brand { font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase; color: #5b2d8e; font-weight: 700; }
-      .cc-title { font-size: 2.0rem; font-weight: 700; color: #1A1A1A; margin: 0; line-height: 1.15; }
-      .cc-sub { color: #6b6b6b; font-size: 0.95rem; margin: 0.15rem 0 0.25rem 0; }
-    </style>
-    <div class="cc-brand">Cars.com · Growth Insights</div>
-    <h1 class="cc-title">Dealer Health Dashboard</h1>
-    <p class="cc-sub">Health snapshots powered by the Dealer Growth Triangle</p>
-    <div class="cc-accent"></div>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown(CC_CSS, unsafe_allow_html=True)
 
 @st.cache_data(ttl=300)
 def _session_ok() -> bool:
@@ -606,19 +612,47 @@ if run and (dealer_name.strip() or ccid_override.strip()):
             + "\n\n".join(lines)
         )
 
-    client = anthropic.Anthropic()
-    with st.container():
-        response_text = ""
-        placeholder = st.empty()
-        with client.messages.stream(
-            model="claude-sonnet-4-6",
-            max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": f"Generate a dealer health snapshot for this dealer.\n\n{data_context}"}],
-        ) as stream:
-            for text in stream.text_stream:
-                response_text += text
-                placeholder.markdown(response_text)
+    _env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as sys_f:
+        sys_f.write(SYSTEM_PROMPT)
+        sys_path = sys_f.name
+    try:
+        proc = subprocess.Popen(
+            [
+                "claude", "-p",
+                f"Generate a dealer health snapshot for this dealer.\n\n{data_context}",
+                "--system-prompt-file", sys_path,
+                "--model", "claude-sonnet-4-6",
+                "--output-format", "text",
+                "--mcp-config", '{"mcpServers":{}}',
+                "--strict-mcp-config",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=_env,
+        )
+    finally:
+        os.unlink(sys_path)
+
+    # Drain stderr in background so its buffer never blocks stdout
+    stderr_lines: list = []
+    threading.Thread(target=lambda: stderr_lines.extend(proc.stderr.readlines()), daemon=True).start()
+
+    status_box = st.empty()
+    status_box.info("Connecting to Claude CLI… (startup takes ~20s, then text will stream in)")
+    placeholder = st.empty()
+    response_text = ""
+    for chunk in iter(lambda: proc.stdout.read(64), ""):
+        if not response_text:
+            status_box.empty()
+        response_text += chunk
+        placeholder.markdown(response_text)
+    proc.wait()
+
+    if proc.returncode != 0 or not response_text:
+        status_box.empty()
+        st.error(f"Claude CLI error (exit {proc.returncode}):\n\n{''.join(stderr_lines)[:1000]}")
 
     # Compact data-source summary — collapsed by default so the snapshot is the hero
     if source_summary:
