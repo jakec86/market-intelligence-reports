@@ -712,10 +712,17 @@ if run and (dealer_name.strip() or ccid_override.strip()):
         response_text += chunk
         placeholder.markdown(response_text)
     proc.wait()
+    response_text = response_text.strip()
 
     if proc.returncode != 0 or not response_text:
         status_box.empty()
         st.error(f"Claude CLI error (exit {proc.returncode}):\n\n{''.join(stderr_lines)[:1000]}")
+    else:
+        scores, narrative = _parse_scores(response_text)
+        placeholder.empty()
+        if scores:
+            st.markdown(_render_score_bars(scores), unsafe_allow_html=True)
+        st.markdown(narrative)
 
     # Compact data-source summary — collapsed by default so the snapshot is the hero
     if source_summary:
