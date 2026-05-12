@@ -939,6 +939,7 @@ if run and (dealer_name.strip() or ccid_override.strip()):
                     "--system-prompt-file", sys_path,
                     "--model", "claude-sonnet-4-6",
                     "--output-format", "text",
+                    "--max-tokens", "4096",
                     "--mcp-config", '{"mcpServers":{}}',
                     "--strict-mcp-config",
                 ],
@@ -956,10 +957,23 @@ if run and (dealer_name.strip() or ccid_override.strip()):
     if result_proc.returncode != 0 or not response_text:
         st.error(f"Claude error (exit {result_proc.returncode}):\n\n{result_proc.stderr[:1000]}")
     else:
-        scores, narrative = _parse_scores(response_text)
-        if scores:
-            st.markdown(_render_score_bars(scores), unsafe_allow_html=True)
-        st.markdown(narrative)
+        _scores_for_export, _ = _parse_scores(response_text)
+        st.session_state["last_result"] = {
+            "dealer": dealer_name,
+            "analysis": response_text,
+            "scores": _scores_for_export,
+            "sf_data": sf_data,
+            "sub_data": sub_data,
+            "perf_data": perf_data,
+            "rep_data": rep_data,
+            "mkt_data": mkt_data,
+            "lo_data": lo_data,
+            "si_data": si_data,
+            "roi_data": roi_data,
+            "wid_data": wid_data,
+            "vd_data": vd_data,
+            "source_summary": source_summary,
+        }
 
     # Compact data-source summary — collapsed by default so the snapshot is the hero
     if source_summary:
@@ -967,26 +981,7 @@ if run and (dealer_name.strip() or ccid_override.strip()):
             for line in source_summary:
                 st.markdown(f"- {line}")
 
-    # Parse + store scores for doc export
-    _scores_for_export, _ = _parse_scores(response_text)
-    st.session_state["last_result"] = {
-        "dealer": dealer_name,
-        "analysis": response_text,
-        "scores": _scores_for_export,
-        "sf_data": sf_data,
-        "sub_data": sub_data,
-        "perf_data": perf_data,
-        "rep_data": rep_data,
-        "mkt_data": mkt_data,
-        "lo_data": lo_data,
-        "si_data": si_data,
-        "roi_data": roi_data,
-        "wid_data": wid_data,
-        "vd_data": vd_data,
-        "source_summary": source_summary,
-    }
-
-# Show raw data from last run
+# Show snapshot and raw data from last run — export button always renders first
 if "last_result" in st.session_state:
     result = st.session_state["last_result"]
 
@@ -1008,12 +1003,12 @@ if "last_result" in st.session_state:
             except Exception as _e:
                 st.error(f"Doc creation failed: {_e}")
 
-    if not (run and (dealer_name.strip() or ccid_override.strip())):
-        _cached_scores = result.get("scores", [])
-        if _cached_scores:
-            st.markdown(_render_score_bars(_cached_scores), unsafe_allow_html=True)
-        _, _cached_narrative = _parse_scores(result["analysis"])
-        st.markdown(_cached_narrative)
+    # Render score bars + narrative from session state (consistent on fresh run and cached view)
+    _scores = result.get("scores", [])
+    if _scores:
+        st.markdown(_render_score_bars(_scores), unsafe_allow_html=True)
+    _, _narrative = _parse_scores(result["analysis"])
+    st.markdown(_narrative)
 
     st.divider()
 
