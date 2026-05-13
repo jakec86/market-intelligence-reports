@@ -49,7 +49,7 @@ TEMP_CONTACT_OVERRIDES = {
         "gm_name": "Maureen Bailey", "first_name": "Maureen",
         "email": "mbailey@kennyross.com",
     },
-    # Mercedes-Benz of Washington — not in GM sheet; Angela Marcinizyn (staff page, TBD confirmation)
+    # Mercedes-Benz of Washington — not in GM sheet; Angela Marcinizyn confirmed
     "mercedes benz of washington": {
         "gm_name": "Angela Marcinizyn", "first_name": "Angela",
         "email": "amarcinizyn@johnsissonmotors.com",
@@ -65,6 +65,11 @@ TEMP_CONTACT_OVERRIDES = {
             "jporter@southernteam.com",
             "jramirez@southernteam.com",
         ],
+    },
+    # Vision Kia of Canandaigua — not in GM sheet; Ziad Hasasneh confirmed
+    "vision kia of canandaigua": {
+        "gm_name": "Ziad Hasasneh", "first_name": "Ziad",
+        "email": "ziad@visionauto.com",
     },
     # Vision Chevrolet — no entry in GM sheet; Jesus Francos manages multiple Vision stores
     "vision chevrolet": {
