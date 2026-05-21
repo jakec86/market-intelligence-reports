@@ -116,7 +116,6 @@ HEADER_HTML = """
 TABLEAU_HOST    = "https://us-west-2b.online.tableau.com"
 SITE_ID         = "12338861-20b1-46ed-8841-269a5a937edb"
 BY_STORE_VIEW   = "a0b9bdce-2db3-4ea0-a2fc-365fd08c5786"
-AE_INSIGHTS_VIEW = "a60dbfc3-0156-4728-884a-fec77a3b7d2c"  # no RLS — all dealers, MRR + products
 
 # Scenario → admin.cars.com report slug mapping (used for scenario-aware quick links)
 SCENARIO_REPORTS = {
@@ -304,42 +303,6 @@ def _pull_by_ccid(ccid: str) -> List[Dict]:
         except Exception:
             pass
     return [s for s in all_stores if s.get("Legacy Id", "").strip() == ccid.strip()]
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def _pull_ae_insights() -> Dict[str, Dict]:
-    """
-    Pull AE Insights view — no RLS, all dealers, has CCID + MRR + products.
-    Returns dict keyed by CCID: {name, ccid, mrr, products, dma, ae}.
-    Cached 1 hour — this is a large payload (~75K rows).
-    """
-    token = _tableau_token()
-    url = f"{TABLEAU_HOST}/api/3.22/sites/{SITE_ID}/views/{AE_INSIGHTS_VIEW}/data"
-    req = urllib.request.Request(url, headers={"X-Tableau-Auth": token})
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            raw = r.read().decode("utf-8", errors="replace")
-    except Exception:
-        return {}
-    result = {}
-    for row in csv.DictReader(io.StringIO(raw)):
-        ccid = row.get("Customer Id", row.get("CCID", "")).strip()
-        if not ccid:
-            continue
-        mrr_raw = row.get("MRR", row.get("Current MRR", "0")) or "0"
-        try:
-            mrr = float(str(mrr_raw).replace("$", "").replace(",", "").strip() or "0")
-        except ValueError:
-            mrr = 0.0
-        result[ccid] = {
-            "name":     row.get("Customer Name", row.get("Dealer Name", "")),
-            "ccid":     ccid,
-            "mrr":      mrr,
-            "products": row.get("Products", row.get("Product Names", "")),
-            "dma":      row.get("DMA", ""),
-            "ae":       row.get("AE", ""),
-        }
-    return result
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -1197,105 +1160,106 @@ with tab_expiry:
         "Higher = stronger upsell conversation."
     )
 
-    col_mrr, col_scope = st.columns([2, 2])
-    mrr_ceiling = col_mrr.slider("Max MRR threshold ($)", 0, 20000, 8000, step=500,
-                                  help="Show stores currently below this MRR — growth headroom")
-    include_flagged = col_scope.checkbox("Include flagged stores", value=False,
-                                          help="Flagged stores have issues to fix first — usually exclude from upsell")
+    include_flagged = st.checkbox(
+        "Include flagged stores",
+        value=False,
+        help="Flagged stores have active issues — typically fix first, then upsell",
+    )
 
-    with st.spinner("Loading product data from AE Insights…"):
-        ae_data = _pull_ae_insights()
+    # Build upsell candidates from scan data only — no external API needed.
+    # Score = metric trajectory (VDP + connection growth) × scenario gap weight.
+    # Enterprise accounts don't expose per-store MRR via Tableau or SF,
+    # so trajectory is the primary signal; flagged scenarios indicate product gaps.
 
-    if not ae_data:
-        st.warning("AE Insights view returned no data — check Tableau PAT access.")
+    SCENARIO_UPSELL_WEIGHT = {
+        1: ("Connections drop → Listings Optimizer / MAE conversation", 20),
+        2: ("Merch gap → Listings Optimizer Premium",                    25),
+        3: ("VDP decline → Demand Signals / Market Area Expansion",      20),
+        4: ("Demand mismatch → AccuTrade / inventory mix conversation",  25),
+        5: ("High Cost/Lead → lead quality product or package review",   15),
+    }
+
+    upsell_candidates = []
+    all_scan_stores = (
+        results["high"] + results["medium"] + results["bright_spots"] + results["clean"]
+    )
+
+    for entry in all_scan_stores:
+        is_flagged = entry in (results["high"] + results["medium"])
+        if is_flagged and not include_flagged:
+            continue
+
+        ccid  = entry.get("ccid", "")
+        name  = entry.get("store", "") or entry.get("Customer Name", "")
+        flags = entry.get("flags", [])
+
+        store_rec = next((s for s in stores if s.get("Legacy Id") == ccid), {})
+        vdp_d  = _delta(store_rec, "vdp_cp", "vdp_pp", "vdp_delta") or 0
+        conn_d = _delta(store_rec, "conn_cp","conn_pp","conn_delta") or 0
+
+        # Trajectory score (0–50): growth momentum = upsell readiness
+        traj_score = min(50, int(max(0, vdp_d) * 120 + max(0, conn_d) * 120))
+
+        # Gap score (0–50): active flags identify which products to bring up
+        gap_score   = 0
+        gap_labels  = []
+        seen_scenarios = set()
+        for f in flags:
+            s = f["scenario"]
+            if s not in seen_scenarios:
+                label, weight = SCENARIO_UPSELL_WEIGHT.get(s, ("", 0))
+                gap_score += weight
+                if label:
+                    gap_labels.append(label)
+                seen_scenarios.add(s)
+        gap_score = min(50, gap_score)
+
+        total_score = traj_score + gap_score
+        if total_score < 15:
+            continue
+
+        upsell_candidates.append({
+            "Score":          total_score,
+            "Store":          name,
+            "CCID":           ccid,
+            "Metric Trend":   f"VDPs {_pct(vdp_d) if vdp_d else '→'}  Conn {_pct(conn_d) if conn_d else '→'}",
+            "Conversation":   gap_labels[0] if gap_labels else "Growth momentum — package review",
+            "_score":         total_score,
+        })
+
+    upsell_candidates.sort(key=lambda r: -r["_score"])
+
+    if not upsell_candidates:
+        st.info("No upsell candidates found. Run a scan first, or enable 'Include flagged stores'.")
     else:
-        # Build upsell score for every store in the current scan
-        PRODUCT_WEIGHTS = {
-            "listings optimizer": 2, "cars social": 3, "accutrade": 3,
-            "market area expansion": 3, "mae": 3, "premium": 2,
-            "vpm": 2, "vin performance": 2, "featured": 1,
-        }
+        def _score_color(val):
+            try:
+                s = int(val)
+                if s >= 60: return "background-color: #d1fae5; color: #065f46; font-weight:700"
+                if s >= 35: return "background-color: #fef3c7; color: #92400e"
+            except Exception:
+                pass
+            return ""
 
-        upsell_candidates = []
-        all_scan_stores = results["high"] + results["medium"] + results["bright_spots"] + results["clean"]
+        display_cols = ["Score", "Store", "CCID", "Metric Trend", "Conversation"]
+        upsell_df = pd.DataFrame(
+            [{k: v for k, v in r.items() if not k.startswith("_")} for r in upsell_candidates]
+        )
+        st.dataframe(
+            upsell_df[display_cols].style.applymap(_score_color, subset=["Score"]),
+            use_container_width=True, hide_index=True,
+        )
+        st.caption(
+            f"**{len(upsell_candidates)} candidates** · "
+            f"Score = metric trajectory (0–50) + scenario gap weight (0–50). "
+            f"Green ≥60 = strong conversation; yellow ≥35 = worth raising. "
+            f"Per-store MRR not available for enterprise accounts — use for conversation direction only."
+        )
 
-        for entry in all_scan_stores:
-            # Skip flagged stores unless opted in
-            is_flagged = entry in (results["high"] + results["medium"])
-            if is_flagged and not include_flagged:
-                continue
-
-            ccid  = entry.get("ccid", "") or (entry.get("ccid") if "ccid" in entry else "")
-            name  = entry.get("store", "") or entry.get("Customer Name", "")
-            ae    = ae_data.get(ccid, {})
-            mrr   = ae.get("mrr", 0) or 0
-            prods = (ae.get("products", "") or "").lower()
-
-            if mrr > mrr_ceiling:
-                continue
-
-            # Metric trajectory score (0–40): VDP + connection deltas
-            store_rec = next((s for s in stores if s.get("Legacy Id") == ccid), {})
-            vdp_d  = _delta(store_rec, "vdp_cp",  "vdp_pp",  "vdp_delta") or 0
-            conn_d = _delta(store_rec, "conn_cp", "conn_pp", "conn_delta") or 0
-            traj_score = min(40, int(max(0, vdp_d) * 100 + max(0, conn_d) * 100))
-
-            # Product gap score (0–60): missing high-value products = more headroom
-            gap_score = 0
-            gap_products = []
-            for prod_key, weight in PRODUCT_WEIGHTS.items():
-                if prod_key not in prods:
-                    gap_score += weight * 5
-                    gap_products.append(prod_key.title())
-            gap_score = min(60, gap_score)
-
-            total_score = traj_score + gap_score
-            if total_score < 20:
-                continue
-
-            upsell_candidates.append({
-                "Score":         total_score,
-                "Store":         name,
-                "CCID":          ccid,
-                "Current MRR":   f"${mrr:,.0f}/mo",
-                "Metric Trend":  f"VDPs {_pct(vdp_d) if vdp_d else '—'}  Conn {_pct(conn_d) if conn_d else '—'}",
-                "Products on File": ae.get("products", "—") or "—",
-                "Missing (Growth Opps)": ", ".join(gap_products[:4]) or "—",
-                "_score": total_score,
-            })
-
-        upsell_candidates.sort(key=lambda r: -r["_score"])
-
-        if not upsell_candidates:
-            st.info(f"No upsell candidates found at MRR < ${mrr_ceiling:,}. Try raising the threshold or enabling flagged stores.")
-        else:
-            display_cols = ["Score", "Store", "CCID", "Current MRR", "Metric Trend", "Missing (Growth Opps)"]
-            upsell_df = pd.DataFrame([{k: v for k, v in r.items() if not k.startswith("_")} for r in upsell_candidates])
-
-            # Score color scale
-            def _score_color(val):
-                try:
-                    s = int(val)
-                    if s >= 70: return "background-color: #d1fae5; color: #065f46; font-weight:700"
-                    if s >= 40: return "background-color: #fef3c7; color: #92400e"
-                except Exception:
-                    pass
-                return ""
-
-            st.dataframe(
-                upsell_df[display_cols].style.applymap(_score_color, subset=["Score"]),
-                use_container_width=True, hide_index=True,
-            )
-            st.caption(
-                f"**{len(upsell_candidates)} upsell candidates** · "
-                f"Score = metric trajectory (0–40) + product gap (0–60). "
-                f"Green ≥70 = strong conversation; yellow ≥40 = worth discussing."
-            )
-
-            # Click to get prep brief for top candidate
-            top = upsell_candidates[0]
-            if st.button(f"📋 Get Brief for top candidate — {top['Store']}", key="upsell_top_brief"):
-                st.session_state["brief_prefill"] = top["Store"]
+        # Quick link to prep brief for top candidate
+        top = upsell_candidates[0]
+        if st.button(f"📋 Get Brief for top candidate — {top['Store']}", key="upsell_top_brief"):
+            st.session_state["brief_prefill"] = top["Store"]
 
 # ═══════════════════════ TAB 4: HEALTH ANALYSIS ══════════════════════════════
 with tab_health:
