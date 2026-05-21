@@ -1342,65 +1342,74 @@ with tab_health:
                     h_source_summary.append(f"Subscriptions: {len(h_sub_data)} · ${total:,.0f}/mo")
 
         if h_use_admin and h_effective_ccid and _cdp_ok:
-            _h_progress("Resolving admin.cars.com UUID…")
+            _h_progress("Connecting to admin.cars.com (30s timeout per report)…")
             _admin_error = None
             try:
-                with _admin_cars.session(restart=False) as _admin:
-                    _uuid = _admin.resolve_uuid(h_effective_ccid)
-                    if _uuid:
-                        _h_progress("Pulling Performance Trends…")
-                        h_perf = _admin.fetch_performance_trends(_uuid)
-                        if h_perf: h_source_summary.append(f"Performance Trends: {sum(1 for v in h_perf.values() if v is not None)} metrics")
+                import signal as _signal
 
-                        _h_progress("Pulling Reputation…")
-                        h_rep = _admin.fetch_reputation(_uuid)
-                        if h_rep and h_rep.get("rating"): h_source_summary.append(f"Reputation: {h_rep['rating']}★")
+                def _timeout_handler(signum, frame):
+                    raise TimeoutError("admin.cars.com data pull exceeded 90 seconds")
 
-                        _h_progress("Pulling Market Comparison…")
-                        h_mkt = _admin.fetch_market_comparison(_uuid)
-                        if h_mkt: h_source_summary.append(f"Market Comparison: {h_mkt.get('at_pct')}% at market")
+                _signal.signal(_signal.SIGALRM, _timeout_handler)
+                _signal.alarm(90)  # hard 90-second ceiling for entire admin block
 
-                        _h_progress("Pulling Listings Optimizer…")
-                        h_lo = _admin.fetch_listings_optimizer(_uuid)
-                        if h_lo:
-                            n = len(h_lo.get("within_500_good",[])) + len(h_lo.get("within_500_great",[]))
-                            h_source_summary.append(f"Listings Optimizer: {n} pricing opps")
+                try:
+                    with _admin_cars.session(restart=False) as _admin:
+                        _uuid = _admin.resolve_uuid(h_effective_ccid)
+                        if _uuid:
+                            for _report, _fetch, _label in [
+                                ("Performance Trends", _admin.fetch_performance_trends,
+                                 lambda d: f"Performance Trends: {sum(1 for v in d.values() if v is not None)} metrics"),
+                                ("Reputation",         _admin.fetch_reputation,
+                                 lambda d: f"Reputation: {d.get('rating')}★" if d.get("rating") else None),
+                                ("Market Comparison",  _admin.fetch_market_comparison,
+                                 lambda d: f"Market Comparison: {d.get('at_pct')}% at market"),
+                                ("Listings Optimizer", _admin.fetch_listings_optimizer,
+                                 lambda d: f"Listings Optimizer: {len(d.get('within_500_good',[]))+len(d.get('within_500_great',[]))} pricing opps"),
+                                ("ROI One-Sheeter",    _admin.fetch_roi_one_sheeter,
+                                 lambda d: f"Lead sources: {d['lead_sources'].get('total',0)} connections" if d.get("lead_sources") else None),
+                                ("Sales Influence",    _admin.fetch_sales_influence,
+                                 lambda d: "DMS: connected" if d and d.get("dms_connected") else "DMS: not connected"),
+                            ]:
+                                _h_progress(f"Pulling {_report}… (admin.cars.com)")
+                                _data = _fetch(_uuid)
+                                if _report == "Performance Trends":   h_perf = _data
+                                elif _report == "Reputation":         h_rep  = _data
+                                elif _report == "Market Comparison":  h_mkt  = _data
+                                elif _report == "Listings Optimizer": h_lo   = _data
+                                elif _report == "ROI One-Sheeter":    h_roi  = _data
+                                elif _report == "Sales Influence":    h_si   = _data
+                                if _data:
+                                    _lbl = _label(_data)
+                                    if _lbl: h_source_summary.append(_lbl)
 
-                        _h_progress("Pulling ROI One-Sheeter…")
-                        h_roi = _admin.fetch_roi_one_sheeter(_uuid)
-                    if h_roi and h_roi.get("lead_sources"):
-                        h_source_summary.append(f"Lead sources: {h_roi['lead_sources'].get('total',0)} connections")
+                            if h_use_wid:
+                                _h_progress("Pulling Walk-in Demand…")
+                                h_wid = _admin.fetch_walk_in_demand(_uuid)
+                                h_source_summary.append("Walk-in Demand: " + ("available" if h_wid else "not available"))
+                            if h_use_vd:
+                                _h_progress("Pulling Vehicle Demand…")
+                                h_vd = _admin.fetch_vehicle_demand(_uuid)
+                                h_source_summary.append("Vehicle Demand: " + ("available" if h_vd else "not available"))
+                        else:
+                            h_source_summary.append("admin.cars.com: UUID not found")
+                finally:
+                    _signal.alarm(0)  # cancel alarm regardless of outcome
 
-                    _h_progress("Checking Sales Influence…")
-                    h_si = _admin.fetch_sales_influence(_uuid)
-                    h_source_summary.append("DMS: " + ("connected" if h_si and h_si.get("dms_connected") else "not connected"))
-
-                    if h_use_wid:
-                        _h_progress("Pulling Walk-in Demand…")
-                        h_wid = _admin.fetch_walk_in_demand(_uuid)
-                        h_source_summary.append("Walk-in Demand: " + ("available" if h_wid else "not available"))
-                    if h_use_vd:
-                        _h_progress("Pulling Vehicle Demand…")
-                        h_vd = _admin.fetch_vehicle_demand(_uuid)
-                        h_source_summary.append("Vehicle Demand: " + ("available" if h_vd else "not available"))
-                    else:
-                        h_source_summary.append("admin.cars.com: UUID not found")
+            except TimeoutError as _te:
+                _admin_error = "Timed out after 90s"
+                h_source_summary.append("admin.cars.com: timed out — proceeding with SF data")
+                st.warning("⚠️ admin.cars.com pull timed out (90s). Generating snapshot with Salesforce data only.")
             except Exception as _e:
                 _admin_error = str(_e)
                 h_source_summary.append(f"admin.cars.com: skipped — {_admin_error[:80]}")
-
-            if _admin_error and "jumpcloud" in _admin_error.lower():
-                h_prog.empty()
-                st.warning(
-                    "⚠️ **admin.cars.com requires sign-in.** "
-                    "The Chrome session was redirected to JumpCloud SSO. "
-                    "Open the dealer health Chrome window, sign in to admin.cars.com, "
-                    "then click **Run Health Analysis** again. "
-                    "Analysis will continue with Salesforce data only for now."
-                )
-            elif _admin_error:
-                st.warning(f"admin.cars.com data unavailable ({_admin_error[:120]}). "
-                           f"Proceeding with Salesforce data only.")
+                if "jumpcloud" in _admin_error.lower():
+                    st.warning(
+                        "⚠️ **admin.cars.com requires sign-in.** Sign in to admin.cars.com "
+                        "in the dealer health Chrome window, then click Run Health Analysis again."
+                    )
+                else:
+                    st.warning(f"admin.cars.com unavailable — proceeding with Salesforce data only.")
 
         _h_progress("Generating health snapshot…")
         data_ctx = build_data_context(
