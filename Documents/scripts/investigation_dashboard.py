@@ -13,6 +13,7 @@ import csv
 import io
 import json
 import os
+import re as _re
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,12 @@ from investigation_triggers import (
     SCENARIO_META,
     THRESHOLDS,
 )
+from health_analysis import (
+    fetch_salesforce, fetch_salesforce_by_ccid, fetch_subscriptions,
+    build_data_context, parse_scores, render_score_bars,
+    run_health_analysis, create_health_doc,
+)
+import admin_cars as _admin_cars
 
 # ─── BRANDING ─────────────────────────────────────────────────────────────────
 
@@ -747,6 +754,36 @@ with st.sidebar:
         st.error("✗ Tableau PAT not found")
         st.caption("Run: `security add-generic-password -a jcrawley -s tableau-pat -w 'YOUR_PAT'`")
 
+    # admin.cars.com session status (for Tab 4 Health Analysis)
+    st.divider()
+    st.caption("Health Analysis (Tab 4)")
+
+    @st.cache_data(ttl=300)
+    def _admin_session_ok() -> bool:
+        return _admin_cars.check_session()
+
+    _cdp_ok = _admin_session_ok()
+    if _cdp_ok:
+        st.success("● admin.cars.com connected")
+        if st.button("Refresh CDP", use_container_width=True, key="refresh_cdp"):
+            st.cache_data.clear()
+            st.rerun()
+    else:
+        st.warning("● admin.cars.com not connected")
+        st.caption("Launch Chrome with port 9223 to enable full Health Analysis:")
+        st.code(
+            'mkdir -p ~/.chrome-dealer-health && '
+            'nohup "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" '
+            '--remote-debugging-port=9223 '
+            '--user-data-dir="$HOME/.chrome-dealer-health" '
+            "--remote-allow-origins='*' --no-first-run "
+            '> /tmp/chrome-debug.log 2>&1 &',
+            language="bash",
+        )
+        if st.button("Re-check", use_container_width=True, key="recheck_cdp"):
+            st.cache_data.clear()
+            st.rerun()
+
 
 # ─── RUN SCAN ─────────────────────────────────────────────────────────────────
 
@@ -844,7 +881,9 @@ st.markdown(
 st.markdown(_render_kpis(results, expirations), unsafe_allow_html=True)
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab_book, tab_brief, tab_expiry = st.tabs(["📋 Flagged Stores", "🔍 Store Brief", "⚠️ Expirations & Upsell"])
+tab_book, tab_brief, tab_expiry, tab_health = st.tabs([
+    "📋 Flagged Stores", "🔍 Store Brief", "⚠️ Expirations & Upsell", "🏥 Health Analysis"
+])
 
 # ═══════════════════════ TAB 1: FLAGGED STORES ════════════════════════════════
 with tab_book:
@@ -1085,6 +1124,10 @@ with tab_brief:
         # Scenario-aware quick links
         st.markdown(_admin_links(brief["ccid"], flags=brief.get("flags")), unsafe_allow_html=True)
 
+        if st.button("🏥 Run Full Health Analysis →", key="brief_to_health"):
+            st.session_state["health_prefill"] = brief.get("store", brief.get("ccid", ""))
+            st.session_state["active_tab"] = "health"
+
         # Talking points
         if brief["tp"]:
             st.divider()
@@ -1253,6 +1296,204 @@ with tab_expiry:
             top = upsell_candidates[0]
             if st.button(f"📋 Get Brief for top candidate — {top['Store']}", key="upsell_top_brief"):
                 st.session_state["brief_prefill"] = top["Store"]
+
+# ═══════════════════════ TAB 4: HEALTH ANALYSIS ══════════════════════════════
+with tab_health:
+    st.subheader("🏥 Dealer Health Analysis")
+    st.caption(
+        "Full Growth Triangle analysis — Salesforce + admin.cars.com + Claude. "
+        "Requires Chrome running on port 9223 for admin.cars.com data."
+    )
+
+    # Auto-populate from Tab 2 "Run Full Health Analysis" button
+    health_prefill = st.session_state.pop("health_prefill", "")
+
+    h_col1, h_col2 = st.columns([3, 1])
+    with h_col1:
+        health_dealer = st.text_input(
+            "Dealer name or CCID",
+            value=health_prefill,
+            placeholder="e.g. Nalley Lexus Galleria or 109754",
+            key="health_dealer_input",
+        )
+    with h_col2:
+        import datetime as _hdt
+        _ht = _hdt.date.today()
+        _hpm = (_ht.replace(day=1) - _hdt.timedelta(days=1))
+        _hcl = f"Current MTD ({_ht.strftime('%B %Y')})"
+        _hpl = f"Prior Month ({_hpm.strftime('%B %Y')})"
+        health_period = st.radio("Period", [_hcl, _hpl], horizontal=True, key="health_period")
+
+    h_src_col1, h_src_col2 = st.columns(2)
+    with h_src_col1:
+        h_use_sf    = st.checkbox("Salesforce", value=True, key="h_sf")
+        h_use_admin = st.checkbox("admin.cars.com", value=_cdp_ok, disabled=not _cdp_ok, key="h_admin")
+    with h_src_col2:
+        h_use_wid = st.checkbox("Walk-in Demand", value=_cdp_ok, disabled=not _cdp_ok, key="h_wid")
+        h_use_vd  = st.checkbox("Vehicle Demand", value=_cdp_ok, disabled=not _cdp_ok, key="h_vd")
+
+    run_health = st.button("Run Health Analysis", type="primary", key="run_health",
+                            disabled=not health_dealer.strip())
+
+    if run_health and health_dealer.strip():
+        inp = health_dealer.strip()
+        h_use_prev = health_period == _hpl
+        h_dealer_name = inp
+        h_effective_ccid = inp if inp.isdigit() else None
+        h_sf_data = h_sub_data = None
+        h_perf = h_rep = h_mkt = h_lo = h_si = h_roi = h_wid = h_vd = None
+        h_source_summary = []
+
+        h_prog = st.empty()
+        _h_start = _hdt.datetime.now()
+
+        def _h_progress(msg):
+            elapsed = (_hdt.datetime.now() - _h_start).seconds
+            h_prog.markdown(
+                f"<div style='color:#5b2d8e;font-size:0.9rem;'>⏳ {msg} "
+                f"<span style='color:#999;font-size:0.8rem;'>({elapsed}s)</span></div>",
+                unsafe_allow_html=True,
+            )
+
+        if h_use_sf:
+            _h_progress("Querying Salesforce…")
+            if h_effective_ccid:
+                h_sf_data = fetch_salesforce_by_ccid(h_effective_ccid)
+            else:
+                h_sf_data = fetch_salesforce(inp)
+            if h_sf_data:
+                ccids = [r.get("CCID__c") for r in h_sf_data if r.get("CCID__c")]
+                if not h_effective_ccid and ccids:
+                    h_effective_ccid = ccids[0]
+                if h_sf_data[0].get("Name"):
+                    h_dealer_name = h_sf_data[0]["Name"]
+                h_source_summary.append(f"Salesforce: {len(h_sf_data)} account · CCID {h_effective_ccid}")
+            elif h_sf_data is not None:
+                h_source_summary.append("Salesforce: no matches")
+            if h_sf_data and h_sf_data[0].get("Id"):
+                _h_progress("Pulling subscriptions…")
+                h_sub_data = fetch_subscriptions(h_sf_data[0]["Id"])
+                if h_sub_data:
+                    total = sum(float(s.get("SBQQ__NetPrice__c") or 0) for s in h_sub_data)
+                    h_source_summary.append(f"Subscriptions: {len(h_sub_data)} · ${total:,.0f}/mo")
+
+        if h_use_admin and h_effective_ccid and _cdp_ok:
+            _h_progress("Resolving admin.cars.com UUID…")
+            with _admin_cars.session() as _admin:
+                _uuid = _admin.resolve_uuid(h_effective_ccid)
+                if _uuid:
+                    _h_progress("Pulling Performance Trends…")
+                    h_perf = _admin.fetch_performance_trends(_uuid)
+                    if h_perf: h_source_summary.append(f"Performance Trends: {sum(1 for v in h_perf.values() if v is not None)} metrics")
+
+                    _h_progress("Pulling Reputation…")
+                    h_rep = _admin.fetch_reputation(_uuid)
+                    if h_rep and h_rep.get("rating"): h_source_summary.append(f"Reputation: {h_rep['rating']}★")
+
+                    _h_progress("Pulling Market Comparison…")
+                    h_mkt = _admin.fetch_market_comparison(_uuid)
+                    if h_mkt: h_source_summary.append(f"Market Comparison: {h_mkt.get('at_pct')}% at market")
+
+                    _h_progress("Pulling Listings Optimizer…")
+                    h_lo = _admin.fetch_listings_optimizer(_uuid)
+                    if h_lo:
+                        n = len(h_lo.get("within_500_good",[])) + len(h_lo.get("within_500_great",[]))
+                        h_source_summary.append(f"Listings Optimizer: {n} pricing opps")
+
+                    _h_progress("Pulling ROI One-Sheeter…")
+                    h_roi = _admin.fetch_roi_one_sheeter(_uuid)
+                    if h_roi and h_roi.get("lead_sources"):
+                        h_source_summary.append(f"Lead sources: {h_roi['lead_sources'].get('total',0)} connections")
+
+                    _h_progress("Checking Sales Influence…")
+                    h_si = _admin.fetch_sales_influence(_uuid)
+                    h_source_summary.append("DMS: " + ("connected" if h_si and h_si.get("dms_connected") else "not connected"))
+
+                    if h_use_wid:
+                        _h_progress("Pulling Walk-in Demand…")
+                        h_wid = _admin.fetch_walk_in_demand(_uuid)
+                        h_source_summary.append("Walk-in Demand: " + ("available" if h_wid else "not available"))
+                    if h_use_vd:
+                        _h_progress("Pulling Vehicle Demand…")
+                        h_vd = _admin.fetch_vehicle_demand(_uuid)
+                        h_source_summary.append("Vehicle Demand: " + ("available" if h_vd else "not available"))
+                else:
+                    h_source_summary.append("admin.cars.com: UUID not found")
+
+        _h_progress("Generating health snapshot…")
+        data_ctx = build_data_context(
+            dealer_name=h_dealer_name, sf_data=h_sf_data,
+            perf_data=h_perf, rep_data=h_rep, mkt_data=h_mkt,
+            sub_data=h_sub_data, lo_data=h_lo, si_data=h_si,
+            roi_data=h_roi, wid_data=h_wid, vd_data=h_vd,
+            use_prev_month=h_use_prev,
+        )
+        h_prog.empty()
+
+        period_label = _hpl if h_use_prev else _hcl
+        with st.spinner("Generating health snapshot… (~90s)"):
+            h_response = run_health_analysis(h_dealer_name, data_ctx, period_label)
+
+        if h_response.startswith("ERROR:"):
+            st.error(h_response)
+        else:
+            h_scores, _ = parse_scores(h_response)
+            st.session_state["health_result"] = {
+                "dealer": h_dealer_name, "analysis": h_response, "scores": h_scores,
+                "sf_data": h_sf_data, "sub_data": h_sub_data,
+                "perf_data": h_perf, "rep_data": h_rep, "mkt_data": h_mkt,
+                "lo_data": h_lo, "wid_data": h_wid, "vd_data": h_vd,
+                "source_summary": h_source_summary,
+            }
+
+        if h_source_summary:
+            with st.expander(f"Data sources · {len(h_source_summary)} checks", expanded=False):
+                for l in h_source_summary: st.markdown(f"- {l}")
+
+    # Show results
+    if "health_result" in st.session_state:
+        h_res = st.session_state["health_result"]
+
+        h_c1, h_c2 = st.columns([1, 1])
+        if h_c1.button("📄 Export to Google Doc", key="h_export_doc"):
+            with st.spinner("Creating Google Doc…"):
+                try:
+                    _, _hn = parse_scores(h_res["analysis"])
+                    doc_url = create_health_doc(
+                        dealer_name=h_res["dealer"], scores=h_res.get("scores",[]),
+                        narrative=_hn, wid_data=h_res.get("wid_data"),
+                        vd_data=h_res.get("vd_data"), sf_data=h_res.get("sf_data"),
+                        perf_data=h_res.get("perf_data"),
+                    )
+                    st.success(f"[Open in Google Docs]({doc_url})")
+                except Exception as _e:
+                    st.error(f"Export failed: {_e}")
+        if h_c2.button("🔍 Also run investigation scan for this store", key="h_to_brief"):
+            inp = h_res["dealer"]
+            if h_res.get("sf_data") and h_res["sf_data"][0].get("CCID__c"):
+                inp = h_res["sf_data"][0]["CCID__c"]
+            st.session_state["brief_prefill"] = inp
+
+        _h_scores = h_res.get("scores", [])
+        if _h_scores:
+            st.markdown(render_score_bars(_h_scores), unsafe_allow_html=True)
+        _, _h_narrative = parse_scores(h_res["analysis"])
+        st.markdown(_re.sub(r'\$(?!\$)', r'\\$', _h_narrative))
+
+        with st.expander("Raw Salesforce & Subscription Data", expanded=False):
+            if h_res.get("sf_data"):
+                st.dataframe(pd.DataFrame(h_res["sf_data"]), use_container_width=True)
+            if h_res.get("sub_data"):
+                st.dataframe(pd.DataFrame(h_res["sub_data"]), use_container_width=True)
+
+    elif not run_health:
+        if not _cdp_ok:
+            st.info(
+                "admin.cars.com is not connected. Health Analysis will run with Salesforce data only. "
+                "Launch Chrome on port 9223 (see sidebar) to enable the full dataset."
+            )
+        else:
+            st.info("Enter a dealer name or CCID above and click **Run Health Analysis**.")
 
 # ─── EXPORT ───────────────────────────────────────────────────────────────────
 st.divider()

@@ -1,6 +1,6 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from dealer_health import _parse_scores, _render_score_bars
+from health_analysis import parse_scores as _parse_scores, render_score_bars as _render_score_bars
 
 SAMPLE = """\
 ---SCORES---
