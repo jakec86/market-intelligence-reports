@@ -125,10 +125,30 @@ SCENARIO_REPORTS = {
         ("ROI One-Sheeter",          "roi_one_sheeter")],
 }
 def _load_tableau_pat() -> tuple:
-    """Load PAT name + secret. Prefers env vars; falls back to ~/.claude/settings.json."""
+    """
+    Load PAT name + secret. Priority order:
+    1. Env vars TABLEAU_PAT_SECRET / TABLEAU_PAT_NAME (set by .zshrc or run-report.sh)
+    2. macOS Keychain entry 'tableau-pat' (canonical store)
+    3. ~/.claude/settings.json mcpServers.tableau.env (legacy fallback)
+    """
     name   = os.environ.get("TABLEAU_PAT_NAME") or os.environ.get("PAT_NAME")
     secret = os.environ.get("TABLEAU_PAT_SECRET") or os.environ.get("PAT_VALUE")
+
     if not secret:
+        # Try macOS Keychain directly
+        try:
+            result = subprocess.run(
+                ["security", "find-generic-password", "-a", "jcrawley", "-s", "tableau-pat", "-w"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                secret = result.stdout.strip()
+                name = name or "Claude"
+        except Exception:
+            pass
+
+    if not secret:
+        # Final fallback: settings.json
         try:
             with open(os.path.expanduser("~/.claude/settings.json")) as f:
                 cfg = json.load(f)
@@ -137,6 +157,7 @@ def _load_tableau_pat() -> tuple:
             secret = secret or tab_env.get("PAT_VALUE", "")
         except Exception:
             pass
+
     return (name or "Claude"), (secret or "")
 
 
@@ -162,6 +183,21 @@ GROUP_OPTIONS = {
 # Keys treated as Asbury sub-groups for "Full Book" display consolidation
 ASBURY_FILTER_VALS = {
     "Asbury", "Larry Miller", "Koons Automotive MA Group", "Herb Chambers MA Group"
+}
+
+# Parent/group CCID → list of Tableau filter values to pull
+# Allows entering e.g. 538486 to load all Sonic stores
+PARENT_CCID_MAP = {
+    "538486":  ["Sonic"],                                         # Sonic Automotive Group
+    "546973":  ["Hendrick Automotive Group"],                     # Hendrick Automotive Group
+    "6051462": ["Atlantic Coast Automotive MA Group"],            # ACA
+    "6051464": ["EchoPark MA Group"],                             # EchoPark
+    "539890":  ["Asbury", "Larry Miller",                         # Asbury full umbrella
+                "Koons Automotive MA Group", "Herb Chambers MA Group"],
+    "1875929": ["Larry Miller"],                                  # Larry H. Miller standalone
+    "5392338": ["Koons Automotive MA Group"],                     # Koons standalone
+    "185555":  ["Koons Automotive MA Group"],                     # Koons Group 2
+    "6048251": ["Herb Chambers MA Group"],                        # Herb Chambers standalone
 }
 
 FOCUS_OPTIONS = {
@@ -489,6 +525,30 @@ def generate_talking_points(store_name: str, metrics: Dict, flags: List[Dict], s
         f"Products: {products}" if products else None,
     ]))
 
+    # Build scenario-specific report guidance for TP3
+    report_guidance = ""
+    if flags:
+        top_scenario = flags[0]["scenario"]
+        report_map = {
+            1: ("Listings Optimizer (Best Match tab + Low Engaged Inventory)",
+                "admin.cars.com → Reports → Listings Optimizer"),
+            2: ("Listings Optimizer (Best Match tab — photo bucket, price-to-market)",
+                "admin.cars.com → Reports → Listings Optimizer"),
+            3: ("Demand Signals (inventory mix vs. what local shoppers are searching for)",
+                "admin.cars.com → Reports → Demand Signals"),
+            4: ("Demand Signals (make/model demand vs. inventory — what's missing from the lot)",
+                "admin.cars.com → Reports → Demand Signals"),
+            5: ("Connections & Contact Details (lead source breakdown and cost-per-lead by type)",
+                "admin.cars.com → Reports → Connections & Contact Details"),
+        }
+        if top_scenario in report_map:
+            report_name, report_path = report_map[top_scenario]
+            report_guidance = (
+                f"\nFor TP3, reference this specific report: {report_name}\n"
+                f"Path: {report_path}\n"
+                f"Ask a question that invites the dealer to review it together on the call."
+            )
+
     prompt = f"""You are a Cars.com account executive preparing for a dealer call.
 Generate exactly 3 talking points for a call with {store_name} ({city}).
 
@@ -497,12 +557,13 @@ CURRENT METRICS:
 
 INVESTIGATION FLAGS:
 {flag_lines if flag_lines else "No active flags — store is performing well."}
-
+{report_guidance}
 Rules:
-- TP1: open with a specific WIN or positive data point (use actual numbers)
-- TP2: the highest-priority opportunity framed as revenue or competitive impact (estimate even if rough)
-- TP3: a specific question or next step tied to a particular report or product
-- Each TP must use real numbers from the data above
+- TP1: open with a specific WIN or positive data point (use actual numbers from metrics above)
+- TP2: the highest-priority flag framed as revenue or competitive impact — estimate dollar or lead impact even if rough
+- TP3: a specific, named report question — use the exact report name from REPORT FOR TP3 above.
+  Format: "Have you had a chance to look at [Report Name] in admin.cars.com? I want to walk you through [specific insight from the data]."
+- Every TP must cite at least one real number from the data
 - Keep each under 3 sentences
 - Do NOT write headings — just three numbered paragraphs
 
@@ -680,9 +741,11 @@ with st.sidebar:
     st.divider()
     st.caption("Tableau data cached 30 min · SF data cached 5 min")
     if PAT_SECRET:
-        st.success(f"● Tableau PAT configured ({PAT_NAME})")
+        src = "env" if os.environ.get("TABLEAU_PAT_SECRET") else "keychain/settings"
+        st.success(f"● Tableau PAT ready ({PAT_NAME} · {src})")
     else:
-        st.error("✗ Tableau PAT not found (check settings.json)")
+        st.error("✗ Tableau PAT not found")
+        st.caption("Run: `security add-generic-password -a jcrawley -s tableau-pat -w 'YOUR_PAT'`")
 
 
 # ─── RUN SCAN ─────────────────────────────────────────────────────────────────
@@ -702,8 +765,18 @@ if run:
             elif mode == "Store / CCID" and store_input.strip():
                 inp = store_input.strip()
                 if inp.isdigit():
-                    stores = _pull_by_ccid(inp)
-                    group_label = f"CCID {inp}"
+                    # Check if this is a parent/group CCID first
+                    if inp in PARENT_CCID_MAP:
+                        filter_vals = PARENT_CCID_MAP[inp]
+                        for fv in filter_vals:
+                            try:
+                                stores.extend(_pull_group(fv))
+                            except Exception as e:
+                                st.warning(f"{fv}: {e}")
+                        group_label = f"Group {inp} ({', '.join(filter_vals)})"
+                    else:
+                        stores = _pull_by_ccid(inp)
+                        group_label = f"CCID {inp}"
                 else:
                     stores = _pull_by_name(inp)
                     group_label = inp
