@@ -133,15 +133,20 @@ SF_ORG = "cars-commerce"
 ADMIN_BASE = "https://admin.cars.com"
 
 GROUP_OPTIONS = {
-    "Sonic Automotive":                "Sonic",
-    "ACA (Atlantic Coast Auto)":       "Atlantic Coast Automotive MA Group",
-    "Hendrick Automotive":             "Hendrick Automotive Group",
-    "Asbury Automotive":               "Asbury",
-    "Herb Chambers":                   "Herb Chambers MA Group",
-    "Greenway Auto":                   "Greenway MA Group",
-    "Koons Automotive":                "Koons Automotive MA Group",
-    "EchoPark":                        "EchoPark MA Group",
-    "Indigo Auto":                     "Indigo Auto MA Group",
+    # 5 clients — Asbury sub-groups shown separately for per-group drill-down
+    "Sonic Automotive":              "Sonic",
+    "EchoPark":                      "EchoPark MA Group",
+    "Hendrick Automotive":           "Hendrick Automotive Group",
+    "ACA":                           "Atlantic Coast Automotive MA Group",
+    "Asbury":                        "Asbury",
+    "Asbury — Larry H. Miller":      "Larry Miller",
+    "Asbury — Koons":                "Koons Automotive MA Group",
+    "Asbury — Herb Chambers":        "Herb Chambers MA Group",
+}
+
+# Keys treated as Asbury sub-groups for "Full Book" display consolidation
+ASBURY_FILTER_VALS = {
+    "Asbury", "Larry Miller", "Koons Automotive MA Group", "Herb Chambers MA Group"
 }
 
 FOCUS_OPTIONS = {

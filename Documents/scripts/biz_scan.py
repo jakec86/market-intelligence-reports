@@ -63,18 +63,23 @@ HISTORY_DIR     = os.path.expanduser("~/.claude/scan_history")
 HISTORY_FILE    = os.path.join(HISTORY_DIR, "biz_scan_latest.json")
 EXPORT_DIR      = os.path.expanduser("~/Documents/Reports/InvestigationScans")
 
-# Groups to scan in order — skipped silently if Tableau returns 0 rows (RLS)
+# Jake's book of business — 5 clients, ~445 stores
+# Asbury is the parent account; Larry H. Miller, Koons, and Herb Chambers
+# are sub-groups billed under the Asbury umbrella in Tableau.
 ALL_GROUPS = [
-    ("sonic",       "Sonic"),
-    ("hendrick",    "Hendrick Automotive Group"),
-    ("aca",         "Atlantic Coast Automotive MA Group"),
-    ("asbury",      "Asbury"),
-    ("herb",        "Herb Chambers MA Group"),
-    ("greenway",    "Greenway MA Group"),
-    ("koons",       "Koons Automotive MA Group"),
-    ("echopark",    "EchoPark MA Group"),
-    ("indigo",      "Indigo Auto MA Group"),
+    ("sonic",        "Sonic"),
+    ("echopark",     "EchoPark MA Group"),
+    ("hendrick",     "Hendrick Automotive Group"),
+    ("aca",          "Atlantic Coast Automotive MA Group"),
+    # Asbury umbrella — output grouped together in triage
+    ("asbury",       "Asbury"),
+    ("larry_miller", "Larry Miller"),
+    ("koons",        "Koons Automotive MA Group"),
+    ("herb",         "Herb Chambers MA Group"),
 ]
+
+# Asbury sub-group keys — displayed together under the Asbury client header
+ASBURY_KEYS = {"asbury", "larry_miller", "koons", "herb"}
 
 # Expiration windows (days)
 EXPIRY_CRITICAL = 30
@@ -338,11 +343,29 @@ def build_html_digest(
                 <td style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;color:#888;">{u['products'] or '—'}</td>
             </tr>"""
 
-    group_summary_rows = ""
+    # Build client-level summary — roll Asbury sub-groups into one row
+    CLIENT_ORDER = ["Sonic", "EchoPark MA Group", "Hendrick Automotive Group",
+                    "Atlantic Coast Automotive MA Group", "_asbury_combined"]
+    asbury_labels = {"Asbury", "Larry Miller", "Koons Automotive MA Group", "Herb Chambers MA Group"}
+    asbury_row = {"label": "Asbury Group (incl. LHM, Koons, Herb Chambers)",
+                  "store_count": 0, "high_count": 0, "medium_count": 0, "bright_count": 0}
+    client_rows = []
     for g in groups_results:
+        if g["group_label"] in asbury_labels:
+            asbury_row["store_count"] += g["store_count"]
+            asbury_row["high_count"]   += g["high_count"]
+            asbury_row["medium_count"] += g["medium_count"]
+            asbury_row["bright_count"] += g["bright_count"]
+        else:
+            client_rows.append(g)
+    client_rows.append(asbury_row)
+
+    group_summary_rows = ""
+    for g in client_rows:
+        lbl = g.get("group_label") or g.get("label", "")
         group_summary_rows += f"""
             <tr>
-                <td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:500;">{g['group_label']}</td>
+                <td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:500;">{lbl}</td>
                 <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">{g['store_count']}</td>
                 <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;color:#c0392b;font-weight:600;">{g['high_count']}</td>
                 <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;color:#e67e22;">{g['medium_count']}</td>
@@ -377,7 +400,7 @@ def build_html_digest(
 
   <div class="header">
     <h1>Book-of-Business Health Scan</h1>
-    <p>Weekly automated scan &nbsp;·&nbsp; {scan_date} &nbsp;·&nbsp; {total_stores} stores across {len(groups_results)} groups</p>
+    <p>Weekly automated scan &nbsp;·&nbsp; {scan_date} &nbsp;·&nbsp; {total_stores} stores across 5 clients</p>
   </div>
 
   <div class="kpi-row">
@@ -459,15 +482,33 @@ def print_console_triage(
     total_med    = sum(g["medium_count"] for g in groups_results)
     total_bright = sum(g["bright_count"] for g in groups_results)
 
+    # Client names for header display
+    CLIENT_LABELS = {
+        "Sonic":                              "SONIC",
+        "EchoPark MA Group":                  "ECHOPARK",
+        "Hendrick Automotive Group":          "HENDRICK",
+        "Atlantic Coast Automotive MA Group": "ACA",
+        "Asbury":                             "ASBURY",
+        "Larry Miller":                       "ASBURY — LARRY H. MILLER",
+        "Koons Automotive MA Group":          "ASBURY — KOONS",
+        "Herb Chambers MA Group":             "ASBURY — HERB CHAMBERS",
+    }
+    ASBURY_LABELS = {"Asbury", "Larry Miller", "Koons Automotive MA Group", "Herb Chambers MA Group"}
+
     print(f"\n{'═'*70}")
     print(f"  BOOK-OF-BUSINESS SCAN  |  {date.today().isoformat()}")
-    print(f"  {total_stores} stores  |  {total_high} HIGH  {total_med} MED  {total_bright} bright")
+    print(f"  {total_stores} stores across 5 clients  |  {total_high} HIGH  {total_med} MED  {total_bright} bright")
     print(f"{'═'*70}")
 
-    for group in groups_results:
+    # Print non-Asbury groups first, then Asbury umbrella
+    non_asbury = [g for g in groups_results if g["group_label"] not in ASBURY_LABELS]
+    asbury_groups = [g for g in groups_results if g["group_label"] in ASBURY_LABELS]
+
+    def _print_group(group):
         if not group["flagged"] and not group["bright"]:
-            continue
-        print(f"\n── {group['group_label'].upper()} ({group['store_count']} stores) ──")
+            return
+        label = CLIENT_LABELS.get(group["group_label"], group["group_label"].upper())
+        print(f"\n── {label} ({group['store_count']} stores) ──")
         for entry in group["flagged"]:
             trend = entry.get("trend", "NEW")
             prefix = {"CRITICAL": "🔴", "SUSTAINED": "🟠", "NEW": "🔵"}.get(trend, "⚪")
@@ -477,6 +518,22 @@ def print_console_triage(
                 print(f"       Scenario {flag['scenario']}: {flag['signal']}")
         for b in group["bright"][:3]:
             print(f"  ✓ [BRIGHT] {b['store']}  —  {b['signal']}")
+
+    for group in non_asbury:
+        _print_group(group)
+
+    # Asbury umbrella — combined header then each sub-group
+    asbury_any = any(g["flagged"] or g["bright"] for g in asbury_groups)
+    if asbury_any:
+        asbury_stores = sum(g["store_count"] for g in asbury_groups)
+        asbury_high   = sum(g["high_count"]   for g in asbury_groups)
+        asbury_med    = sum(g["medium_count"]  for g in asbury_groups)
+        print(f"\n{'─'*70}")
+        print(f"  ASBURY GROUP  ({asbury_stores} stores — {asbury_high}H {asbury_med}M)")
+        print(f"  Includes: Asbury · Larry H. Miller · Koons · Herb Chambers")
+        print(f"{'─'*70}")
+        for group in asbury_groups:
+            _print_group(group)
 
     if expirations:
         print(f"\n── EXPIRING PRODUCTS ({len(expirations)}) ──")
