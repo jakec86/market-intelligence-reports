@@ -1343,29 +1343,31 @@ with tab_health:
 
         if h_use_admin and h_effective_ccid and _cdp_ok:
             _h_progress("Resolving admin.cars.com UUID…")
-            with _admin_cars.session() as _admin:
-                _uuid = _admin.resolve_uuid(h_effective_ccid)
-                if _uuid:
-                    _h_progress("Pulling Performance Trends…")
-                    h_perf = _admin.fetch_performance_trends(_uuid)
-                    if h_perf: h_source_summary.append(f"Performance Trends: {sum(1 for v in h_perf.values() if v is not None)} metrics")
+            _admin_error = None
+            try:
+                with _admin_cars.session() as _admin:
+                    _uuid = _admin.resolve_uuid(h_effective_ccid)
+                    if _uuid:
+                        _h_progress("Pulling Performance Trends…")
+                        h_perf = _admin.fetch_performance_trends(_uuid)
+                        if h_perf: h_source_summary.append(f"Performance Trends: {sum(1 for v in h_perf.values() if v is not None)} metrics")
 
-                    _h_progress("Pulling Reputation…")
-                    h_rep = _admin.fetch_reputation(_uuid)
-                    if h_rep and h_rep.get("rating"): h_source_summary.append(f"Reputation: {h_rep['rating']}★")
+                        _h_progress("Pulling Reputation…")
+                        h_rep = _admin.fetch_reputation(_uuid)
+                        if h_rep and h_rep.get("rating"): h_source_summary.append(f"Reputation: {h_rep['rating']}★")
 
-                    _h_progress("Pulling Market Comparison…")
-                    h_mkt = _admin.fetch_market_comparison(_uuid)
-                    if h_mkt: h_source_summary.append(f"Market Comparison: {h_mkt.get('at_pct')}% at market")
+                        _h_progress("Pulling Market Comparison…")
+                        h_mkt = _admin.fetch_market_comparison(_uuid)
+                        if h_mkt: h_source_summary.append(f"Market Comparison: {h_mkt.get('at_pct')}% at market")
 
-                    _h_progress("Pulling Listings Optimizer…")
-                    h_lo = _admin.fetch_listings_optimizer(_uuid)
-                    if h_lo:
-                        n = len(h_lo.get("within_500_good",[])) + len(h_lo.get("within_500_great",[]))
-                        h_source_summary.append(f"Listings Optimizer: {n} pricing opps")
+                        _h_progress("Pulling Listings Optimizer…")
+                        h_lo = _admin.fetch_listings_optimizer(_uuid)
+                        if h_lo:
+                            n = len(h_lo.get("within_500_good",[])) + len(h_lo.get("within_500_great",[]))
+                            h_source_summary.append(f"Listings Optimizer: {n} pricing opps")
 
-                    _h_progress("Pulling ROI One-Sheeter…")
-                    h_roi = _admin.fetch_roi_one_sheeter(_uuid)
+                        _h_progress("Pulling ROI One-Sheeter…")
+                        h_roi = _admin.fetch_roi_one_sheeter(_uuid)
                     if h_roi and h_roi.get("lead_sources"):
                         h_source_summary.append(f"Lead sources: {h_roi['lead_sources'].get('total',0)} connections")
 
@@ -1381,8 +1383,24 @@ with tab_health:
                         _h_progress("Pulling Vehicle Demand…")
                         h_vd = _admin.fetch_vehicle_demand(_uuid)
                         h_source_summary.append("Vehicle Demand: " + ("available" if h_vd else "not available"))
-                else:
-                    h_source_summary.append("admin.cars.com: UUID not found")
+                    else:
+                        h_source_summary.append("admin.cars.com: UUID not found")
+            except Exception as _e:
+                _admin_error = str(_e)
+                h_source_summary.append(f"admin.cars.com: skipped — {_admin_error[:80]}")
+
+            if _admin_error and "jumpcloud" in _admin_error.lower():
+                h_prog.empty()
+                st.warning(
+                    "⚠️ **admin.cars.com requires sign-in.** "
+                    "The Chrome session was redirected to JumpCloud SSO. "
+                    "Open the dealer health Chrome window, sign in to admin.cars.com, "
+                    "then click **Run Health Analysis** again. "
+                    "Analysis will continue with Salesforce data only for now."
+                )
+            elif _admin_error:
+                st.warning(f"admin.cars.com data unavailable ({_admin_error[:120]}). "
+                           f"Proceeding with Salesforce data only.")
 
         _h_progress("Generating health snapshot…")
         data_ctx = build_data_context(

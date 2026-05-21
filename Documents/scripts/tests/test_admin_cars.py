@@ -4,10 +4,19 @@ import admin_cars
 
 
 def test_check_session_returns_true_when_chrome_reachable():
-    """check_session() returns True when Chrome CDP endpoint responds."""
-    mock_response = MagicMock()
-    mock_response.read.return_value = b'{"Browser": "Chrome"}'
-    with patch("urllib.request.urlopen", return_value=mock_response):
+    """check_session() returns True when Chrome is up and no SSO redirect visible."""
+    import json
+    # check_session() now calls urlopen twice: /json/version then /json (tab list)
+    version_resp = MagicMock()
+    version_resp.read.return_value = b'{"Browser": "Chrome"}'
+
+    tabs_resp = MagicMock()
+    # No jumpcloud tabs — session is clean
+    tabs_resp.read.return_value = json.dumps([
+        {"url": "about:blank"}
+    ]).encode()
+
+    with patch("urllib.request.urlopen", side_effect=[version_resp, tabs_resp]):
         result = admin_cars.check_session()
     assert result is True
 
@@ -15,6 +24,19 @@ def test_check_session_returns_true_when_chrome_reachable():
 def test_check_session_returns_false_when_chrome_unreachable():
     """check_session() returns False when Chrome CDP endpoint is not up."""
     with patch("urllib.request.urlopen", side_effect=Exception("connection refused")):
+        assert admin_cars.check_session() is False
+
+
+def test_check_session_returns_false_when_jumpcloud_redirect_visible():
+    """check_session() returns False when a JumpCloud SSO tab is open."""
+    import json
+    version_resp = MagicMock()
+    version_resp.read.return_value = b'{"Browser": "Chrome"}'
+    tabs_resp = MagicMock()
+    tabs_resp.read.return_value = json.dumps([
+        {"url": "https://sso.jumpcloud.com/saml2/tableau"}
+    ]).encode()
+    with patch("urllib.request.urlopen", side_effect=[version_resp, tabs_resp]):
         assert admin_cars.check_session() is False
 
 

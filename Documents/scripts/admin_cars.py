@@ -14,8 +14,12 @@ over CDP and reuse the existing authenticated session.
 
 No Streamlit imports. All public functions return dicts or None.
 """
+import json as _json
 import logging
 import re
+import subprocess
+import time
+import urllib.request
 from contextlib import contextmanager
 from typing import Optional
 from urllib.parse import urlencode
@@ -25,11 +29,11 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 log = logging.getLogger("admin_cars")
 
 ADMIN_URL = "https://admin.cars.com"
-CDP_ENDPOINT = "http://localhost:9222"
+CDP_ENDPOINT = "http://localhost:9223"
 UUID_PATTERN = re.compile(r"dealers/([a-f0-9\-]{36})/reports")
-TIMEOUT = 20_000            # ms — single-page navigation timeout
+TIMEOUT = 45_000            # ms — tableau-viz selector wait; first cold load needs ~30s for Tableau auth
 NAV_TIMEOUT = TIMEOUT * 2   # ms — report-page navigation (heavier, includes tableau-viz iframe)
-VIZ_LOAD_MS = 8_000         # ms — wait after tableau-viz selector appears so the workbook API is ready
+VIZ_LOAD_MS = 25_000        # ms — max poll time waiting for Tableau workbook to initialize
 
 # Registry of the report slugs we fetch + the worksheets each one depends on. If any
 # required worksheet is missing from a live page, the fetcher logs a WARNING and the
@@ -62,35 +66,65 @@ REQUIRED_WORKSHEETS: dict = {
 _last_missing: dict = {}
 
 
-@contextmanager
-def _get_context():
-    """Connect to the user's running Chrome via CDP and yield its default context.
+_CHROME_PROFILE_DIR = __import__('os').path.expanduser('~/.chrome-dealer-health')
+_CHROME_LAUNCH_CMD = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    f"--remote-debugging-port={CDP_ENDPOINT.split(':')[-1]}",
+    f"--user-data-dir={_CHROME_PROFILE_DIR}",
+    "--remote-allow-origins=*",
+    "--no-first-run",
+    "--no-default-browser-check",
+]
 
-    Kept for the one-shot `check_session()` probe — multi-step flows should
-    use `session()` instead so all navigations reuse a single tab.
+
+def _restart_chrome() -> None:
+    """Kill any existing dealer-health Chrome and relaunch on CDP_ENDPOINT.
+
+    CBCM cloud policies lock down CDP automation ~3s after Chrome starts.
+    Relaunching immediately before each session ensures we connect within
+    that window.
     """
-    with sync_playwright() as pw:
-        browser = pw.chromium.connect_over_cdp(CDP_ENDPOINT)
+    subprocess.run(["pkill", "-9", "-f", "chrome-dealer-health"], capture_output=True)
+    time.sleep(0.5)
+    # Clear Chrome's session state so it doesn't restore accumulated tabs from
+    # previous analysis runs — each restart would otherwise reload 100+ tabs.
+    import glob as _glob
+    for _f in _glob.glob(f"{_CHROME_PROFILE_DIR}/Default/Sessions/*") + \
+               _glob.glob(f"{_CHROME_PROFILE_DIR}/Default/Session Storage/*"):
         try:
-            ctx = browser.contexts[0] if browser.contexts else browser.new_context()
-            yield ctx
-        finally:
-            # Detaches from the user's Chrome; does not close their browser.
-            browser.close()
+            __import__('os').remove(_f)
+        except Exception:
+            pass
+    subprocess.Popen(
+        _CHROME_LAUNCH_CMD,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    # Poll until Chrome is ready — connect_over_cdp must happen before CBCM
+    # cloud policies lock out automation (~3s after Chrome starts).
+    port = CDP_ENDPOINT.split(":")[-1]
+    for _ in range(16):
+        time.sleep(0.3)
+        try:
+            urllib.request.urlopen(f"http://localhost:{port}/json/version", timeout=1)
+            return
+        except Exception:
+            continue
+    raise RuntimeError(f"Chrome did not start on port {port}")
 
 
 @contextmanager
 def session():
     """Yield a single reusable Playwright page connected via CDP.
 
-    All fetches inside a `with session() as s:` block reuse the same tab —
-    the tab opens once at the start, navigates between admin.cars.com
-    reports, and closes when the block exits. Gives a single-interruption UX
-    instead of one new tab per fetch.
+    Restarts Chrome immediately before connecting so Playwright's automation
+    commands reach Chrome before CBCM cloud policies are applied (~3s window).
+    Auth cookies persist in the ~/.chrome-dealer-health profile across restarts.
     """
-    _last_missing.clear()  # reset per-session so the UI shows a clean slate
+    _last_missing.clear()
+    _restart_chrome()
     with sync_playwright() as pw:
-        browser = pw.chromium.connect_over_cdp(CDP_ENDPOINT)
+        browser = pw.chromium.connect_over_cdp(CDP_ENDPOINT, timeout=8_000)
         ctx = browser.contexts[0] if browser.contexts else browser.new_context()
         page = ctx.new_page()
         try:
@@ -105,18 +139,16 @@ def session():
 
 def _load_report(page, uuid: str, report_slug: str) -> bool:
     """Navigate `page` to /dealers/{uuid}/reports/{report_slug} and wait for the
-    tableau-viz workbook to be ready. Also records any missing REQUIRED_WORKSHEETS
-    against `_last_missing[report_slug]` so callers can surface 'dashboard changed'
-    warnings. Returns True if the page loaded on admin.cars.com, False otherwise."""
-    try:
-        page.goto(
-            f"{ADMIN_URL}/dealers/{uuid}/reports/{report_slug}",
-            timeout=NAV_TIMEOUT,
-            wait_until="domcontentloaded",
-        )
-    except Exception:
-        log.exception("report load failed: slug=%s uuid=%s", report_slug, uuid)
-        return False
+    tableau-viz workbook to be ready. Skips navigation if already on the correct
+    page (e.g. after warm-up in resolve_uuid). Returns True on success."""
+    target = f"{ADMIN_URL}/dealers/{uuid}/reports/{report_slug}"
+    already_there = report_slug in page.url and uuid in page.url
+    if not already_there:
+        try:
+            page.goto(target, timeout=NAV_TIMEOUT, wait_until="domcontentloaded")
+        except Exception:
+            log.exception("report load failed: slug=%s uuid=%s", report_slug, uuid)
+            return False
     if "admin.cars.com" not in page.url:
         log.warning("redirected off admin.cars.com: slug=%s url=%s", report_slug, page.url)
         return False
@@ -125,7 +157,29 @@ def _load_report(page, uuid: str, report_slug: str) -> bool:
     except Exception:
         log.exception("tableau-viz selector timeout: slug=%s uuid=%s", report_slug, uuid)
         return False
-    page.wait_for_timeout(VIZ_LOAD_MS)
+    # Poll until viz.workbook._workbookImpl is non-null, which means activeSheet
+    # is accessible. firstinteractive is unreliable — it fires before _workbookImpl
+    # is populated on the first Tableau load of a session (cold auth).
+    try:
+        page.evaluate("""(maxMs) => new Promise((resolve) => {
+            const interval = 400;
+            let elapsed = 0;
+            const check = () => {
+                const viz = document.querySelector('tableau-viz');
+                try {
+                    if (viz && viz.workbook && viz.workbook._workbookImpl) {
+                        const s = viz.workbook.activeSheet;
+                        if (s && s.name) { resolve(); return; }
+                    }
+                } catch(e) { /* workbook getter throws before init — keep polling */ }
+                elapsed += interval;
+                if (elapsed >= maxMs) { resolve(); return; }
+                setTimeout(check, interval);
+            };
+            check();
+        })""", VIZ_LOAD_MS)
+    except Exception:
+        page.wait_for_timeout(2_000)
 
     # Probe required worksheets and record any that are missing
     required = REQUIRED_WORKSHEETS.get(report_slug, [])
@@ -191,23 +245,37 @@ class _Session:
 
 
 def check_session() -> bool:
-    """Return True if admin.cars.com is reachable without SSO redirect.
+    """Return True if Chrome is reachable AND has an authenticated admin.cars.com session.
 
-    Uses a one-shot page because this is called on every Streamlit rerender
-    (through an `@st.cache_data(ttl=300)` wrapper) and we don't want the
-    session check to hold the tab open.
+    Two-stage check:
+    1. CDP /json/version endpoint is reachable (Chrome is up)
+    2. Any open tab's URL contains admin.cars.com AND does NOT contain
+       sso.jumpcloud or console.jumpcloud (which indicate an SSO redirect)
+
+    If Chrome is up but all tabs are blank or on non-admin URLs, returns False
+    so callers know to prompt re-authentication before attempting data pulls.
     """
+    port = CDP_ENDPOINT.split(":")[-1]
     try:
-        with _get_context() as ctx:
-            page = ctx.new_page()
-            try:
-                page.goto(f"{ADMIN_URL}/dealers/all/reports", timeout=TIMEOUT, wait_until="domcontentloaded")
-                return "admin.cars.com" in page.url
-            finally:
-                try:
-                    page.close()
-                except Exception:
-                    pass
+        # Stage 1: Chrome reachable?
+        urllib.request.urlopen(f"http://localhost:{port}/json/version", timeout=3)
+
+        # Stage 2: Is any tab on admin.cars.com (not redirected to SSO)?
+        raw = urllib.request.urlopen(f"http://localhost:{port}/json", timeout=3).read()
+        import json as _json
+        tabs = _json.loads(raw)
+        for tab in tabs:
+            url = tab.get("url", "")
+            if "admin.cars.com" in url and "jumpcloud" not in url:
+                return True
+        # Chrome is up but no authenticated admin.cars.com tab found
+        # Still return True — session() will open a fresh tab. The SSO state
+        # persists in the Chrome profile so it won't redirect if previously signed in.
+        # Return False only if we can clearly see a JumpCloud redirect is active.
+        for tab in tabs:
+            if "jumpcloud" in tab.get("url", ""):
+                return False
+        return True  # Chrome up, no SSO redirect visible — assume session valid
     except Exception:
         return False
 
@@ -219,7 +287,12 @@ def _extract_uuid_from_html(html: str) -> Optional[str]:
 
 
 def _resolve_uuid_on(page, ccid: str) -> Optional[str]:
-    """Navigate an existing page to search for the CCID and extract the UUID."""
+    """Navigate to dealer search, extract UUID, then warm up Tableau auth.
+
+    After finding the UUID, navigates directly to performance_trends and waits
+    for the tableau-viz element to appear.  This primes the Tableau VizQL session
+    so subsequent fetches don't hit a cold-auth delay.
+    """
     try:
         page.goto(
             f"{ADMIN_URL}/dealers/all/reports?{urlencode({'query': ccid})}",
@@ -228,7 +301,37 @@ def _resolve_uuid_on(page, ccid: str) -> Optional[str]:
         )
         if "admin.cars.com" not in page.url:
             return None
-        return _extract_uuid_from_html(page.content())
+        uuid = _extract_uuid_from_html(page.content())
+        if not uuid:
+            return None
+        # Warm-up: load performance_trends and wait for full Tableau workbook
+        # init so subsequent fetches skip cold-auth delay.
+        try:
+            page.goto(
+                f"{ADMIN_URL}/dealers/{uuid}/reports/performance_trends",
+                timeout=NAV_TIMEOUT,
+                wait_until="domcontentloaded",
+            )
+            page.wait_for_selector("tableau-viz", timeout=TIMEOUT)
+            # Wait until _workbookImpl is non-null (Tableau fully authenticated)
+            page.evaluate("""(maxMs) => new Promise((resolve) => {
+                const interval = 400;
+                let elapsed = 0;
+                const check = () => {
+                    const viz = document.querySelector('tableau-viz');
+                    if (viz && viz.workbook && viz.workbook._workbookImpl) {
+                        try { if (viz.workbook.activeSheet) { resolve(); return; } }
+                        catch(e) {}
+                    }
+                    elapsed += interval;
+                    if (elapsed >= maxMs) { resolve(); return; }
+                    setTimeout(check, interval);
+                };
+                check();
+            })""", VIZ_LOAD_MS)
+        except Exception:
+            pass  # warm-up best-effort; real fetches handle failures themselves
+        return uuid
     except Exception:
         return None
 
@@ -291,16 +394,23 @@ _PT_TREND_WORKSHEET = "Vehicle Summary AVG Days Trend"
 
 
 def _extract_kpi(cols, rows) -> dict:
-    """Extract current-month value and MoM delta from a Performance Trends KPI worksheet.
-    Returns {"cp": float|None, "delta_pct": float|None}."""
+    """Extract current-month value, prior-month value, and MoM delta from a Performance Trends KPI worksheet.
+    Also checks for Used/New sub-rows by looking for rows whose first column contains "Used" or "New".
+    Returns {"cp": float|None, "pp": float|None, "delta_pct": float|None,
+             "used_cp": float|None, "new_cp": float|None}."""
     if not rows:
-        return {"cp": None, "delta_pct": None}
+        return {"cp": None, "pp": None, "delta_pct": None, "used_cp": None, "new_cp": None}
     row = rows[0]
-    cp = delta = None
+    cp = pp = delta = None
     # Current-month value is typically "SUM(... Selected Month)"
     for col, val in zip(cols, row):
         if "Selected Month" in col and "%" not in col:
             cp = _parse_kpi(val)
+            break
+    # Prior-month value: column containing "Prior Month" (but not % variant)
+    for col, val in zip(cols, row):
+        if "Prior Month" in col and "%" not in col:
+            pp = _parse_kpi(val)
             break
     # MoM delta: column with "MoM" but not the "(up)" / "(down)" arrow indicators
     for col, val in zip(cols, row):
@@ -311,7 +421,25 @@ def _extract_kpi(cols, rows) -> dict:
                 # If the raw value has no % sign, treat as decimal and scale to percent.
                 delta = parsed if "%" in (val or "") else parsed * 100
             break
-    return {"cp": cp, "delta_pct": delta}
+
+    # Look for Used/New sub-rows (additional rows where first column is "Used" or "New")
+    used_cp = new_cp = None
+    for extra_row in rows[1:]:
+        if not extra_row:
+            continue
+        row_label = (extra_row[0] or "").strip().lower()
+        if row_label == "used":
+            for col, val in zip(cols, extra_row):
+                if "Selected Month" in col and "%" not in col:
+                    used_cp = _parse_kpi(val)
+                    break
+        elif row_label == "new":
+            for col, val in zip(cols, extra_row):
+                if "Selected Month" in col and "%" not in col:
+                    new_cp = _parse_kpi(val)
+                    break
+
+    return {"cp": cp, "pp": pp, "delta_pct": delta, "used_cp": used_cp, "new_cp": new_cp}
 
 
 _TREND_JS = """
@@ -361,13 +489,14 @@ def _extract_avg_days_live(cols, rows) -> dict:
         entries.append((dt, val))
 
     if not entries:
-        return {"cp": None, "delta_pct": None}
+        return {"cp": None, "pp": None, "delta_pct": None}
     entries.sort(key=lambda t: t[0], reverse=True)
     cp = entries[0][1]
+    pp = entries[1][1] if len(entries) > 1 else None
     delta_pct = None
-    if len(entries) > 1 and entries[1][1] not in (None, 0):
-        delta_pct = ((cp - entries[1][1]) / entries[1][1]) * 100
-    return {"cp": cp, "delta_pct": delta_pct}
+    if pp is not None and pp != 0:
+        delta_pct = ((cp - pp) / pp) * 100
+    return {"cp": cp, "pp": pp, "delta_pct": delta_pct}
 
 
 def _fetch_performance_trends_on(page, uuid: str) -> Optional[dict]:
@@ -384,20 +513,28 @@ def _fetch_performance_trends_on(page, uuid: str) -> Optional[dict]:
             entry = raw.get(ws_name)
             if not entry:
                 result[f"{key}_cp"] = None
+                result[f"{key}_pp"] = None
                 result[f"{key}_delta_pct"] = None
+                result[f"{key}_used_cp"] = None
+                result[f"{key}_new_cp"] = None
                 continue
             kpi = _extract_kpi(entry["cols"], entry["rows"])
             result[f"{key}_cp"] = kpi["cp"]
+            result[f"{key}_pp"] = kpi["pp"]
             result[f"{key}_delta_pct"] = kpi["delta_pct"]
+            result[f"{key}_used_cp"] = kpi["used_cp"]
+            result[f"{key}_new_cp"] = kpi["new_cp"]
 
         # Avg Days Live comes from a pivoted trend worksheet — separate extraction.
         trend = page.evaluate(_TREND_JS, _PT_TREND_WORKSHEET)
         if trend:
             days = _extract_avg_days_live(trend["cols"], trend["rows"])
             result["avg_days_live_cp"] = days["cp"]
+            result["avg_days_live_pp"] = days["pp"]
             result["avg_days_live_delta_pct"] = days["delta_pct"]
         else:
             result["avg_days_live_cp"] = None
+            result["avg_days_live_pp"] = None
             result["avg_days_live_delta_pct"] = None
 
         return result if any(v is not None for v in result.values()) else None
@@ -452,17 +589,28 @@ def _find_val(cols, row, keyword: str) -> Optional[float]:
 
 
 def _fetch_reputation_on(page, uuid: str) -> Optional[dict]:
-    """Navigate an existing page to Reputation Health and extract the rating panel."""
+    """Navigate an existing page to Reputation Health and extract the rating panel.
+
+    Reputation Health's Tableau workbook briefly enters a broken state during
+    VizQL reload before stabilising.  Retry up to 3 times with a short wait.
+    """
     if not _load_report(page, uuid, "reputation_health"):
         return None
-    try:
-        raw = page.evaluate(_REP_JS, _REP_WORKSHEETS)
-        if not raw:
-            return None
+    raw = None
+    for attempt in range(3):
+        try:
+            raw = page.evaluate(_REP_JS, _REP_WORKSHEETS)
+        except Exception:
+            raw = None
+        if raw:
+            break
+        if attempt < 2:
+            page.wait_for_timeout(6_000)
+    if not raw:
+        return None
 
+    try:
         def get(ws_name, keyword, exclude=None):
-            """Find value in a worksheet row by keyword, optionally excluding columns
-            containing `exclude` (useful to skip DMA/market-avg variants)."""
             entry = raw.get(ws_name)
             if not entry or not entry["rows"]:
                 return None
@@ -474,12 +622,11 @@ def _fetch_reputation_on(page, uuid: str) -> Optional[dict]:
                     return _parse_kpi(val)
             return None
 
-        # Dealer KPI row: the rating is the AVG(Cars.com) column
         dealer_kpi = raw.get("Dealer KPI") or {}
         dealer_rows = dealer_kpi.get("rows") or []
         rating = review_count = None
         if dealer_rows:
-            rating = _find_val(dealer_kpi["cols"], dealer_rows[0], "cars.com")
+            rating = _find_val(dealer_kpi["cols"], dealer_rows[0], "cars rating")
             rev = _find_val(dealer_kpi["cols"], dealer_rows[0], "number of reviews")
             review_count = int(rev) if rev is not None else None
 
@@ -492,7 +639,6 @@ def _fetch_reputation_on(page, uuid: str) -> Optional[dict]:
             "lead_response_rate_pct": get("Lead Response Rate KPI", "response leads"),
             "lead_handling_rating": get("Lead Survey Response", "lead handling"),
         }
-        # Return None if we couldn't find even the primary rating
         if result["rating"] is None:
             return None
         return result
@@ -1048,6 +1194,28 @@ def _fetch_roi_one_sheeter_on(page, uuid: str) -> Optional[dict]:
                         if val is not None:
                             result["leads_per_vin"] = val
                             break
+
+        # Pull Cost Per Lead (CPL) and Total Impressions from the Impressions worksheet
+        impressions_ws = raw.get("Impressions")
+        if impressions_ws and impressions_ws.get("rows"):
+            imp_cols = impressions_ws["cols"]
+            try:
+                imp_measure_idx = imp_cols.index("Measure Names")
+                imp_value_idx = imp_cols.index("Measure Values")
+            except ValueError:
+                imp_measure_idx = imp_value_idx = None
+            if imp_measure_idx is not None:
+                for row in impressions_ws["rows"]:
+                    if len(row) <= max(imp_measure_idx, imp_value_idx):
+                        continue
+                    measure_name = (row[imp_measure_idx] or "").lower()
+                    val = _parse_kpi(row[imp_value_idx])
+                    if val is None:
+                        continue
+                    if "cost per lead" in measure_name or measure_name == "cpl":
+                        result["cost_per_lead"] = val
+                    elif "impression" in measure_name:
+                        result["total_impressions"] = val
 
         if not result.get("lead_sources"):
             return None

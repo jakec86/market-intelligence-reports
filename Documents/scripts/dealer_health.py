@@ -169,39 +169,52 @@ if run and (dealer_name.strip() or ccid_override.strip()):
 
     if use_admin and effective_ccid:
         _progress("Opening admin.cars.com and resolving dealer UUID…")
-        with admin_cars.session() as admin:
-            uuid = admin.resolve_uuid(effective_ccid)
-            if not uuid:
-                source_summary.append("admin.cars.com: dealer UUID not found")
-            else:
-                for report, fetch_fn, label_fn in [
-                    ("Performance Trends",  admin.fetch_performance_trends,  lambda d: f"Performance Trends: {sum(1 for v in d.values() if v is not None)} metrics"),
-                    ("Reputation Health",   admin.fetch_reputation,          lambda d: f"Reputation: {d.get('rating')}★"),
-                    ("Market Comparison",   admin.fetch_market_comparison,   lambda d: f"Market Comparison: {d.get('at_pct')}% at market"),
-                    ("Listings Optimizer",  admin.fetch_listings_optimizer,  lambda d: f"Listings Optimizer: {len(d.get('within_500_good',[]))+len(d.get('within_500_great',[]))} pricing opps"),
-                    ("ROI One-Sheeter",     admin.fetch_roi_one_sheeter,     lambda d: f"Lead sources: {d['lead_sources'].get('total',0)} connections" if d.get('lead_sources') else None),
-                    ("Sales Influence",     admin.fetch_sales_influence,     lambda d: "DMS: connected" if d.get('dms_connected') else "DMS: not connected"),
-                ]:
-                    _progress(f"Pulling {report}…")
-                    data = fetch_fn(uuid)
-                    if report == "Performance Trends":    perf_data = data
-                    elif report == "Reputation Health":  rep_data  = data
-                    elif report == "Market Comparison":  mkt_data  = data
-                    elif report == "Listings Optimizer": lo_data   = data
-                    elif report == "ROI One-Sheeter":    roi_data  = data
-                    elif report == "Sales Influence":    si_data   = data
-                    if data:
-                        lbl = label_fn(data)
-                        if lbl: source_summary.append(lbl)
+        _admin_err = None
+        try:
+            with admin_cars.session() as admin:
+                uuid = admin.resolve_uuid(effective_ccid)
+                if not uuid:
+                    source_summary.append("admin.cars.com: dealer UUID not found")
+                else:
+                    for report, fetch_fn, label_fn in [
+                        ("Performance Trends",  admin.fetch_performance_trends,  lambda d: f"Performance Trends: {sum(1 for v in d.values() if v is not None)} metrics"),
+                        ("Reputation Health",   admin.fetch_reputation,          lambda d: f"Reputation: {d.get('rating')}★"),
+                        ("Market Comparison",   admin.fetch_market_comparison,   lambda d: f"Market Comparison: {d.get('at_pct')}% at market"),
+                        ("Listings Optimizer",  admin.fetch_listings_optimizer,  lambda d: f"Listings Optimizer: {len(d.get('within_500_good',[]))+len(d.get('within_500_great',[]))} pricing opps"),
+                        ("ROI One-Sheeter",     admin.fetch_roi_one_sheeter,     lambda d: f"Lead sources: {d['lead_sources'].get('total',0)} connections" if d.get('lead_sources') else None),
+                        ("Sales Influence",     admin.fetch_sales_influence,     lambda d: "DMS: connected" if d.get('dms_connected') else "DMS: not connected"),
+                    ]:
+                        _progress(f"Pulling {report}…")
+                        data = fetch_fn(uuid)
+                        if report == "Performance Trends":    perf_data = data
+                        elif report == "Reputation Health":  rep_data  = data
+                        elif report == "Market Comparison":  mkt_data  = data
+                        elif report == "Listings Optimizer": lo_data   = data
+                        elif report == "ROI One-Sheeter":    roi_data  = data
+                        elif report == "Sales Influence":    si_data   = data
+                        if data:
+                            lbl = label_fn(data)
+                            if lbl: source_summary.append(lbl)
 
-                if use_wid:
-                    _progress("Pulling Walk-in Demand…")
-                    wid_data = admin.fetch_walk_in_demand(uuid)
-                    source_summary.append("Walk-in Demand: " + ("data available" if wid_data else "not available"))
-                if use_vd:
-                    _progress("Pulling Vehicle Demand…")
-                    vd_data = admin.fetch_vehicle_demand(uuid)
-                    source_summary.append("Vehicle Demand: " + ("data available" if vd_data else "not available"))
+                    if use_wid:
+                        _progress("Pulling Walk-in Demand…")
+                        wid_data = admin.fetch_walk_in_demand(uuid)
+                        source_summary.append("Walk-in Demand: " + ("data available" if wid_data else "not available"))
+                    if use_vd:
+                        _progress("Pulling Vehicle Demand…")
+                        vd_data = admin.fetch_vehicle_demand(uuid)
+                        source_summary.append("Vehicle Demand: " + ("data available" if vd_data else "not available"))
+        except Exception as _e:
+            _admin_err = str(_e)
+            source_summary.append(f"admin.cars.com: skipped — session error")
+            progress.empty()
+            st.warning(
+                "⚠️ **admin.cars.com session issue.** "
+                "Chrome may have been redirected to JumpCloud SSO. "
+                "Sign in to admin.cars.com in the dealer health Chrome window, "
+                "then click **Run Analysis** again. "
+                "Generating snapshot with Salesforce data only."
+            )
 
     _progress("Generating health snapshot…")
 
