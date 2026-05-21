@@ -35,8 +35,26 @@ from investigation_triggers import investigate_stores, _get, _delta, _pct, SCENA
 TABLEAU_HOST    = "https://us-west-2b.online.tableau.com"
 SITE_ID         = "12338861-20b1-46ed-8841-269a5a937edb"
 BY_STORE_VIEW   = "a0b9bdce-2db3-4ea0-a2fc-365fd08c5786"
-PAT_NAME        = os.environ.get("TABLEAU_PAT_NAME", "Claude")
-PAT_SECRET      = os.environ.get("TABLEAU_PAT_SECRET", "")
+
+
+def _load_tableau_pat() -> tuple:
+    """Load PAT name + secret. Prefers env vars; falls back to ~/.claude/settings.json."""
+    name   = os.environ.get("TABLEAU_PAT_NAME") or os.environ.get("PAT_NAME")
+    secret = os.environ.get("TABLEAU_PAT_SECRET") or os.environ.get("PAT_VALUE")
+    if not secret:
+        try:
+            settings_path = os.path.expanduser("~/.claude/settings.json")
+            with open(settings_path) as f:
+                cfg = json.load(f)
+            tab_env = cfg.get("mcpServers", {}).get("tableau", {}).get("env", {})
+            name   = name   or tab_env.get("PAT_NAME", "Claude")
+            secret = secret or tab_env.get("PAT_VALUE", "")
+        except Exception:
+            pass
+    return (name or "Claude"), (secret or "")
+
+
+PAT_NAME, PAT_SECRET = _load_tableau_pat()
 
 SF_CLI          = os.path.expanduser("~/.npm-global/bin/sf")
 SF_ORG          = "cars-commerce"
@@ -67,7 +85,10 @@ EXPIRY_WARN     = 90
 
 def _tableau_auth() -> str:
     if not PAT_SECRET:
-        raise RuntimeError("TABLEAU_PAT_SECRET not set")
+        raise RuntimeError(
+            "Tableau PAT not found. Set TABLEAU_PAT_SECRET env var or ensure "
+            "~/.claude/settings.json has mcpServers.tableau.env.PAT_VALUE."
+        )
     payload = json.dumps({
         "credentials": {
             "personalAccessTokenName": PAT_NAME,
@@ -81,7 +102,17 @@ def _tableau_auth() -> str:
         headers={"Content-Type": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read())["credentials"]["token"]
+        body = r.read()
+    # Response is XML: <credentials token="...">
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(body)
+    ns = {"t": "http://tableau.com/api"}
+    creds = root.find("t:credentials", ns)
+    if creds is None:
+        creds = root.find("credentials")
+    if creds is None:
+        raise RuntimeError(f"Unexpected Tableau auth response: {body[:200]}")
+    return creds.attrib["token"]
 
 
 def pull_group(token: str, filter_val: str) -> List[Dict]:

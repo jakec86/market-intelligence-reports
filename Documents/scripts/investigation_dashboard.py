@@ -109,8 +109,23 @@ HEADER_HTML = """
 TABLEAU_HOST  = "https://us-west-2b.online.tableau.com"
 SITE_ID       = "12338861-20b1-46ed-8841-269a5a937edb"
 BY_STORE_VIEW = "a0b9bdce-2db3-4ea0-a2fc-365fd08c5786"
-PAT_NAME      = os.environ.get("TABLEAU_PAT_NAME", "Claude")
-PAT_SECRET    = os.environ.get("TABLEAU_PAT_SECRET", "")
+def _load_tableau_pat() -> tuple:
+    """Load PAT name + secret. Prefers env vars; falls back to ~/.claude/settings.json."""
+    name   = os.environ.get("TABLEAU_PAT_NAME") or os.environ.get("PAT_NAME")
+    secret = os.environ.get("TABLEAU_PAT_SECRET") or os.environ.get("PAT_VALUE")
+    if not secret:
+        try:
+            with open(os.path.expanduser("~/.claude/settings.json")) as f:
+                cfg = json.load(f)
+            tab_env = cfg.get("mcpServers", {}).get("tableau", {}).get("env", {})
+            name   = name   or tab_env.get("PAT_NAME", "Claude")
+            secret = secret or tab_env.get("PAT_VALUE", "")
+        except Exception:
+            pass
+    return (name or "Claude"), (secret or "")
+
+
+PAT_NAME, PAT_SECRET = _load_tableau_pat()
 
 SF_CLI = "/Users/jcrawley/.npm-global/bin/sf"
 SF_ORG = "cars-commerce"
@@ -163,7 +178,14 @@ def _tableau_token() -> str:
         headers={"Content-Type": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=30) as r:
-        return json.loads(r.read())["credentials"]["token"]
+        body = r.read()
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(body)
+    ns = {"t": "http://tableau.com/api"}
+    creds = root.find("t:credentials", ns) or root.find("credentials")
+    if creds is None:
+        raise RuntimeError(f"Unexpected Tableau auth response: {body[:200]}")
+    return creds.attrib["token"]
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
@@ -538,9 +560,9 @@ with st.sidebar:
     st.divider()
     st.caption("Tableau data cached 30 min · SF data cached 5 min")
     if PAT_SECRET:
-        st.success("● Tableau PAT configured")
+        st.success(f"● Tableau PAT configured ({PAT_NAME})")
     else:
-        st.error("✗ TABLEAU_PAT_SECRET not set")
+        st.error("✗ Tableau PAT not found (check settings.json)")
 
 
 # ─── RUN SCAN ─────────────────────────────────────────────────────────────────
