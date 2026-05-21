@@ -268,6 +268,32 @@ class _Session:
     def fetch_vehicle_demand(self, uuid: str) -> Optional[dict]:
         return _fetch_vehicle_demand_on(self.page, uuid)
 
+    def verify_auth(self) -> bool:
+        """Quick auth check — navigate to admin.cars.com and confirm we land there.
+        Returns False if redirected to JumpCloud SSO (session not authenticated).
+        """
+        try:
+            self.page.goto(
+                f"{ADMIN_URL}/dealers/all/reports",
+                timeout=15_000,
+                wait_until="domcontentloaded",
+            )
+            return "admin.cars.com" in self.page.url and "jumpcloud" not in self.page.url
+        except Exception:
+            return False
+
+
+def check_admin_auth() -> bool:
+    """Open a temporary session and verify admin.cars.com is authenticated.
+    Use this as a pre-flight before a full data pull.
+    Returns True = authenticated, False = needs sign-in.
+    """
+    try:
+        with session(restart=False) as s:
+            return s.verify_auth()
+    except Exception:
+        return False
+
 
 def check_session() -> bool:
     """Return True if Chrome is reachable AND has an authenticated admin.cars.com session.

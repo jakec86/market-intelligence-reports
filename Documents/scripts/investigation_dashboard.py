@@ -721,28 +721,51 @@ with st.sidebar:
     st.divider()
     st.caption("Health Analysis (Tab 4)")
 
-    @st.cache_data(ttl=300)
+    @st.cache_data(ttl=60)
     def _admin_session_ok() -> bool:
-        return _admin_cars.check_session()
+        # Two-stage: Chrome up + actually authenticated to admin.cars.com
+        if not _admin_cars.check_session():
+            return False
+        return _admin_cars.check_admin_auth()
 
     _cdp_ok = _admin_session_ok()
+
     if _cdp_ok:
-        st.success("● admin.cars.com connected")
-        if st.button("Refresh CDP", use_container_width=True, key="refresh_cdp"):
+        st.success("● admin.cars.com — authenticated")
+        if st.button("Refresh", use_container_width=True, key="refresh_cdp"):
             st.cache_data.clear()
             st.rerun()
     else:
-        st.warning("● admin.cars.com not connected")
-        st.caption("Launch Chrome with port 9223 to enable full Health Analysis:")
-        st.code(
-            'mkdir -p ~/.chrome-dealer-health && '
-            'nohup "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" '
-            '--remote-debugging-port=9223 '
-            '--user-data-dir="$HOME/.chrome-dealer-health" '
-            "--remote-allow-origins='*' --no-first-run "
-            '> /tmp/chrome-debug.log 2>&1 &',
-            language="bash",
-        )
+        # Differentiate: Chrome not running vs. Chrome running but not signed in
+        _chrome_up = _admin_cars.check_session.__wrapped__() if hasattr(_admin_cars.check_session, "__wrapped__") else None
+        try:
+            import urllib.request as _ur
+            _ur.urlopen("http://localhost:9223/json/version", timeout=2)
+            _chrome_running = True
+        except Exception:
+            _chrome_running = False
+
+        if _chrome_running:
+            st.warning("● Chrome running — sign in to admin.cars.com")
+            st.caption(
+                "Chrome is up on port 9223 but not signed into admin.cars.com. "
+                "Open admin.cars.com in that Chrome window and sign in via JumpCloud, "
+                "then click Re-check."
+            )
+            st.caption("To open admin.cars.com in that Chrome window, run:")
+            st.code('open -a "Google Chrome" --args --profile-directory=Default https://admin.cars.com', language="bash")
+        else:
+            st.error("● Chrome not running on port 9223")
+            st.caption("Launch Chrome with remote debugging:")
+            st.code(
+                'mkdir -p ~/.chrome-dealer-health && '
+                'nohup "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" '
+                '--remote-debugging-port=9223 '
+                '--user-data-dir="$HOME/.chrome-dealer-health" '
+                "--remote-allow-origins='*' --no-first-run "
+                '> /tmp/chrome-debug.log 2>&1 &',
+                language="bash",
+            )
         if st.button("Re-check", use_container_width=True, key="recheck_cdp"):
             st.cache_data.clear()
             st.rerun()
