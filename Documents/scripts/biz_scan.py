@@ -169,19 +169,60 @@ def _sf_query(soql: str) -> List[Dict]:
         return []
 
 
-def fetch_expirations() -> List[Dict]:
-    """Subscriptions expiring within EXPIRY_WARN days."""
-    cutoff = (date.today() + timedelta(days=EXPIRY_WARN)).isoformat()
-    soql = f"""
-        SELECT SBQQ__Account__r.Name, SBQQ__Account__r.CCID__c,
-               SBQQ__ProductName__c, SBQQ__NetPrice__c,
-               SBQQ__SubscriptionEndDate__c
-        FROM SBQQ__Subscription__c
-        WHERE SBQQ__SubscriptionEndDate__c <= {cutoff}
-        AND SBQQ__SubscriptionEndDate__c >= TODAY
-        ORDER BY SBQQ__SubscriptionEndDate__c
-        LIMIT 200
+def fetch_expirations(scanned_ccids: Optional[List[str]] = None) -> List[Dict]:
     """
+    Subscriptions expiring within EXPIRY_WARN days, filtered to Jake's book.
+    scanned_ccids: list of CCIDs from the Tableau pull — restricts results to
+    those exact stores. Falls back to parent account name filter if not provided.
+    """
+    cutoff = (date.today() + timedelta(days=EXPIRY_WARN)).isoformat()
+
+    if scanned_ccids:
+        # Split into batches of 100 (SOQL IN limit)
+        results = []
+        for i in range(0, len(scanned_ccids), 100):
+            batch = scanned_ccids[i:i+100]
+            ccid_clause = "','".join(batch)
+            soql = f"""
+                SELECT SBQQ__Account__r.Name, SBQQ__Account__r.CCID__c,
+                       SBQQ__ProductName__c, SBQQ__NetPrice__c,
+                       SBQQ__SubscriptionEndDate__c
+                FROM SBQQ__Subscription__c
+                WHERE SBQQ__SubscriptionEndDate__c <= {cutoff}
+                AND SBQQ__SubscriptionEndDate__c >= TODAY
+                AND SBQQ__Account__r.CCID__c IN ('{ccid_clause}')
+                ORDER BY SBQQ__SubscriptionEndDate__c
+                LIMIT 200
+            """
+            results.extend(_sf_query(soql.strip()))
+    else:
+        # Fallback: filter by parent account names for Jake's 5 clients
+        name_filter = (
+            "SBQQ__Account__r.Parent.Name LIKE '%Sonic%' OR "
+            "SBQQ__Account__r.Parent.Name LIKE '%Hendrick%' OR "
+            "SBQQ__Account__r.Parent.Name LIKE '%Atlantic Coast%' OR "
+            "SBQQ__Account__r.Parent.Name LIKE '%Asbury%' OR "
+            "SBQQ__Account__r.Parent.Name LIKE '%EchoPark%' OR "
+            "SBQQ__Account__r.Parent.Name LIKE '%Larry%Miller%' OR "
+            "SBQQ__Account__r.Parent.Name LIKE '%Koons%' OR "
+            "SBQQ__Account__r.Parent.Name LIKE '%Herb%Chambers%' OR "
+            "SBQQ__Account__r.Name LIKE '%Sonic%' OR "
+            "SBQQ__Account__r.Name LIKE '%Hendrick%' OR "
+            "SBQQ__Account__r.Name LIKE '%Atlantic Coast%' OR "
+            "SBQQ__Account__r.Name LIKE '%EchoPark%'"
+        )
+        soql = f"""
+            SELECT SBQQ__Account__r.Name, SBQQ__Account__r.CCID__c,
+                   SBQQ__ProductName__c, SBQQ__NetPrice__c,
+                   SBQQ__SubscriptionEndDate__c
+            FROM SBQQ__Subscription__c
+            WHERE SBQQ__SubscriptionEndDate__c <= {cutoff}
+            AND SBQQ__SubscriptionEndDate__c >= TODAY
+            AND ({name_filter})
+            ORDER BY SBQQ__SubscriptionEndDate__c
+            LIMIT 200
+        """
+        results = _sf_query(soql.strip())
     rows = _sf_query(soql.strip())
     results = []
     for r in rows:
@@ -581,6 +622,7 @@ def main():
 
     groups_results = []
     all_bright_ccids = []
+    all_scanned_ccids: List[str] = []  # collected as groups are pulled — used to scope SF queries
 
     for group_key, filter_val in groups_to_scan:
         print(f"Pulling {filter_val}...", end=" ", flush=True)
@@ -591,6 +633,9 @@ def main():
         print(f"{len(stores)} stores")
 
         results = investigate_stores(stores)
+
+        # Collect CCIDs for scoped SF queries
+        all_scanned_ccids.extend(s.get("Legacy Id", "") for s in stores if s.get("Legacy Id"))
 
         # Classify trends against history
         flagged_with_trend = []
@@ -641,8 +686,8 @@ def main():
     upsell_candidates = []
     if not args.dry_run:
         print("Querying Salesforce for expirations...", end=" ", flush=True)
-        expirations = fetch_expirations()
-        print(f"{len(expirations)} found")
+        expirations = fetch_expirations(scanned_ccids=all_scanned_ccids)
+        print(f"{len(expirations)} found (scoped to {len(all_scanned_ccids)} scanned stores)")
 
         print("Querying Salesforce for upsell signals...", end=" ", flush=True)
         upsell_candidates = fetch_upsell_candidates(all_bright_ccids)

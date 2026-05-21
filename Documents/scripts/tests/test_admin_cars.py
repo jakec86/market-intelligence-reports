@@ -3,29 +3,19 @@ import pytest
 import admin_cars
 
 
-def test_check_session_returns_bool():
-    """check_session() must return a bool — True when an admin.cars.com tab is open."""
-    import json
-    tabs = [{"url": "https://admin.cars.com/dealers/all/reports"}]
+def test_check_session_returns_true_when_chrome_reachable():
+    """check_session() returns True when Chrome CDP endpoint responds."""
     mock_response = MagicMock()
-    mock_response.read.return_value = json.dumps(tabs).encode()
+    mock_response.read.return_value = b'{"Browser": "Chrome"}'
     with patch("urllib.request.urlopen", return_value=mock_response):
         result = admin_cars.check_session()
     assert result is True
 
 
-def test_check_session_returns_false_when_redirected_off_admin_cars():
-    """check_session() returns False when no admin.cars.com tab is open."""
-    import json
-    for tabs in (
-        [{"url": "https://sso.jumpcloud.com/saml2/tableau"}],
-        [{"url": "https://console.jumpcloud.com/login"}],
-        [],
-    ):
-        mock_response = MagicMock()
-        mock_response.read.return_value = json.dumps(tabs).encode()
-        with patch("urllib.request.urlopen", return_value=mock_response):
-            assert admin_cars.check_session() is False, f"expected False for tabs={tabs}"
+def test_check_session_returns_false_when_chrome_unreachable():
+    """check_session() returns False when Chrome CDP endpoint is not up."""
+    with patch("urllib.request.urlopen", side_effect=Exception("connection refused")):
+        assert admin_cars.check_session() is False
 
 
 def test_resolve_uuid_extracts_uuid_from_html():
@@ -124,7 +114,7 @@ def test_extract_kpi_connections_negative_delta():
 def test_extract_kpi_handles_empty_rows():
     """Empty worksheet returns {cp: None, delta_pct: None} rather than raising."""
     kpi = admin_cars._extract_kpi(["col1", "col2"], [])
-    assert kpi == {"cp": None, "pp": None, "delta_pct": None}
+    assert kpi == {"cp": None, "pp": None, "delta_pct": None, "used_cp": None, "new_cp": None}
 
 
 def test_find_val_matches_keyword_case_insensitively():

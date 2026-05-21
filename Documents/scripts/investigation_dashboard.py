@@ -344,20 +344,45 @@ def _sf_subscriptions(ccid: str) -> List[Dict]:
     return recs
 
 
-def _sf_expirations(days: int = 90) -> List[Dict]:
-    cutoff = date.today().replace(day=1).__class__(
-        date.today().year + (date.today().month // 12),
-        (date.today().month % 12) + 1,
-        1,
-    ).isoformat() if days > 60 else date.today().isoformat()
+def _sf_expirations(days: int = 90, scanned_ccids: Optional[List[str]] = None) -> List[Dict]:
+    """Return expiring subscriptions scoped to the scanned stores only."""
     from datetime import timedelta
     cutoff = (date.today() + timedelta(days=days)).isoformat()
+
+    if scanned_ccids:
+        all_results = []
+        for i in range(0, len(scanned_ccids), 100):
+            batch = scanned_ccids[i:i+100]
+            ccid_clause = "','".join(batch)
+            all_results.extend(_sf_query(
+                f"SELECT SBQQ__Account__r.Name, SBQQ__Account__r.CCID__c, "
+                f"SBQQ__ProductName__c, SBQQ__NetPrice__c, SBQQ__SubscriptionEndDate__c "
+                f"FROM SBQQ__Subscription__c "
+                f"WHERE SBQQ__SubscriptionEndDate__c <= {cutoff} "
+                f"AND SBQQ__SubscriptionEndDate__c >= TODAY "
+                f"AND SBQQ__Account__r.CCID__c IN ('{ccid_clause}') "
+                f"ORDER BY SBQQ__SubscriptionEndDate__c LIMIT 100"
+            ))
+        return all_results
+
+    # Fallback: filter by Jake's client names when no CCIDs available
+    name_filter = (
+        "SBQQ__Account__r.Parent.Name LIKE '%Sonic%' OR "
+        "SBQQ__Account__r.Parent.Name LIKE '%Hendrick%' OR "
+        "SBQQ__Account__r.Parent.Name LIKE '%Atlantic Coast%' OR "
+        "SBQQ__Account__r.Parent.Name LIKE '%Asbury%' OR "
+        "SBQQ__Account__r.Parent.Name LIKE '%EchoPark%' OR "
+        "SBQQ__Account__r.Parent.Name LIKE '%Larry%Miller%' OR "
+        "SBQQ__Account__r.Parent.Name LIKE '%Koons%' OR "
+        "SBQQ__Account__r.Parent.Name LIKE '%Herb%Chambers%'"
+    )
     return _sf_query(
         f"SELECT SBQQ__Account__r.Name, SBQQ__Account__r.CCID__c, "
         f"SBQQ__ProductName__c, SBQQ__NetPrice__c, SBQQ__SubscriptionEndDate__c "
         f"FROM SBQQ__Subscription__c "
         f"WHERE SBQQ__SubscriptionEndDate__c <= {cutoff} "
         f"AND SBQQ__SubscriptionEndDate__c >= TODAY "
+        f"AND ({name_filter}) "
         f"ORDER BY SBQQ__SubscriptionEndDate__c LIMIT 100"
     )
 
@@ -704,10 +729,13 @@ if run:
         results = run_investigation(stores, focus_scenarios)
         results = enrich_with_trends(results, history)
 
+        # Collect scanned CCIDs to scope SF queries to Jake's book only
+        scanned_ccids = [s.get("Legacy Id", "") for s in stores if s.get("Legacy Id")]
+
         expirations = []
         if show_expirations:
             with st.spinner("Checking Salesforce for expirations…"):
-                expirations = _sf_expirations(expiry_days)
+                expirations = _sf_expirations(expiry_days, scanned_ccids=scanned_ccids)
 
         st.session_state["scan"] = {
             "stores":       stores,
@@ -1004,7 +1032,13 @@ with tab_expiry:
 
     # ── Expiring products ──────────────────────────────────────────────────────
     if not expirations:
-        st.info("Enable 'Show expiring products' in the sidebar and re-run to see renewals.")
+        if show_expirations:
+            st.success(
+                f"✓ No expiring products in the next {expiry_days} days for your scanned accounts. "
+                f"Results are scoped to your book only — not the full Salesforce org."
+            )
+        else:
+            st.info("Enable 'Show expiring products' in the sidebar and re-run to see renewals.")
     else:
         st.subheader(f"⚠️ Expiring Products ({len(expirations)})")
         expiry_rows = []
