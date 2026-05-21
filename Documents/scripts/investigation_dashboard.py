@@ -1345,7 +1345,7 @@ with tab_health:
             _h_progress("Resolving admin.cars.com UUID…")
             _admin_error = None
             try:
-                with _admin_cars.session() as _admin:
+                with _admin_cars.session(restart=False) as _admin:
                     _uuid = _admin.resolve_uuid(h_effective_ccid)
                     if _uuid:
                         _h_progress("Pulling Performance Trends…")

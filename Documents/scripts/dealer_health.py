@@ -171,7 +171,7 @@ if run and (dealer_name.strip() or ccid_override.strip()):
         _progress("Opening admin.cars.com and resolving dealer UUID…")
         _admin_err = None
         try:
-            with admin_cars.session() as admin:
+            with admin_cars.session(restart=False) as admin:
                 uuid = admin.resolve_uuid(effective_ccid)
                 if not uuid:
                     source_summary.append("admin.cars.com: dealer UUID not found")

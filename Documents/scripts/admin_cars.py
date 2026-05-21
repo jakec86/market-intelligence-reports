@@ -114,15 +114,33 @@ def _restart_chrome() -> None:
 
 
 @contextmanager
-def session():
+def session(restart: bool = True):
     """Yield a single reusable Playwright page connected via CDP.
 
-    Restarts Chrome immediately before connecting so Playwright's automation
-    commands reach Chrome before CBCM cloud policies are applied (~3s window).
-    Auth cookies persist in the ~/.chrome-dealer-health profile across restarts.
+    restart=True (default, used by standalone dealer_health.py):
+        Kills and relaunches Chrome immediately before connecting so
+        Playwright commands reach it before CBCM cloud policies lock
+        down automation (~3s window). Auth cookies persist in the
+        ~/.chrome-dealer-health profile across restarts.
+
+    restart=False (used by integrated dashboard):
+        Attaches to an already-running Chrome on CDP_ENDPOINT without
+        killing it. Raises RuntimeError if Chrome is not already running
+        so the caller can fall back to SF-only analysis gracefully.
     """
     _last_missing.clear()
-    _restart_chrome()
+    if restart:
+        _restart_chrome()
+    else:
+        # Verify Chrome is reachable before attaching — don't kill it
+        port = CDP_ENDPOINT.split(":")[-1]
+        try:
+            urllib.request.urlopen(f"http://localhost:{port}/json/version", timeout=3)
+        except Exception:
+            raise RuntimeError(
+                "admin.cars.com Chrome is not running on port 9223. "
+                "Launch it from the sidebar first."
+            )
     with sync_playwright() as pw:
         browser = pw.chromium.connect_over_cdp(CDP_ENDPOINT, timeout=8_000)
         ctx = browser.contexts[0] if browser.contexts else browser.new_context()
@@ -134,7 +152,14 @@ def session():
                 page.close()
             except Exception:
                 pass
-            browser.close()
+            if restart:
+                browser.close()
+            else:
+                # Don't close the browser — other tabs may be in use
+                try:
+                    browser.close()
+                except Exception:
+                    pass
 
 
 def _load_report(page, uuid: str, report_slug: str) -> bool:
