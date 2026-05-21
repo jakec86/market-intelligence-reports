@@ -106,9 +106,24 @@ HEADER_HTML = """
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 
-TABLEAU_HOST  = "https://us-west-2b.online.tableau.com"
-SITE_ID       = "12338861-20b1-46ed-8841-269a5a937edb"
-BY_STORE_VIEW = "a0b9bdce-2db3-4ea0-a2fc-365fd08c5786"
+TABLEAU_HOST    = "https://us-west-2b.online.tableau.com"
+SITE_ID         = "12338861-20b1-46ed-8841-269a5a937edb"
+BY_STORE_VIEW   = "a0b9bdce-2db3-4ea0-a2fc-365fd08c5786"
+AE_INSIGHTS_VIEW = "a60dbfc3-0156-4728-884a-fec77a3b7d2c"  # no RLS — all dealers, MRR + products
+
+# Scenario → admin.cars.com report slug mapping (used for scenario-aware quick links)
+SCENARIO_REPORTS = {
+    1: [("Historical Connections",   "historical_connections"),
+        ("Low Engaged Inventory",    "listings_optimizer")],
+    2: [("Listings Optimizer",       "listings_optimizer"),
+        ("Performance Trends",       "performance_trends")],
+    3: [("Performance Trends",       "performance_trends"),
+        ("Demand Signals",           "demand_signals")],
+    4: [("Demand Signals",           "demand_signals"),
+        ("Market Opportunities",     "market_opportunities")],
+    5: [("Connections & Contact Details", "connections_contact_details"),
+        ("ROI One-Sheeter",          "roi_one_sheeter")],
+}
 def _load_tableau_pat() -> tuple:
     """Load PAT name + secret. Prefers env vars; falls back to ~/.claude/settings.json."""
     name   = os.environ.get("TABLEAU_PAT_NAME") or os.environ.get("PAT_NAME")
@@ -246,6 +261,42 @@ def _pull_by_ccid(ccid: str) -> List[Dict]:
         except Exception:
             pass
     return [s for s in all_stores if s.get("Legacy Id", "").strip() == ccid.strip()]
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _pull_ae_insights() -> Dict[str, Dict]:
+    """
+    Pull AE Insights view — no RLS, all dealers, has CCID + MRR + products.
+    Returns dict keyed by CCID: {name, ccid, mrr, products, dma, ae}.
+    Cached 1 hour — this is a large payload (~75K rows).
+    """
+    token = _tableau_token()
+    url = f"{TABLEAU_HOST}/api/3.22/sites/{SITE_ID}/views/{AE_INSIGHTS_VIEW}/data"
+    req = urllib.request.Request(url, headers={"X-Tableau-Auth": token})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            raw = r.read().decode("utf-8", errors="replace")
+    except Exception:
+        return {}
+    result = {}
+    for row in csv.DictReader(io.StringIO(raw)):
+        ccid = row.get("Customer Id", row.get("CCID", "")).strip()
+        if not ccid:
+            continue
+        mrr_raw = row.get("MRR", row.get("Current MRR", "0")) or "0"
+        try:
+            mrr = float(str(mrr_raw).replace("$", "").replace(",", "").strip() or "0")
+        except ValueError:
+            mrr = 0.0
+        result[ccid] = {
+            "name":     row.get("Customer Name", row.get("Dealer Name", "")),
+            "ccid":     ccid,
+            "mrr":      mrr,
+            "products": row.get("Products", row.get("Product Names", "")),
+            "dma":      row.get("DMA", ""),
+            "ae":       row.get("AE", ""),
+        }
+    return result
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -495,26 +546,65 @@ def _days_left(expiry_rec: Dict) -> int:
         return 999
 
 
-def _admin_links(ccid: str) -> str:
+def _get_uuid(ccid: str) -> Optional[str]:
+    """Look up cached admin.cars.com UUID for a CCID."""
+    for cache_path in [
+        os.path.expanduser("~/.claude/aca_uuid_cache.json"),
+        os.path.expanduser("~/.claude/uuid_cache.json"),
+    ]:
+        try:
+            with open(cache_path) as f:
+                cache = json.load(f)
+            if ccid in cache:
+                return cache[ccid]
+        except Exception:
+            pass
+    return None
+
+
+def _admin_links(ccid: str, flags: Optional[List] = None) -> str:
+    """
+    Render admin.cars.com quick links. Always shows a working search link.
+    When scenario flags are provided, surfaces the two most relevant reports
+    for the highest-priority scenario first (scenario-aware).
+    """
     if not ccid:
         return ""
-    uuid_cache = os.path.expanduser("~/.claude/aca_uuid_cache.json")
-    uuid = None
-    try:
-        with open(uuid_cache) as f:
-            cache = json.load(f)
-        uuid = cache.get(ccid)
-    except Exception:
-        pass
+    uuid = _get_uuid(ccid)
 
-    links = [f'<a href="https://admin.cars.com/dealers/all/reports?query={ccid}" target="_blank">Search admin.cars.com</a>']
+    # Always-available: search by CCID
+    links = [f'<a href="https://admin.cars.com/dealers/all/reports?query={ccid}" target="_blank">🔍 Open in admin.cars.com</a>']
+
     if uuid:
         base = f"https://admin.cars.com/dealers/{uuid}/reports"
-        links += [
-            f'<a href="{base}/performance_trends" target="_blank">Performance Trends</a>',
-            f'<a href="{base}/demand_signals" target="_blank">Demand Signals</a>',
-            f'<a href="{base}/listings_optimizer" target="_blank">Listings Optimizer</a>',
-        ]
+
+        if flags:
+            # Scenario-aware: show reports relevant to the highest-priority scenario first
+            shown_slugs = set()
+            for flag in sorted(flags, key=lambda f: (0 if f["severity"] == "HIGH" else 1, f["scenario"])):
+                for label, slug in SCENARIO_REPORTS.get(flag["scenario"], []):
+                    if slug not in shown_slugs:
+                        links.append(f'<a href="{base}/{slug}" target="_blank">→ {label}</a>')
+                        shown_slugs.add(slug)
+                if len(shown_slugs) >= 3:
+                    break
+            # Always add Performance Trends as a baseline if not already shown
+            if "performance_trends" not in shown_slugs:
+                links.append(f'<a href="{base}/performance_trends" target="_blank">Performance Trends</a>')
+        else:
+            # No flags — show standard set for a healthy store (upsell/optimize focus)
+            links += [
+                f'<a href="{base}/performance_trends" target="_blank">Performance Trends</a>',
+                f'<a href="{base}/listings_optimizer" target="_blank">Listings Optimizer</a>',
+                f'<a href="{base}/demand_signals" target="_blank">Demand Signals</a>',
+            ]
+    else:
+        # No UUID cached — give instructions to resolve
+        links.append(
+            f'<span style="color:#9ca3af;font-size:11px;">'
+            f'(Deep links available after first admin.cars.com visit for this store)</span>'
+        )
+
     return f'<div class="qlink">{"".join(links)}</div>'
 
 
@@ -725,12 +815,17 @@ with tab_book:
                 ):
                     st.caption(f"**Next step:** {meta.get('next_step','')}")
 
-            # admin.cars.com quick links
-            st.markdown(_admin_links(ccid), unsafe_allow_html=True)
+            # Scenario-aware admin.cars.com quick links
+            st.markdown(_admin_links(ccid, flags=entry["flags"]), unsafe_allow_html=True)
 
-            # Talking points button
+            # Talking points button + "Open Full Brief" shortcut to Tab 2
             store_metrics = next((s for s in stores if s["Customer Name"] == store_name), {})
-            if st.button("⚡ Generate Talking Points", key=f"tp_{ccid}"):
+            col_tp, col_brief = st.columns(2)
+            run_tp = col_tp.button("⚡ Generate Talking Points", key=f"tp_{ccid}")
+            if col_brief.button("📋 Open Full Brief →", key=f"brief_nav_{ccid}"):
+                st.session_state["brief_prefill"] = store_name
+                st.session_state["active_tab"] = "brief"
+            if run_tp:
                 with st.spinner("Generating talking points…"):
                     sf_acct = _sf_account(ccid) if ccid else None
                     tp_text = generate_talking_points(store_name, store_metrics, entry["flags"], sf_acct)
@@ -771,10 +866,14 @@ with tab_book:
 with tab_brief:
     st.subheader("Pre-Call Brief")
 
+    # Auto-populate from Tab 1 "Open Full Brief" or Tab 3 "Get Brief" buttons
+    prefill = st.session_state.pop("brief_prefill", "")
+
     col_inp, col_btn = st.columns([4, 1])
     with col_inp:
         brief_store = st.text_input(
             "Store name or CCID",
+            value=prefill,
             placeholder="e.g. Stevens Creek BMW or 25732",
             key="brief_store_input",
         )
@@ -882,8 +981,8 @@ with tab_brief:
         else:
             st.success("No active flags — store is performing well.")
 
-        # Quick links
-        st.markdown(_admin_links(brief["ccid"]), unsafe_allow_html=True)
+        # Scenario-aware quick links
+        st.markdown(_admin_links(brief["ccid"], flags=brief.get("flags")), unsafe_allow_html=True)
 
         # Talking points
         if brief["tp"]:
@@ -902,79 +1001,151 @@ with tab_brief:
 
 # ═══════════════════════ TAB 3: EXPIRATIONS & UPSELL ═════════════════════════
 with tab_expiry:
-    if not expirations:
-        if show_expirations:
-            st.info("No expiring products found in the selected window, or SF query was skipped.")
-        else:
-            st.info("Enable 'Show expiring products' in the sidebar and re-run.")
-    else:
-        st.subheader(f"Expiring Products ({len(expirations)})")
 
+    # ── Expiring products ──────────────────────────────────────────────────────
+    if not expirations:
+        st.info("Enable 'Show expiring products' in the sidebar and re-run to see renewals.")
+    else:
+        st.subheader(f"⚠️ Expiring Products ({len(expirations)})")
         expiry_rows = []
         for e in expirations:
             days = _days_left(e)
-            acct = (e.get("SBQQ__Account__r") or {}) if isinstance(e.get("SBQQ__Account__r"), dict) else {}
-            name = acct.get("Name") or e.get("SBQQ__Account__r", {}).get("Name", "Unknown") if isinstance(e.get("SBQQ__Account__r"), dict) else "Unknown"
+            acct = e.get("SBQQ__Account__r") or {}
+            name = acct.get("Name", "Unknown") if isinstance(acct, dict) else "Unknown"
             expiry_rows.append({
-                "Days Left":  days,
-                "Account":    name,
-                "Product":    e.get("SBQQ__ProductName__c", ""),
-                "MRR":        f"${e.get('SBQQ__NetPrice__c', 0):,.0f}",
-                "Expires":    e.get("SBQQ__SubscriptionEndDate__c", ""),
-                "_days":      days,
+                "Days Left": days,
+                "Account":   name,
+                "Product":   e.get("SBQQ__ProductName__c", ""),
+                "MRR":       f"${e.get('SBQQ__NetPrice__c', 0):,.0f}",
+                "Expires":   e.get("SBQQ__SubscriptionEndDate__c", ""),
+                "_days":     days,
             })
-
         expiry_rows.sort(key=lambda r: r["_days"])
         expiry_df = pd.DataFrame([{k: v for k, v in r.items() if k != "_days"} for r in expiry_rows])
 
         def _color_days(val):
             try:
                 d = int(val)
-                if d <= 30:
-                    return "color: #c0392b; font-weight: 700"
-                if d <= 60:
-                    return "color: #d97706; font-weight: 600"
+                if d <= 30: return "color: #c0392b; font-weight: 700"
+                if d <= 60: return "color: #d97706; font-weight: 600"
             except Exception:
                 pass
             return ""
 
         st.dataframe(
             expiry_df.style.applymap(_color_days, subset=["Days Left"]),
-            use_container_width=True,
-            hide_index=True,
+            use_container_width=True, hide_index=True,
         )
 
-    # Upsell signals from current scan
     st.divider()
-    st.subheader("Upsell Signals — Bright Spots with Growth Headroom")
 
-    bright_ccids = [b["ccid"] for b in results["bright_spots"] if b["ccid"]]
-    if not bright_ccids:
-        st.info("No bright spots identified in current scan.")
+    # ── Upsell scoring ─────────────────────────────────────────────────────────
+    st.subheader("📈 Upsell Opportunities")
+    st.caption(
+        "Scored across ALL scanned stores — not limited to bright spots. "
+        "Score = metric trajectory × product gap. "
+        "Higher = stronger upsell conversation."
+    )
+
+    col_mrr, col_scope = st.columns([2, 2])
+    mrr_ceiling = col_mrr.slider("Max MRR threshold ($)", 0, 20000, 8000, step=500,
+                                  help="Show stores currently below this MRR — growth headroom")
+    include_flagged = col_scope.checkbox("Include flagged stores", value=False,
+                                          help="Flagged stores have issues to fix first — usually exclude from upsell")
+
+    with st.spinner("Loading product data from AE Insights…"):
+        ae_data = _pull_ae_insights()
+
+    if not ae_data:
+        st.warning("AE Insights view returned no data — check Tableau PAT access.")
     else:
-        with st.spinner("Checking Salesforce for product spend…"):
-            upsell_recs = []
-            if bright_ccids:
-                ccid_list = "','".join(bright_ccids[:30])
-                upsell_recs = _sf_query(
-                    f"SELECT Name, CCID__c, Product_Amount__c, Products__c "
-                    f"FROM Account WHERE CCID__c IN ('{ccid_list}') "
-                    f"AND Product_Amount__c < 3000 ORDER BY Product_Amount__c ASC LIMIT 20"
-                )
-        if upsell_recs:
-            upsell_df = pd.DataFrame([{
-                "Store":       r.get("Name", ""),
-                "CCID":        r.get("CCID__c", ""),
-                "Current MRR": f"${r.get('Product_Amount__c', 0):,.0f}/mo",
-                "Products":    r.get("Products__c", "") or "—",
-            } for r in upsell_recs])
-            st.dataframe(upsell_df, use_container_width=True, hide_index=True)
-            st.caption(
-                f"{len(upsell_recs)} stores with strong metrics (both VDPs and Connections growing) "
-                f"and MRR < $3,000/mo — prime growth conversation candidates."
-            )
+        # Build upsell score for every store in the current scan
+        PRODUCT_WEIGHTS = {
+            "listings optimizer": 2, "cars social": 3, "accutrade": 3,
+            "market area expansion": 3, "mae": 3, "premium": 2,
+            "vpm": 2, "vin performance": 2, "featured": 1,
+        }
+
+        upsell_candidates = []
+        all_scan_stores = results["high"] + results["medium"] + results["bright_spots"] + results["clean"]
+
+        for entry in all_scan_stores:
+            # Skip flagged stores unless opted in
+            is_flagged = entry in (results["high"] + results["medium"])
+            if is_flagged and not include_flagged:
+                continue
+
+            ccid  = entry.get("ccid", "") or (entry.get("ccid") if "ccid" in entry else "")
+            name  = entry.get("store", "") or entry.get("Customer Name", "")
+            ae    = ae_data.get(ccid, {})
+            mrr   = ae.get("mrr", 0) or 0
+            prods = (ae.get("products", "") or "").lower()
+
+            if mrr > mrr_ceiling:
+                continue
+
+            # Metric trajectory score (0–40): VDP + connection deltas
+            store_rec = next((s for s in stores if s.get("Legacy Id") == ccid), {})
+            vdp_d  = _delta(store_rec, "vdp_cp",  "vdp_pp",  "vdp_delta") or 0
+            conn_d = _delta(store_rec, "conn_cp", "conn_pp", "conn_delta") or 0
+            traj_score = min(40, int(max(0, vdp_d) * 100 + max(0, conn_d) * 100))
+
+            # Product gap score (0–60): missing high-value products = more headroom
+            gap_score = 0
+            gap_products = []
+            for prod_key, weight in PRODUCT_WEIGHTS.items():
+                if prod_key not in prods:
+                    gap_score += weight * 5
+                    gap_products.append(prod_key.title())
+            gap_score = min(60, gap_score)
+
+            total_score = traj_score + gap_score
+            if total_score < 20:
+                continue
+
+            upsell_candidates.append({
+                "Score":         total_score,
+                "Store":         name,
+                "CCID":          ccid,
+                "Current MRR":   f"${mrr:,.0f}/mo",
+                "Metric Trend":  f"VDPs {_pct(vdp_d) if vdp_d else '—'}  Conn {_pct(conn_d) if conn_d else '—'}",
+                "Products on File": ae.get("products", "—") or "—",
+                "Missing (Growth Opps)": ", ".join(gap_products[:4]) or "—",
+                "_score": total_score,
+            })
+
+        upsell_candidates.sort(key=lambda r: -r["_score"])
+
+        if not upsell_candidates:
+            st.info(f"No upsell candidates found at MRR < ${mrr_ceiling:,}. Try raising the threshold or enabling flagged stores.")
         else:
-            st.info("No upsell candidates found (SF query returned no results).")
+            display_cols = ["Score", "Store", "CCID", "Current MRR", "Metric Trend", "Missing (Growth Opps)"]
+            upsell_df = pd.DataFrame([{k: v for k, v in r.items() if not k.startswith("_")} for r in upsell_candidates])
+
+            # Score color scale
+            def _score_color(val):
+                try:
+                    s = int(val)
+                    if s >= 70: return "background-color: #d1fae5; color: #065f46; font-weight:700"
+                    if s >= 40: return "background-color: #fef3c7; color: #92400e"
+                except Exception:
+                    pass
+                return ""
+
+            st.dataframe(
+                upsell_df[display_cols].style.applymap(_score_color, subset=["Score"]),
+                use_container_width=True, hide_index=True,
+            )
+            st.caption(
+                f"**{len(upsell_candidates)} upsell candidates** · "
+                f"Score = metric trajectory (0–40) + product gap (0–60). "
+                f"Green ≥70 = strong conversation; yellow ≥40 = worth discussing."
+            )
+
+            # Click to get prep brief for top candidate
+            top = upsell_candidates[0]
+            if st.button(f"📋 Get Brief for top candidate — {top['Store']}", key="upsell_top_brief"):
+                st.session_state["brief_prefill"] = top["Store"]
 
 # ─── EXPORT ───────────────────────────────────────────────────────────────────
 st.divider()
