@@ -70,6 +70,7 @@ Custom slash commands defined in `~/.claude/commands/`. Plugin skills are namesp
 **On-demand analysis:**
 | Command | What it does |
 |---|---|
+| `/book-scan [groups] [--email] [--dry-run]` | Weekly book-of-business health scan — all groups, expiring products, upsell signals, trend tracking (NEW/SUSTAINED/CRITICAL) |
 | `/investigate-stores <scope> [flags]` | Unified investigation scan — any store/CCID/group/all + optional `--brief`, `--report`, `--export`, `--focus`, `--since` |
 | `/prep <dealer name or CCID>` | Pre-call briefing — SF account + Tableau metrics + investigation flags + DealerRater + 3 talking points in ~90 seconds |
 | `/auto-research` | Automotive Research Analyst — Growth & Gains deep dive on a specified dealer or market |
