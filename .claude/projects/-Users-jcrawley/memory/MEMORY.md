@@ -1,0 +1,67 @@
+# Memory Index
+
+- [URL Sharing in Terminal](feedback_url_sharing.md) — Always use raw URLs in code blocks, never markdown hyperlinks; suggest `! open "url"` for direct browser open
+- [Price Badge Report Workflow](project_price_badge_report_workflow.md) — Weekly dealer report: download from Tableau LEI view + admin.cars.com Demand Signals → auto-feeds Google Sheet → email to dealer
+- [GitHub Copilot Access](project_github_copilot.md) — Cursor active now (free tier); Cars Commerce enterprise Copilot available 2026-04-24 via M365
+- [Folder Structure & Download Defaults](project_folder_structure.md) — Desktop stays clean (scripts/, templates/ only); reports → Documents/Reports/; Tableau CSVs → Documents/Tableau/
+- [Auto Research Learnings](auto_research_learnings.md) — Cumulative knowledge from /auto-research sessions: dealer patterns, market insights, data tips, effective framings
+- [Price Badge Email Formatting](feedback_price_badge_email.md) — Hyperlink sheet link, include price comparison data, sort J by green, blank line before Jake, vary messaging
+- [Asbury Research Project](project_asbury_research.md) — Full portfolio analysis: CPL/CPC, used volumes, prospects — data collected, analysis in progress
+- [eCarOne VPM Sheet Formatting](feedback_ecarone_vpm_sheet_format.md) — Exact cell format spec for VPM Performance tab: Poppins 10, dark gray text, DOTTED borders, 0% (not 0.0%) for pct cols, CENTER/MIDDLE — apply via API repeatCell, not copyPaste
+- [User Timezone](user_timezone.md) — Jake is in Mountain Time (MST/MDT); convert calendar events from CT accordingly
+- [Login Flows](reference_login_flows.md) — admin.cars.com = JumpCloud SSO, Gmail/Sheets = Google sign-in, DealerRater = METAL SSO — all need manual password entry
+- [Prospect Pipeline Formatting](project_prospect_pipeline_formatting.md) — Asbury Prospect Pipeline tab: purple header, banded rows, quickhit sidebar with attainment tiers, basic filter by Last MKP Date desc
+- [Creative Formatting Welcome](feedback_creative_formatting.md) — Jake welcomes creative formatting improvements; don't just replicate, suggest better visuals
+- [Price Badge Sheet URLs](reference_price_badge_sheets.md) — Hendrick + Nalley Google Sheet links for weekly PB reports
+- [PB Report — Do Not Modify Formulas](feedback_pb_formulas.md) — Never change PBT formulas; fix data imports instead; clear filters before sorting J by green
+- [Dealer Health App Progress](project_dealer_health_app.md) — Streamlit app: SF + admin.cars.com (CDP scraping) + Claude analysis; Tableau REST API blocked by row-level security
+- [Sonic Porsche Performance Review](project_sonic_porsche_review.md) — 5 Porsche stores, Q4/Q1 data, CCIDs/UUIDs, competitor contacts, report at ~/Documents/Reports/SonicAutomotive/
+- [Connections vs Leads Terminology](feedback_connections_vs_leads.md) — Connections = all types; Leads = Phone+Email+Chat only. Always split both in reports.
+- [Tactical Fleet Research](project_tactical_fleet.md) — Charlotte (6001077) + Dallas (5383761) exotic/luxury group; reports → Documents/Reports/TacticalFleet/
+- [Performance Deep Dive Playbook](reference_performance_playbook.md) — Cars Commerce internal playbook: 6 investigation scenarios, admin.cars.com report reference, escalation paths
+- [SF Account_Status__c Unreliable](feedback_sf_account_status.md) — Always check SBQQ__Subscription__c for actual products; Account_Status__c can be stale
+- [ACA Monthly Reporting](project_aca_reporting.md) — Atlantic Coast Automotive (CCID 6051462), ~72 stores, Tableau + admin.cars.com → Google Sheet, email to Danielle McJunkins
+- [SRP/VDP Source Must Be Market Opportunities](feedback_srp_vdp_source.md) — Use admin.cars.com Market Opps (Store tab) for SRP/VDP conversion, not Tableau SRP Detail (undercounts SRPs ~25%)
+- [Gmail MCP Stale Process Fix](reference_port3000_fix.md) — Find stale gmail-mcp by process name (not fixed port — can be 3000 or 3100); kill by PID; fresh probe/session relaunches clean
+- [SF Cars Social Count Can Be Wrong](feedback_sf_cars_social_count.md) — SBQQ showed 6 Cars Social for eCarOne but actual was 2; verify product counts with AE
+- [Market Intelligence Workflow](project_market_intelligence_workflow.md) — Tableau crosstab → report gen → GitHub Pages → ZIP QC Google Sheet; PAT fallback via Playwright; hitlist coverage analysis
+- [Market Intel Client-Facing Improvements](feedback_market_intel_improvements.md) — Auto-generate index.html; add City Summary tab; link interactive map from sheet
+- [Herb Chambers Employee Updates](project_herb_chambers_employees.md) — Quarterly DR employee audit for ~24 HC stores; Playwright + WebFetch → cross-reference → adds/removes/title fixes
+- [DR Admin Form Submission](reference_dr_admin_form.md) — Playwright native fill + `historicAccountPrompt()` is the correct DR employee add/edit pattern; JS value assignment bypasses framework events and breaks submit
+- [Cars Commerce Data Warehouse](reference_data_warehouse.md) — Redshift DW via Atlan (carscommerce.atlan.com, rs-prod/dw, 54K assets); key views: customer_vw (964q), agg_vehicle_metric_daily_vw (380q), lead (412q)
+- [Atlan API Token Request](project_atlan_api_token_request.md) — Pending: requested in #data_governance_communications 2026-04-10; once received, configure Atlan MCP server
+- [Cars Commerce Report Style](feedback_carscommerce_report_style.md) — Brand CSS tokens, component patterns, and upload method for all HTML dealer reports (purple #6B2D8B, teal #00A88E, KPI cards, purple thead tables)
+- [PB Sort Safety](feedback_pb_sort_safety.md) — NEVER "Sort sheet" on PBT — moves header row. Use "Sort range" on data rows only (A4:L54)
+- [Nalley PBT Correct Layout](feedback_nalley_pbt_layout.md) — Exact row structure: empty R1, spacer R2, dark teal headers R3, data R4+. Different from Hendrick.
+- [Tableau LEI Filter Automation](feedback_tableau_lei_filters.md) — Use portal URL (not embed); no DMA filter needed; Dealer Name filter: deselect All via inner checkbox, search, select, clear search, Apply; vf_ URL params don't work; pb_report.py handles all sheet/email work
+- [Nalley LEI Tableau Filter Sequence](reference_nalley_lei_filters.md) — DEPRECATED: DMA cascade no longer needed. Go straight to Dealer Name filter from portal URL.
+- [LEI Tableau Download Automation](project_lei_automation.md) — JS API sequence: revert → DMA=All → Maj dealer=Hendrick Automotive Group → reset dependents; SSO required once; Gmail compose scope added
+- [PB Sheet Formatting Automation](feedback_pb_sheet_formatting.md) — NEVER clear+rewrite PBT tab (destroys VLOOKUPs); use in-place sort only
+- [PB Report Full Automation Plan](project_pb_automation_plan.md) — Complete cron-ready plan: Tableau JS API → CSV filter → gspread import → in-place sort → Gmail draft; SSO is sole blocker
+- [Gmail Pagination](feedback_gmail_pagination.md) — Always check all Gmail pages (Older button) + use checkbox elements for accurate email count
+- [Google Sheet Style](feedback_gsheet_style.md) — Poppins font, separate tabs for data/analysis/citations
+- [caffeinate for Scheduled Tasks](reference_caffeinate.md) — `caffeinate -s &` keeps Mac awake for overnight/recurring tasks that need local MCP servers
+- [SF Health Score Dashboard Integration](project_sf_healthscore_dashboard.md) — SF Health Scores as faster alternative data source for Dealer Health Dashboard while Atlan access pending
+- [Sonic Monthly Brand Report](project_sonic_monthly_report.md) — ~101 stores, 18 brands, rotating luxury/volume focus; per-brand emails to Sonic managers CC Sharon; demand indexing + auto-research deep dives
+- [Sonic Monthly — March Test Run](project_sonic_monthly_testrun.md) — Luxury rotation test run: sheet URL, Portfolio DI methodology, Nov uncap baseline carry-forward, known gaps pending admin SSO
+- [Tableau API Access Map](reference_tableau_api_access.md) — PAT "Claude", view IDs, Maj Cust Name filter values for all 7 accounts, RLS behavior, API gotchas
+- [Screenshot Save Paths](feedback_screenshot_paths.md) — Always use explicit paths for Playwright/Chrome screenshots; default dumps to ~ causing clutter
+- [Hendrick PBT Formatting](feedback_hendrick_pbt_formatting.md) — Header in Row 2 (purple bg, white bold), sort A3:J only, column K deleted, green must match J conditional format
+- [Hendrick PB Email Format](feedback_hendrick_pb_email_format.md) — Email callout: SAM + vehicle + target reprice (not store + diff); QC checks Inventory Engagement, Low Engaged Inventory, Missing Features tabs
+- [Playwright MCP Download Path](reference_playwright_downloads.md) — Playwright MCP browser downloads land in ~/.playwright-mcp/, NOT ~/Downloads/ — scripts must check both
+- [Nalley admin.cars.com UUID](reference_nalley_admin_uuid.md) — `156f9bb7-3c44-549c-b16b-0c3af73fdb1f` → direct demand_signals URL skips search step
+- [Nalley LEI CSV — No Reorder](feedback_nalley_lei_csv_format.md) — LEI CSV now matches sheet layout (Stock num in col 3); `col_reorder: False` in pb_report.py
+- [GSheet Formula Preservation](feedback_gsheet_formula_preservation.md) — Never sort across formula columns or paste values over formulas; stage sorts off-sheet; verify formulas intact before finishing
+- [Sonic Demand KPI — Market DI % framing](feedback_sonic_demand_framing.md) — Market DI primary, "±X% to market" display, per-DMA aggregation for shared markets, no rotation labels in emails
+- [Sonic Brand Manager / Marketing / VP Contacts](project_sonic_recipients.md) — Full recipient mapping for per-brand emails (confirmed 2026-04-22); managers own multiple brands — combine into one email per manager
+- [Sonic Duplicate Admin CCIDs](reference_sonic_duplicate_ccids.md) — CCIDs that look like new Sonic stores in AE Insights but are duplicate admin records (e.g., 6037235 = BMW Mini of Birmingham 182765)
+- [Slack MCP — token rotation](reference_slack_mcp.md) — Token updates require session restart; xoxb-only since 2026-04-23 (xoxp dropped, posts as bot)
+- [JumpCloud TOTP Fallback — Paused Awaiting IT Reset](project_totp_fallback_paused.md) — Tasks 1-5 done + code-reviewed; Task 0 (Keychain seed) blocked because JumpCloud reset requires current 6-digit code and user only has Mobile Push; resume after IT clears Authenticator App enrollment
+- [Investigation Workflow](project_investigation_workflow.md) — investigation_triggers.py + /investigate-stores + /prep built May 2026; detection engine wired into Sonic + ACA, unified front door for any scope
+- [J.C. Lewis Auto Group Research](project_jclewis_research.md) — 5-store Ford/Mazda group (Savannah GA); Pooler has website but no marketplace listing; Edmunds conversion pixel confirmed on site; ~$171-186K upsell opportunity; Doc + Sheet linked
+- [GSheet Formulas for QC](feedback_gsheet_formulas_for_qc.md) — Always use live ARRAYFORMULA for computed columns (not hardcoded values); store thresholds in labeled helper cells for easy QC
+- [Pre-flight — Pivot to Playwright](feedback_preflight_pivot.md) — Don't abort on Tableau 401 or Gmail MCP down; pivot to Playwright instead
+- [Sonic & Hendrick Billing — Hide Source Tabs](feedback_sonic_billing_tabs.md) — After building Overview pivot, hide all source sheets so only Overview tab is visible; set `ws.sheet_state = 'hidden'`
+- [Claude Code Auth — Login Migration](feedback_auth_login_migration.md) — As of 4/11/2026, Claude Code uses login OAuth (/login), not API key; ANTHROPIC_API_KEY in Keychain is for Python scripts only
+- [Nalley PB Post-Run Steps](feedback_nalley_pb_postrun.md) — After pb_report.py: check col K formulas filled down; add draft recipients (To: Grayson/Jason/Zlatan/Rashad, Cc: Shashank)
+- [Scheduling Architecture](reference_scheduling_architecture.md) — Cowork native scheduler for all recurring workflows (needs MCP/SSO); Desktop Commander for ad-hoc bash only; never cron for MCP-dependent tasks

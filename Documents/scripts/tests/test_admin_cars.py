@@ -4,29 +4,28 @@ import admin_cars
 
 
 def test_check_session_returns_bool():
-    """check_session() must return a bool — True (connected) or False (expired)."""
-    with patch("admin_cars._get_context") as mock_ctx:
-        mock_page = MagicMock()
-        mock_page.url = "https://admin.cars.com/dealers"
-        mock_ctx.return_value.__enter__ = lambda s: MagicMock(new_page=lambda: mock_page)
-        mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+    """check_session() must return a bool — True when an admin.cars.com tab is open."""
+    import json
+    tabs = [{"url": "https://admin.cars.com/dealers/all/reports"}]
+    mock_response = MagicMock()
+    mock_response.read.return_value = json.dumps(tabs).encode()
+    with patch("urllib.request.urlopen", return_value=mock_response):
         result = admin_cars.check_session()
-    assert isinstance(result, bool)
+    assert result is True
 
 
 def test_check_session_returns_false_when_redirected_off_admin_cars():
-    """check_session() returns False for any non-admin.cars.com URL (SSO, policy denial, etc.)."""
-    for url in (
-        "https://sso.jumpcloud.com/saml2/tableau",
-        "https://console.jumpcloud.com/userconsole#/?error=policyDenial",
-        "https://console.jumpcloud.com/login",
+    """check_session() returns False when no admin.cars.com tab is open."""
+    import json
+    for tabs in (
+        [{"url": "https://sso.jumpcloud.com/saml2/tableau"}],
+        [{"url": "https://console.jumpcloud.com/login"}],
+        [],
     ):
-        with patch("admin_cars._get_context") as mock_ctx:
-            mock_page = MagicMock()
-            mock_page.url = url
-            mock_ctx.return_value.__enter__ = lambda s: MagicMock(new_page=lambda: mock_page)
-            mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
-            assert admin_cars.check_session() is False, f"expected False for {url}"
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps(tabs).encode()
+        with patch("urllib.request.urlopen", return_value=mock_response):
+            assert admin_cars.check_session() is False, f"expected False for tabs={tabs}"
 
 
 def test_resolve_uuid_extracts_uuid_from_html():
@@ -125,7 +124,7 @@ def test_extract_kpi_connections_negative_delta():
 def test_extract_kpi_handles_empty_rows():
     """Empty worksheet returns {cp: None, delta_pct: None} rather than raising."""
     kpi = admin_cars._extract_kpi(["col1", "col2"], [])
-    assert kpi == {"cp": None, "delta_pct": None}
+    assert kpi == {"cp": None, "pp": None, "delta_pct": None}
 
 
 def test_find_val_matches_keyword_case_insensitively():

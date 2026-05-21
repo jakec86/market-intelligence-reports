@@ -22,11 +22,11 @@ _SAMPLE_STATS = {
     "total": 10,
     "within_count": 3,
     "at_threshold_count": 1,
-    "at_threshold_vehicles": [{"mmyt": "2022 Lexus RX 350", "diff": "$0", "current": "Good", "next": "Great"}],
+    "at_threshold_vehicles": [{"mmyt": "2022 Lexus RX 350", "diff": "$0", "current": "Good", "next": "Great", "sam": "Jake C.", "vehicle": "2022 Lexus RX 350", "stock": "STK001"}],
     "already_great": 2,
     "top_vehicles": [
-        {"mmyt": "2021 Lexus ES 350", "diff": "$499", "current": "Fair", "next": "Good"},
-        {"mmyt": "2020 Lexus NX 300", "diff": "$750", "current": "Not Badged", "next": "Fair"},
+        {"mmyt": "2021 Lexus ES 350", "diff": "$499", "current": "Fair", "next": "Good", "sam": "Jake C.", "vehicle": "2021 Lexus ES 350", "stock": "STK002"},
+        {"mmyt": "2020 Lexus NX 300", "diff": "$750", "current": "Not Badged", "next": "Fair", "sam": "Jake C.", "vehicle": "2020 Lexus NX 300", "stock": "STK003"},
     ],
 }
 
