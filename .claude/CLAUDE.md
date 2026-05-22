@@ -60,6 +60,7 @@ Custom slash commands defined in `~/.claude/commands/`. Plugin skills are namesp
 | `/nalley-pb-report` | Nalley Automotive Price Badge Report — Tableau LEI pull + admin.cars.com Demand Signals → Google Sheet → Gmail draft | Weekly | Google Sheet (Nalley PB sheet) + Gmail draft to account team |
 | `/hendricks-pb-report` | Hendrick Automotive Price Badge Report (same flow as Nalley) | Weekly | Google Sheet (Hendrick PB sheet) + Gmail draft to account team |
 | `/sonic-monthly-report` | Sonic Automotive brand-segmented performance report (~101 stores, 18 brands; rotating luxury/volume focus) with per-brand Gmail drafts | Monthly | Per-brand Gmail drafts; data sourced from Tableau By Store view |
+| `/hendrick-monthly-report` | Hendrick Automotive brand-segmented report (~72 stores, 19 brands; luxury/volume rotation) — Group Overview to Anne Lewis + per-brand drafts | Monthly | Per-brand Gmail drafts; Group Overview verification gate |
 | `/sonic-billing` | Sonic & Hendrick billing reconciliation report | Monthly | Google Sheet + Gmail draft |
 | `/aca-monthly-report` | Atlantic Coast Automotive monthly store report (~72 stores) → Google Sheet → email to Danielle McJunkins | Monthly | Google Sheet + Gmail draft to Danielle McJunkins |
 | `/ecarone-vpm-report` | eCarOne VPM (Vehicle Performance Metrics) report | Monthly | Gmail draft |
