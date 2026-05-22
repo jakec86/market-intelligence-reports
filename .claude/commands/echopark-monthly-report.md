@@ -10,7 +10,7 @@ EchoPark Automotive is a **used-car-only** brand (no new vehicles, no OEM franch
 
 **Key framing for EchoPark:** Volume + pricing efficiency is the core model. **Badge % and Cost/Lead are the most important signals** — they directly reflect how well each store is converting inventory presence into buyer engagement at competitive price points.
 
-**Contact:** TBD — confirm the correct EchoPark/Sonic recipient before first send. Route all drafts to `scunane@cars.com` (Sharon Cunane) during test-run phase. See Recipient Mapping below.
+**Contact:** Shane Stevens + Travielle Ross (Sonic Automotive). Sharon Cunane CC'd on all. See Recipient Mapping below.
 
 **Tableau filter:** `vf_Maj%20Cust%20Name=EchoPark%20MA%20Group`
 
@@ -49,24 +49,12 @@ STORES:
 
 ## Recipient Mapping
 
-> **CONTACT TBD — confirm before first live send.**
-> All drafts currently route to Sharon Cunane during the test-run phase. Once the correct EchoPark/Sonic contact is identified, update `default_to` below and remove the `[TEST]` subject prefix.
-
 ```yaml
 RECIPIENTS:
-  # ⚠️ TBD — confirm EchoPark contact before going live
-  default_to: scunane@cars.com       # Sharon Cunane — test-run gate
-  default_cc: scunane@cars.com       # Always CC Sharon once live contact identified
-
   EchoPark:
-    to:  [TBD]                       # ← confirm: likely EchoPark digital/marketing or Sonic liaison
-    cc:  [scunane@cars.com]
+    to:  [Shane.Stevens@sonicautomotive.com, travielle.ross@sonicautomotive.com]
+    cc:  [scunane@cars.com]          # Sharon Cunane always CC'd
 ```
-
-**Known contacts from ep-review-report (may carry over):**
-- Julie McAlister — `julie.mcalister@echopark.com`
-- Shane Stevens — `shane.stevens@sonicautomotive.com`
-- Travielle Ross — `Travielle.Ross@sonicautomotive.com`
 
 Confirm with Jake or Sharon which contact owns the monthly marketplace performance report before first send.
 
@@ -325,9 +313,8 @@ Per-store insight (2–3 sentences): what's happening → revenue/retention impa
 
 **BEFORE composing the main performance email (Step 7), send a pre-send review to the EchoPark contact.**
 
-> **⚠️ CONTACT TBD** — During test-run phase, route this to Sharon Cunane only.
-
-**To:** TBD (EchoPark contact) — use `scunane@cars.com` during test run
+**To:** Shane.Stevens@sonicautomotive.com, travielle.ross@sonicautomotive.com
+**CC:** scunane@cars.com
 **Subject:** `EchoPark — {Month} {Year} Overview | Pre-Send Review`
 
 ```html
@@ -368,21 +355,16 @@ Once approved, I'll finalize the performance email draft.</p>
 - Changes requested → apply edits, resend overview, loop
 - No reply within 48h → ping once; do NOT auto-proceed
 
-**During test-run phase** (until EchoPark contact confirmed):
-- All drafts route **To: scunane@cars.com** with `[TEST]` subject prefix
-- Remove `[TEST]` and swap recipient once contact is confirmed
-
 ---
 
 ### Step 7 — Compose Monthly Performance Email
 
 **Gate:** Proceed ONLY after Step 6.5 overview is approved.
 
-**Subject (test run):** `[TEST] EchoPark — Monthly Performance Update | {Month} {Year}`
-**Subject (production):** `EchoPark — Monthly Performance Update | {Month} {Year}`
+**Subject:** `EchoPark — Monthly Performance Update | {Month} {Year}`
 
-**To:** EchoPark contact (TBD) — `scunane@cars.com` during test run
-**CC:** `scunane@cars.com` (when primary recipient is the EchoPark contact)
+**To:** Shane.Stevens@sonicautomotive.com, travielle.ross@sonicautomotive.com
+**CC:** scunane@cars.com
 
 ```html
 <h3>EchoPark Automotive — 17 Stores, {Month} {Year}</h3>
@@ -478,7 +460,7 @@ Before creating Gmail drafts:
 - [ ] Group Overview (Step 6.5) sent and contact approval recorded
 - [ ] DI Source label consistent across Sheet + email (Market vs Internal benchmark)
 - [ ] No new vehicle metrics in any store's data row
-- [ ] **Test-run phase:** all drafts route To: `scunane@cars.com` with `[TEST]` prefix
+- [x] Recipients confirmed: To Shane Stevens + Travielle Ross, CC Sharon Cunane
 - [ ] **Contact confirmed?** If not, block send and surface to user
 
 Report QC findings before creating Gmail drafts. Resolve anomalies before proceeding.
@@ -500,7 +482,7 @@ Fallback: if Gmail MCP fails, save HTML to `~/Documents/Reports/EchoPark/echopar
 - **Parent Group:** Sonic Automotive (EchoPark brand)
 - **17 stores** — used-car only, no new vehicle franchise
 - **Tableau filter:** `EchoPark MA Group`
-- **Primary contact:** TBD — confirm before first live send; use `scunane@cars.com` (Sharon Cunane) during test run
+- **Primary contacts:** Shane Stevens (Shane.Stevens@sonicautomotive.com) + Travielle Ross (travielle.ross@sonicautomotive.com) · CC Sharon Cunane (scunane@cars.com)
 - **Tableau workbook:** Cars Monthly Marketplace Dealer Health Metrics (ID: 1792343)
 - **Tableau By Store view:** `a0b9bdce-2db3-4ea0-a2fc-365fd08c5786`
 - **investigation_triggers:** `~/Documents/scripts/investigation_triggers.py` — use `show_sams=False`

@@ -199,37 +199,33 @@ SUB_GROUPS:
 
 ## Recipient Mapping
 
-> **NOTE: All sub-group contacts are TBD. Confirm the primary contact for each sub-group before the first send. Until confirmed, ALL drafts route to jcrawley@cars.com with `[TEST]` subject prefix.**
+All sub-group emails currently route to **Sharon Cunane** (EAE) until per-sub-group client contacts are confirmed. Sharon acts as the verification gate across all four groups.
 
 ```yaml
 RECIPIENTS:
   # ── UMBRELLA OVERVIEW EMAIL ────────────────────────────────────────────────
-  overview_to:   TBD   # Primary Asbury umbrella contact — confirm before first send
+  overview_to:   scunane@cars.com   # Sharon Cunane — EAE, all sub-groups
   overview_cc:   []
 
   # ── PER-SUB-GROUP EMAILS ───────────────────────────────────────────────────
   Asbury:
-    to:   TBD   # Asbury parent group contact — confirm before first send
+    to:   [scunane@cars.com]   # TBD client contact → Sharon until confirmed
     cc:   []
 
   LHM:
-    to:   TBD   # Larry H. Miller contact — confirm before first send
+    to:   [scunane@cars.com]   # TBD client contact → Sharon until confirmed
     cc:   []
 
   Koons:
-    to:   TBD   # Koons contact — confirm before first send
+    to:   [scunane@cars.com]   # TBD client contact → Sharon until confirmed
     cc:   []
 
   Herb_Chambers:
-    to:   TBD   # Herb Chambers contact — confirm before first send
+    to:   [scunane@cars.com]   # TBD client contact → Sharon until confirmed
     cc:   []
-
-  # ── FALLBACK (until contacts confirmed) ───────────────────────────────────
-  default_to:    jcrawley@cars.com
-  test_prefix:   "[TEST] "
 ```
 
-**Action required before first run:** Identify the primary reporting contact for each sub-group (likely marketing manager or VP Marketing at each). Update this file with confirmed emails and remove the `[TEST]` prefix + default_to override.
+**When client contacts are identified:** swap `scunane@cars.com` per sub-group and add Sharon to `cc:` instead.
 
 ---
 
@@ -459,8 +455,7 @@ Per-store insight (2–3 sentences): what's happening → revenue impact → spe
 
 **Subject:** `Asbury Group — {Month} {Year} Overview | Pre-Send Review`
 
-**To:** TBD primary Asbury umbrella contact (see Recipient Mapping above)  
-**During test run:** jcrawley@cars.com  
+**To:** scunane@cars.com (Sharon Cunane — EAE)
 **CC:** (none)
 
 ```html
@@ -503,9 +498,7 @@ Once approved I'll finalize the 4 per-sub-group drafts.</p>
 - Changes requested → apply, resend, loop
 - No reply 48h → ping once; do NOT auto-proceed
 
-**Test-run phase** (until contacts confirmed):
-- All drafts route **To: jcrawley@cars.com** with `[TEST]` prefix
-- Remove `[TEST]` and swap recipients once contacts are confirmed
+All drafts currently route to **Sharon Cunane (scunane@cars.com)** until per-sub-group client contacts are confirmed.
 
 ---
 
@@ -515,9 +508,8 @@ Once approved I'll finalize the 4 per-sub-group drafts.</p>
 
 One email per sub-group (not per brand). For each:
 
-**Subject (test run):** `[TEST] {Sub-Group Name} — Monthly Performance Update | {Month} {Year}`  
-**Subject (production):** `{Sub-Group Name} — Monthly Performance Update | {Month} {Year}`  
-**To:** Sub-group contact (from Recipient Mapping; route to jcrawley@cars.com during test run)
+**Subject:** `{Sub-Group Name} — Monthly Performance Update | {Month} {Year}`
+**To:** scunane@cars.com (Sharon Cunane — until client contact confirmed per sub-group)
 
 Sub-group display names for subjects:
 - `Asbury` → "Asbury Automotive Group"
@@ -601,7 +593,7 @@ Use gspread with `~/.claude/tokens/sheets_credentials.json`.
 - [ ] Umbrella Overview drafted (Step 6.5) and sign-off recorded
 - [ ] DI Source consistent across Sheet + per-sub-group emails
 - [ ] All email-facing demand KPIs displayed as `±X% to market` — no raw index numbers
-- [ ] Test-run phase: all drafts To: jcrawley@cars.com with `[TEST]` prefix until contacts confirmed
+- [x] Routing confirmed: all drafts To: scunane@cars.com (Sharon Cunane — EAE) until per-sub-group client contacts identified
 
 ---
 
@@ -620,7 +612,7 @@ Fallback: save HTML to `~/Documents/Reports/AsburyGroup/asbury_{subgroup}_{month
 
 - **Umbrella:** Asbury Group (4 sub-groups, 149 stores)
 - **Sub-groups:** Asbury (69) · Larry H. Miller (29) · Koons (18) · Herb Chambers (33)
-- **Primary contacts:** TBD for all sub-groups — confirm before first send
+- **EAE contact (all sub-groups):** Sharon Cunane — scunane@cars.com (until per-sub-group client contacts confirmed)
 - **Tableau workbook:** Cars Monthly Marketplace Dealer Health Metrics (ID: 1792343)
 - **Tableau view:** `a0b9bdce-2db3-4ea0-a2fc-365fd08c5786`
 - **Tableau filters (one per sub-group):**
