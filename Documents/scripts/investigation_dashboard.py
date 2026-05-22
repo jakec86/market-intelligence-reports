@@ -765,7 +765,7 @@ with st.sidebar:
                         _b.close()
                     if _authed:
                         st.cache_data.clear()
-                        st.success("✓ Connected — admin.cars.com authenticated")
+                        st.rerun()  # force sidebar to re-check and show green
                     else:
                         st.warning("Waiting for JumpCloud approval… approve the push on your phone, then click Re-check.")
                 except Exception as _ce:
