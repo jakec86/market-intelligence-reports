@@ -113,6 +113,83 @@
   .rz-city{flex:1;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .rz-vol{width:50px;text-align:right;font-weight:600;color:#8136B2;}
   .rz-hl{width:14px;text-align:center;margin-left:4px;}
+
+  /* ── Demand View (v2) ── */
+  #demand-view{
+    position:absolute;top:62px;left:0;right:0;bottom:0;
+    background:#f0ecf5;overflow-y:auto;display:none;z-index:900;
+  }
+  #dv-inner{max-width:1280px;margin:0 auto;padding:20px 24px;}
+  #dv-controls{
+    display:flex;align-items:center;gap:12px;margin-bottom:20px;
+    flex-wrap:wrap;
+  }
+  .dv-metric-btn{
+    padding:7px 18px;border-radius:20px;border:1.5px solid var(--lavender);
+    background:#fff;color:var(--violet);font-family:'Inter',sans-serif;
+    font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;
+  }
+  .dv-metric-btn:hover{background:var(--lavender);}
+  .dv-metric-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+  #dv-stock-select{
+    padding:7px 12px;border-radius:20px;border:1.5px solid var(--lavender);
+    background:#fff;color:var(--gray);font-family:'Inter',sans-serif;
+    font-size:12px;cursor:pointer;outline:none;
+  }
+  #dv-context-label{
+    margin-left:auto;font-size:11px;color:#999;font-style:italic;
+  }
+  #dv-body{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:900px){#dv-body{grid-template-columns:1fr;}}
+  .dv-card{background:#fff;border-radius:12px;padding:20px 24px;
+    box-shadow:0 2px 12px rgba(55,11,85,.09);border:1px solid #e8e0f0;}
+  .dv-card h3{
+    font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;
+    color:var(--violet);margin-bottom:16px;border-bottom:2px solid var(--lavender);padding-bottom:8px;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .dv-bar-row{
+    display:flex;align-items:center;gap:10px;margin-bottom:10px;
+    cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .1s;
+  }
+  .dv-bar-row:hover{background:#f8f4fc;}
+  .dv-bar-row.selected{background:#ede0f8;}
+  .dv-make-label{
+    width:110px;font-size:12px;font-weight:600;color:var(--jagger);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;
+  }
+  .dv-bar-wrap{flex:1;height:14px;background:#f0ecf5;border-radius:7px;overflow:hidden;}
+  .dv-bar{height:100%;border-radius:7px;
+    background:linear-gradient(90deg,var(--jagger),var(--vixen));
+    transition:width .3s ease;}
+  .dv-val{width:64px;text-align:right;font-size:11px;font-weight:600;color:var(--violet);flex-shrink:0;}
+  .dv-pct{width:36px;text-align:right;font-size:10px;color:#aaa;flex-shrink:0;}
+  #dv-drill-hint{
+    color:#bbb;font-size:12px;font-style:italic;margin-top:20px;text-align:center;
+  }
+  #dv-footer{
+    margin-top:16px;padding:14px 20px;background:#fff;border-radius:12px;
+    border:1px solid #e8e0f0;display:flex;gap:32px;flex-wrap:wrap;
+    font-size:12px;color:var(--gray);
+    box-shadow:0 2px 8px rgba(55,11,85,.06);
+  }
+  .dv-stat{display:flex;flex-direction:column;gap:3px;}
+  .dv-stat-label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#aaa;font-weight:600;}
+  .dv-stat-value{font-size:20px;font-weight:700;color:var(--jagger);letter-spacing:-.5px;}
+  #dv-map-toggle{
+    padding:7px 16px;border-radius:20px;border:1.5px solid var(--lavender);
+    background:#fff;color:var(--gray);font-family:'Inter',sans-serif;
+    font-size:11px;cursor:pointer;
+  }
+  #dv-map-toggle:hover{background:var(--lavender);}
+  #mode-toggle{position:absolute;top:74px;right:16px;z-index:1100;}
+  .mode-btn{
+    padding:6px 14px;border:1.5px solid var(--lavender);font-family:'Inter',sans-serif;
+    font-size:10px;font-weight:600;cursor:pointer;background:#fff;color:var(--violet);
+  }
+  .mode-btn:first-child{border-radius:8px 0 0 8px;}
+  .mode-btn:last-child{border-radius:0 8px 8px 0;border-left:none;}
+  .mode-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
 </style>
 </head>
 <body>
@@ -128,11 +205,66 @@
   </div>
   <div id="total-badge">
     <div class="num" id="total-num">—</div>
-    <div class="lbl">Total Searches</div>
+    <div class="lbl" id="total-lbl">Total Searches</div>
   </div>
 </div>
 
+<!-- Mode toggle: Demand Chart / Search Map -->
+<div id="mode-toggle">
+  <button class="mode-btn" id="mode-btn-demand" onclick="setMode('demand')">Demand Chart</button>
+  <button class="mode-btn" id="mode-btn-search" onclick="setMode('search')">Search Map</button>
+</div>
+
 <div id="map"></div>
+
+<!-- Demand View (v2) -->
+<div id="demand-view">
+  <div id="dv-inner">
+    <div id="dv-controls">
+      <button class="dv-metric-btn active" id="dv-btn-vdp" onclick="dvSetMetric('vdp')">VDPs</button>
+      <button class="dv-metric-btn" id="dv-btn-connections" onclick="dvSetMetric('connections')">Connections</button>
+      <button class="dv-metric-btn" id="dv-btn-vehicles" onclick="dvSetMetric('vehicles')">Inventory</button>
+      <select id="dv-stock-select" onchange="dvSetStock(this.value)">
+        <option value="all">All Stock Types</option>
+        <option value="New">New</option>
+        <option value="Used">Used</option>
+        <option value="CPO">CPO</option>
+      </select>
+      <span id="dv-context-label"></span>
+    </div>
+    <div id="dv-body">
+      <div class="dv-card">
+        <h3>Market Demand by Make <span id="dv-make-count" style="font-size:10px;color:#aaa;font-weight:400;text-transform:none;letter-spacing:0;"></span></h3>
+        <div id="dv-chart"></div>
+      </div>
+      <div class="dv-card">
+        <h3 id="dv-drill-title">Model Breakdown <span id="dv-drill-make" style="color:var(--jagger);font-weight:700;text-transform:none;letter-spacing:0;"></span></h3>
+        <div id="dv-drill-chart"><div id="dv-drill-hint">← Click a make to see model breakdown</div></div>
+      </div>
+    </div>
+    <div id="dv-footer">
+      <div class="dv-stat">
+        <div class="dv-stat-label">Total Market VDPs</div>
+        <div class="dv-stat-value" id="dv-total-vdps">—</div>
+      </div>
+      <div class="dv-stat">
+        <div class="dv-stat-label">Total Market Connections</div>
+        <div class="dv-stat-value" id="dv-total-conns">—</div>
+      </div>
+      <div class="dv-stat">
+        <div class="dv-stat-label">DMA</div>
+        <div class="dv-stat-value" id="dv-dma-name" style="font-size:14px;">—</div>
+      </div>
+      <div class="dv-stat" id="dv-makes-stat" style="display:none;">
+        <div class="dv-stat-label">Filter</div>
+        <div class="dv-stat-value" id="dv-makes-label" style="font-size:13px;">—</div>
+      </div>
+      <div style="margin-left:auto;align-self:center;">
+        <button id="dv-map-toggle" onclick="setMode('search')">View Search Map ↗</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Radius Tool Panel -->
 <div id="radius-panel" class="panel">
@@ -213,6 +345,7 @@ document.getElementById('total-num').textContent = grandTotal.toLocaleString();
 // Render Top 8 Cities sidebar dynamically
 (function(){
   const top8 = [...cities].sort((a,b)=>b.total-a.total).slice(0,8);
+  if (!top8.length) return;
   const topMax = top8[0].total;
   const body = document.getElementById('stats-body');
   body.innerHTML = top8.map(c=>{
@@ -713,6 +846,205 @@ map.on('click', function(e) {
 document.getElementById('radius-address').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') geocodeAndPlace();
 });
+
+// ---- Demand Chart (v2) -------------------------------------------------------
+
+// %%DEMAND_DATA%%
+
+// %%MODEL_DATA%%
+
+// %%DEMAND_CONFIG%%
+
+// Active state
+let dvMetric = demandConfig.metric || 'vdp';
+let dvStock  = 'all';
+let dvSelectedMake = null;
+
+const DV_METRIC_KEYS = {vdp: 'vdps', connections: 'connections', vehicles: 'vehicles'};
+const DV_METRIC_LABELS = {vdp: 'Market VDPs', connections: 'Market Connections', vehicles: 'Market Vehicles'};
+
+function setMode(mode) {
+  const demandView = document.getElementById('demand-view');
+  const mapEl      = document.getElementById('map');
+  const btnD       = document.getElementById('mode-btn-demand');
+  const btnS       = document.getElementById('mode-btn-search');
+  if (mode === 'demand') {
+    demandView.style.display = 'flex';
+    mapEl.style.visibility   = 'hidden';
+    btnD.classList.add('active');
+    btnS.classList.remove('active');
+    if (dvSelectedMake) renderDrillDown(dvSelectedMake);
+    else renderDemandChart();
+  } else {
+    demandView.style.display = 'none';
+    mapEl.style.visibility   = 'visible';
+    btnD.classList.remove('active');
+    btnS.classList.add('active');
+    setTimeout(() => map.invalidateSize(), 50);
+  }
+}
+
+function dvSetMetric(metric) {
+  dvMetric = metric;
+  ['vdp','connections','vehicles'].forEach(m => {
+    document.getElementById('dv-btn-' + m).classList.toggle('active', m === metric);
+  });
+  renderDemandChart();
+  if (dvSelectedMake) renderDrillDown(dvSelectedMake);
+}
+
+function dvSetStock(val) {
+  dvStock = val;
+  renderDemandChart();
+  if (dvSelectedMake) renderDrillDown(dvSelectedMake);
+}
+
+function dvFilterData(rows) {
+  if (dvStock === 'all') return rows;
+  return rows.filter(r => (r.stock_type || '').toLowerCase() === dvStock);
+}
+
+function dvAgg(rows, keyField) {
+  const agg = {};
+  rows.forEach(r => {
+    const k = r[keyField] || 'Unknown';
+    if (!agg[k]) agg[k] = {vdps: 0, connections: 0, vehicles: 0, label: k};
+    agg[k].vdps        += r.vdps        || 0;
+    agg[k].connections += r.connections || 0;
+    agg[k].vehicles    += r.vehicles    || 0;
+  });
+  return Object.values(agg).sort((a, b) => b[DV_METRIC_KEYS[dvMetric]] - a[DV_METRIC_KEYS[dvMetric]]);
+}
+
+function dvBuildBar(row, maxVal, metric, clickable, selectedLabel) {
+  const key   = DV_METRIC_KEYS[metric];
+  const val   = row[key] || 0;
+  const pct   = maxVal > 0 ? (val / maxVal * 100).toFixed(1) : 0;
+  const fill  = pct > 0 ? Math.max(pct, 1.5) : 0;
+  const isSelected = clickable && row.label === selectedLabel;
+  const rowEl = document.createElement('div');
+  rowEl.className = 'dv-bar-row' + (isSelected ? ' selected' : '');
+  rowEl.innerHTML = `
+    <div class="dv-bar-label" title="${row.label}">${row.label}</div>
+    <div class="dv-bar-wrap">
+      <div class="dv-bar" style="width:${fill}%"></div>
+    </div>
+    <div class="dv-bar-val">${val.toLocaleString()}</div>
+    <div class="dv-bar-pct">${pct}%</div>`;
+  if (clickable) {
+    rowEl.style.cursor = 'pointer';
+    rowEl.addEventListener('click', () => {
+      dvSelectedMake = row.label;
+      renderDemandChart();
+      renderDrillDown(row.label);
+    });
+  }
+  return rowEl;
+}
+
+function renderDemandChart() {
+  const chartEl = document.getElementById('dv-chart');
+  if (!chartEl) return;
+  chartEl.innerHTML = '';
+
+  const filtered = dvFilterData(demandData);
+  if (!filtered.length) {
+    chartEl.innerHTML = '<div style="color:#999;padding:16px;font-size:13px;">No data loaded.</div>';
+    return;
+  }
+
+  const agg    = dvAgg(filtered, 'make');
+  const maxVal = agg[0] ? agg[0][DV_METRIC_KEYS[dvMetric]] : 1;
+  const total  = agg.reduce((s, r) => s + (r[DV_METRIC_KEYS[dvMetric]] || 0), 0);
+
+  agg.forEach(row => chartEl.appendChild(dvBuildBar(row, maxVal, dvMetric, true, dvSelectedMake)));
+
+  // Update count badge
+  const countEl = document.getElementById('dv-make-count');
+  if (countEl) countEl.textContent = `(${agg.length} makes)`;
+
+  // Update footer stats
+  const totalVdps  = filtered.reduce((s, r) => s + (r.vdps || 0), 0);
+  const totalConns = filtered.reduce((s, r) => s + (r.connections || 0), 0);
+
+  const totalVdpEl  = document.getElementById('dv-total-vdps');
+  const totalConnEl = document.getElementById('dv-total-conns');
+  const dmaNameEl   = document.getElementById('dv-dma-name');
+  const makesStatEl = document.getElementById('dv-makes-stat');
+  const makesLblEl  = document.getElementById('dv-makes-label');
+
+  if (totalVdpEl)  totalVdpEl.textContent  = totalVdps.toLocaleString();
+  if (totalConnEl) totalConnEl.textContent = totalConns.toLocaleString();
+  if (dmaNameEl)   dmaNameEl.textContent   = demandConfig.dma || '—';
+  if (makesStatEl && makesLblEl && demandConfig.makes && demandConfig.makes.length) {
+    makesStatEl.style.display = 'flex';
+    makesLblEl.textContent = demandConfig.makes.join(', ');
+  }
+
+  // Context label
+  const ctxEl = document.getElementById('dv-context-label');
+  if (ctxEl) {
+    const makeLabel = demandConfig.makes && demandConfig.makes.length
+      ? demandConfig.makes.join(', ')
+      : 'All Makes';
+    ctxEl.textContent = `${demandConfig.dma || 'DMA'} · ${makeLabel}`;
+  }
+}
+
+function renderDrillDown(make) {
+  const titleEl = document.getElementById('dv-drill-title');
+  const makeEl  = document.getElementById('dv-drill-make');
+  const chartEl = document.getElementById('dv-drill-chart');
+  if (!chartEl) return;
+
+  if (makeEl) makeEl.textContent = make;
+  chartEl.innerHTML = '';
+
+  // Build model rows from modelData lookup (pre-aggregated by Python) or from demandData
+  let modelRows = [];
+  if (modelData[make] && modelData[make].length) {
+    modelRows = dvFilterData(modelData[make]);
+    // re-aggregate by model across stock type filters
+    modelRows = dvAgg(modelRows, 'model');
+  } else {
+    // Fallback: aggregate from demandData filtered to this make
+    const makeRows = dvFilterData(demandData.filter(r => r.make === make));
+    modelRows = dvAgg(makeRows, 'model');
+  }
+
+  if (!modelRows.length) {
+    chartEl.innerHTML = '<div style="color:#999;padding:16px;font-size:13px;">No model data for ' + make + '.</div>';
+    return;
+  }
+
+  const maxVal = modelRows[0] ? modelRows[0][DV_METRIC_KEYS[dvMetric]] : 1;
+  modelRows.forEach(row => chartEl.appendChild(dvBuildBar(row, maxVal, dvMetric, false, null)));
+}
+
+// Populate stock type dropdown from data
+function dvPopulateStockSelect() {
+  const sel = document.getElementById('dv-stock-select');
+  if (!sel || !demandData.length) return;
+  const types = [...new Set(demandData.map(r => r.stock_type).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="all">All Stock Types</option>';
+  types.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.toLowerCase();
+    opt.textContent = t;
+    sel.appendChild(opt);
+  });
+}
+
+// Initialize on load
+(function dvInit() {
+  dvPopulateStockSelect();
+  if (demandConfig.mode === 'demand') {
+    setMode('demand');
+  }
+  renderDemandChart();
+  const hintEl = document.getElementById('dv-drill-hint');
+  if (hintEl) hintEl.style.display = 'block';
+})();
 </script>
 </body>
 </html>

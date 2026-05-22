@@ -44,31 +44,16 @@ Example openings (rotate and riff on these):
 
 ## Step 1 — Tableau: LEI Crosstab Download
 
-Navigate to the full Tableau Cloud portal URL (not the embed URL):
+Navigate directly to the **Hendrick Custom View** (pre-filtered: All DMAs + Hendrick Automotive Group, Used inventory):
 ```
-https://us-west-2b.online.tableau.com/#/site/cars/views/LowEngagedInventoryReport/LEI-Localv2
+https://us-west-2b.online.tableau.com/#/site/cars/views/LowEngagedInventoryReport/LEI-Localv2/8a3a0039-6729-4f23-98bb-099bca061385/HendrickPBReport
 ```
 
 If JumpCloud SSO fires, run the **JumpCloud MFA Sub-procedure** before continuing.
 
-**Step A — Apply DMA filter (All):**
+Wait for the viz to fully render (~15–30 sec). No filter changes needed — all filters are pre-applied in the saved view.
 
-1. Click the `Filter DMA Inclusive` combobox (currently shows "Detroit")
-2. In the dialog, click the **inner `<input>` checkbox** inside the `(All)` row to select all DMAs
-3. Press Escape to close
-4. **Wait for recompute** (~60 sec) — a `tab-glass` overlay will cover the viz. Wait until it clears before proceeding.
-
-**Step B — Apply Maj dealer name filter (Hendrick):**
-
-1. Click the `Filter Maj dealer name Inclusive` combobox
-2. **Deselect everything:** click the inner `<input>` checkbox inside `(All)` to deselect all
-3. Type `Hendrick Automotive Group` in the search box and press Enter
-4. Check `Hendrick Automotive Group`
-5. Clear the search box (fill with a space, then Backspace) — Apply is **disabled while search text is present**
-6. Click **Apply**
-7. Wait for recompute (~15–30 sec)
-
-> **Stock type: leave as "Used"** — correct for this report.
+> **Do NOT click any filters** — the custom view has DMA=All and Maj dealer=Hendrick Automotive Group pre-set. Any filter interaction will trigger a full recompute and may crash the browser.
 
 **Download the crosstab:**
 1. Click **Download** in the toolbar
@@ -78,6 +63,11 @@ If JumpCloud SSO fires, run the **JumpCloud MFA Sub-procedure** before continuin
 5. Click **Download**
 
 File lands at: `~/.playwright-mcp/Low-Engaged-Inventory-Report---Local-v2.csv`
+
+**Immediately rename to avoid collision with Nalley:**
+```bash
+mv ~/.playwright-mcp/Low-Engaged-Inventory-Report---Local-v2.csv ~/.playwright-mcp/hendrick_lei.csv
+```
 
 **CSV schema validation (required before import):**
 ```
@@ -92,7 +82,7 @@ If col 2 is not `Stock num`, abort — format changed.
 ```bash
 python3 ~/Documents/scripts/pb_report.py \
   --dealer hendrick \
-  --lei ~/.playwright-mcp/Low-Engaged-Inventory-Report---Local-v2.csv \
+  --lei ~/.playwright-mcp/hendrick_lei.csv \
   --send
 ```
 
@@ -148,11 +138,11 @@ Invoke whenever Playwright lands on `sso.jumpcloud.com`.
 |------|-------|
 | Dealer | Hendrick Automotive Group |
 | Sheet ID | `1guqWV9HFb2MijC7qQ7qinL4oljbu0N1o9TU5zcmy3GM` |
-| LEI Tableau URL | `https://us-west-2b.online.tableau.com/#/site/cars/views/LowEngagedInventoryReport/LEI-Localv2` |
+| LEI Tableau URL | `https://us-west-2b.online.tableau.com/#/site/cars/views/LowEngagedInventoryReport/LEI-Localv2/8a3a0039-6729-4f23-98bb-099bca061385/HendrickPBReport` |
 | Download path | `~/.playwright-mcp/` |
 | PBT sort range | `A3:J5000` (header Row 2, data Row 3+) |
 | Sort col | J (Difference to Next Badge) |
-| DMA filter | All (click (All) checkbox — Detroit is default) |
-| Maj dealer filter | Hendrick Automotive Group |
-| Stock type | Used (leave as-is) |
+| DMA filter | Pre-applied in custom view — do not touch |
+| Maj dealer filter | Pre-applied in custom view — do not touch |
+| Stock type | Pre-applied in custom view (Used) — do not touch |
 | Email from | jcrawley@carscommerce.inc |

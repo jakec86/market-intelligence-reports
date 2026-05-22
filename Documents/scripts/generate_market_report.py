@@ -27,6 +27,9 @@ import pgeocode
 from io import StringIO
 from datetime import datetime
 from pathlib import Path
+from collections import namedtuple
+
+QCResult = namedtuple('QCResult', ['filter_ignored', 'rows_filtered', 'rows_unfiltered'])
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -95,14 +98,30 @@ def tableau_signout(token):
 
 # ── Data Download ─────────────────────────────────────────────────────────────
 
-def download_view_csv(token, site_id, dma, makes):
+def download_view_csv(token, site_id, dma):
+    """Download ZIP-level search volume for the DMA. All-make only — vf_make is silently ignored by this view."""
     url = f"{TABLEAU_SERVER}/api/3.21/sites/{site_id}/views/{VIEW_ID}/data"
     params = {"vf_dma_market_name": dma, "maxAge": 1}
-    if makes:
-        params["vf_make"] = ",".join(makes)
     r = requests.get(url, headers={"x-tableau-auth": token}, params=params)
     r.raise_for_status()
     return r.text
+
+
+def _qc_filter_check(token, site_id, dma, makes):
+    """Verify vf_make filter has actual effect on this view. Non-blocking — logs findings only."""
+    if not makes:
+        return QCResult(filter_ignored=False, rows_filtered=0, rows_unfiltered=0)
+    url = f"{TABLEAU_SERVER}/api/3.21/sites/{site_id}/views/{VIEW_ID}/data"
+    base = {"vf_dma_market_name": dma, "maxAge": 1}
+    r_all  = requests.get(url, headers={"x-tableau-auth": token}, params=base)
+    r_make = requests.get(url, headers={"x-tableau-auth": token},
+                          params={**base, "vf_make": ",".join(makes)})
+    n_all  = len(r_all.text.strip().splitlines())
+    n_make = len(r_make.text.strip().splitlines())
+    ignored = n_make >= n_all * 0.95
+    print(f"  QC filter check: unfiltered={n_all} rows, make-filtered={n_make} rows "
+          f"→ filter {'SILENTLY IGNORED' if ignored else 'working'}")
+    return QCResult(filter_ignored=ignored, rows_filtered=n_make, rows_unfiltered=n_all)
 
 
 def parse_csv(raw):
@@ -147,8 +166,24 @@ def aggregate_quarter_cols(df, quarters=None):
     for c in quarter_cols:
         df[c] = pd.to_numeric(df[c].astype(str).str.replace(',', ''), errors='coerce')
     df['searches'] = df[quarter_cols].sum(axis=1, min_count=1)
+    df['filled_quarters'] = df[quarter_cols].notna().sum(axis=1)
+    df['searches_avg_per_q'] = (df['searches'] / df['filled_quarters'].replace(0, 1)).round(1)
     print(f"Quarterly columns summed → 'searches': {quarter_cols}")
     return df
+
+
+def _qc_quarter_coverage(df, quarter_cols):
+    """Warn if many ZIPs have incomplete quarter history (causes raw-sum skew)."""
+    if not quarter_cols:
+        return
+    max_q = len(quarter_cols)
+    full_count = (df[quarter_cols].notna().sum(axis=1) == max_q).sum()
+    pct = full_count / len(df) * 100 if len(df) > 0 else 100.0
+    print(f"Quarter coverage: {full_count}/{len(df)} ZIPs have all {max_q} quarters ({pct:.0f}%)")
+    if pct < 60:
+        print(f"  WARNING: Only {pct:.0f}% of ZIPs fully covered — "
+              f"using searches_avg_per_q (per-quarter avg) to reduce skew. "
+              f"Pass --quarters 4 to limit to trailing year.")
 
 
 def detect_sheet_type(df):
@@ -161,6 +196,190 @@ def detect_sheet_type(df):
     if any("search" in c and "%" not in c for c in cols_lower):
         return "volume"
     return "unknown"
+
+# ── Demand Mode (v2) ─────────────────────────────────────────────────────────
+
+_DEMAND_COL_MAP = {
+    'market vdps': 'market_vdps',
+    'market vehicles': 'market_vehicles',
+    'market connections': 'market_connections',
+    'dealer vdps': 'dealer_vdps',
+    'dealer vehicles': 'dealer_vehicles',
+    'dealer connections': 'dealer_connections',
+    'vdp share (%)': 'vdp_share_pct',
+    'vehicle share (%)': 'vehicle_share_pct',
+    'connections share (%)': 'conn_share_pct',
+    'make': 'make',
+    'model': 'model',
+    'stock type': 'stock_type',
+    'dma market name': 'dma',
+}
+_DEMAND_NUMERIC = ['market_vdps', 'market_vehicles', 'market_connections',
+                   'dealer_vdps', 'dealer_vehicles', 'dealer_connections']
+_DEMAND_METRIC_COL = {'vdp': 'market_vdps', 'connections': 'market_connections', 'vehicles': 'market_vehicles'}
+_DEMAND_METRIC_LABEL = {'vdp': 'Market VDPs', 'connections': 'Market Connections', 'vehicles': 'Market Vehicles'}
+
+
+def load_demand_signals_csv(path, makes=None, stock_types=None):
+    """
+    Load a demand signals Market Comparison CSV (admin.cars.com crosstab).
+    Returns a normalized DataFrame with make/model/stock_type + Market VDPs/connections/vehicles.
+    Make filtering works here — data has a Make column (unlike the ZIP view).
+    """
+    with open(path, 'rb') as f:
+        raw = f.read()
+    if raw[:2] in (b'\xff\xfe', b'\xfe\xff'):
+        text = raw.decode('utf-16')
+    else:
+        text = raw.decode('utf-8', errors='replace')
+
+    df = pd.read_csv(StringIO(text), sep='\t')
+
+    # Normalize column names using lowercase key lookup
+    col_map = {}
+    for c in df.columns:
+        key = c.strip().lower()
+        if key in _DEMAND_COL_MAP:
+            col_map[c] = _DEMAND_COL_MAP[key]
+    df = df.rename(columns=col_map)
+
+    # Keep only known columns
+    keep = [v for v in _DEMAND_COL_MAP.values() if v in df.columns]
+    df = df[keep].copy()
+
+    _required = {'make', 'market_vdps'}
+    missing_required = _required - set(df.columns)
+    if missing_required:
+        raw_cols = [c.strip() for c in pd.read_csv(StringIO(text), sep='\t', nrows=0).columns]
+        print(f"  ✗ Demand Signal CSV missing required columns after rename: {missing_required}")
+        print(f"    Raw CSV headers: {raw_cols}")
+        print(f"    Recognized columns found: {list(df.columns)}")
+        sys.exit(1)
+
+    # Parse numeric columns (strip commas)
+    for c in _DEMAND_NUMERIC:
+        if c in df.columns:
+            df[c] = pd.to_numeric(
+                df[c].astype(str).str.replace(',', '').str.strip(),
+                errors='coerce'
+            ).fillna(0).astype(int)
+
+    # Drop rows where make is blank
+    if 'make' in df.columns:
+        df = df[df['make'].notna() & (df['make'].str.strip() != '')]
+
+    # Optional filters (actually work — data has Make and Stock type columns)
+    if makes:
+        df = df[df['make'].str.lower().isin([m.lower() for m in makes])]
+    if stock_types:
+        df = df[df['stock_type'].str.lower().isin([s.lower() for s in stock_types])]
+
+    return df
+
+
+def aggregate_dma_demand(df, metric='vdp', group_by='make'):
+    """
+    Aggregate DMA market demand totals.
+    group_by: 'make' | 'make_model'
+    Returns DataFrame sorted descending by the chosen metric.
+    """
+    metric_col = _DEMAND_METRIC_COL.get(metric, 'market_vdps')
+    agg_cols = [c for c in _DEMAND_NUMERIC if c in df.columns]
+
+    if group_by == 'make':
+        grp_keys = ['make']
+    else:
+        grp_keys = [k for k in ['make', 'model', 'stock_type'] if k in df.columns]
+
+    grp = df.groupby(grp_keys)[agg_cols].sum().reset_index()
+    grp = grp.sort_values(metric_col, ascending=False).reset_index(drop=True)
+
+    total = grp[metric_col].sum()
+    grp['pct'] = (grp[metric_col] / total * 100).round(1) if total > 0 else 0.0
+
+    return grp
+
+
+def _find_demand_csv(dma, makes):
+    """Auto-discover the most recent demand signals CSV in ~/Documents/Tableau/."""
+    import glob
+    patterns = ['*market_comparison*', '*demand_signals*', '*demand*']
+    candidates = []
+    for pat in patterns:
+        candidates.extend(glob.glob(str(TABLEAU_DIR / pat)))
+    # Sort by modification time, newest first
+    candidates = sorted(set(candidates), key=lambda p: Path(p).stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
+
+
+def inject_demand_into_template(demand_df, model_df, dma, makes, metric, template_path, data_date, stock_types=None):
+    """Build the v2 demand chart HTML by injecting data into the template."""
+    makes_label = ', '.join(makes) if makes else 'All Makes'
+    stock_label = ', '.join(stock_types) if stock_types else 'All Stock Types'
+    metric_col = _DEMAND_METRIC_COL.get(metric, 'market_vdps')
+    metric_label = _DEMAND_METRIC_LABEL.get(metric, 'Market VDPs')
+
+    # Build make-level demand array
+    demand_data = []
+    for _, row in demand_df.iterrows():
+        demand_data.append({
+            'make': str(row.get('make', '')),
+            'vdps': int(row.get('market_vdps', 0)),
+            'connections': int(row.get('market_connections', 0)),
+            'vehicles': int(row.get('market_vehicles', 0)),
+            'pct': float(row.get('pct', 0)),
+        })
+
+    # Build model drill-down dict {make: [model rows]}
+    model_data = {}
+    for _, row in model_df.iterrows():
+        make = str(row.get('make', ''))
+        model = str(row.get('model', ''))
+        stock = str(row.get('stock_type', 'All'))
+        if make not in model_data:
+            model_data[make] = []
+        model_data[make].append({
+            'model': model,
+            'stock_type': stock,
+            'vdps': int(row.get('market_vdps', 0)),
+            'connections': int(row.get('market_connections', 0)),
+            'vehicles': int(row.get('market_vehicles', 0)),
+        })
+
+    demand_config = {
+        'mode': 'demand',
+        'metric': metric,
+        'metricLabel': metric_label,
+        'dma': dma,
+        'makes': makes,
+        'makesLabel': makes_label,
+        'stockLabel': stock_label,
+        'period': data_date,
+        'totalVdps': int(demand_df['market_vdps'].sum()) if 'market_vdps' in demand_df.columns else 0,
+        'totalConnections': int(demand_df['market_connections'].sum()) if 'market_connections' in demand_df.columns else 0,
+    }
+
+    js_demand = f"const demandData = {json.dumps(demand_data, indent=2)};"
+    js_model  = f"const modelData = {json.dumps(model_data, indent=2)};"
+    js_config = f"const demandConfig = {json.dumps(demand_config, indent=2)};"
+
+    html = template_path.read_text(encoding='utf-8')
+    for placeholder, replacement in [
+        ('// %%DEMAND_DATA%%',   js_demand),
+        ('// %%MODEL_DATA%%',    js_model),
+        ('// %%DEMAND_CONFIG%%', js_config),
+        ('// %%CITY_DATA%%',     'const cities = [];\nconst mapConfig = {center: [39.5, -98.35], zoom: 4};'),
+        ('// %%ZIP_DATA%%',      'const zipData = [];'),
+        ('// %%HITLIST_ZIPS%%',  'const hitlistZips = [];'),
+        ('// %%DEALER_PIN%%',    'const dealerPin = {};'),
+    ]:
+        html = html.replace(placeholder, replacement)
+
+    html = html.replace('%%PAGE_TITLE%%',   f"{dma} Demand — Cars.com")
+    html = html.replace('%%REPORT_TITLE%%', f"Market Demand · {dma}" + (f" | {makes_label}" if makes else ""))
+    html = html.replace('%%DATA_DATE%%',    data_date)
+    return html
+
 
 # ── ZIP → City Mapping ────────────────────────────────────────────────────────
 
@@ -274,6 +493,10 @@ def inject_into_template(df_cities, dma, makes, template_path, data_date="",
     html = html.replace("// %%ZIP_DATA%%", zip_block)
     html = html.replace("// %%HITLIST_ZIPS%%", hl_block)
     html = html.replace("// %%DEALER_PIN%%", dp_block)
+    # Stub out demand placeholders so search-mode HTML has no unresolved comments
+    html = html.replace("// %%DEMAND_DATA%%",   "const demandData = [];")
+    html = html.replace("// %%MODEL_DATA%%",    "const modelData = {};")
+    html = html.replace("// %%DEMAND_CONFIG%%", "const demandConfig = {mode: 'search'};")
     html = html.replace("%%PAGE_TITLE%%", page_title)
     html = html.replace("%%REPORT_TITLE%%", report_title)
     html = html.replace("%%DATA_DATE%%", data_date)
@@ -298,12 +521,20 @@ def main():
     parser.add_argument("--hitlist", help="Comma-separated hitlist ZIP codes (e.g. '32514,32563,32533')")
     parser.add_argument("--dealer-name", help="Dealer name for map pin")
     parser.add_argument("--dealer-address", help="Dealer address for map pin geocoding")
+    parser.add_argument("--mode", default="demand", choices=["demand", "search"],
+                        help="'demand' = VDP/Lead market chart (default); 'search' = legacy ZIP search-volume map")
+    parser.add_argument("--metric", default="vdp", choices=["vdp", "connections", "vehicles"],
+                        help="Primary metric for demand mode: vdp (default), connections, or vehicles")
+    parser.add_argument("--stock-types", default=None,
+                        help="Comma-separated stock types to filter: New, Used, CPO (default: all)")
     args = parser.parse_args()
 
     if args.config:
         run_config(args.config, args)
         return
 
+    if args.mode == 'demand' and not args.makes:
+        args.makes = 'All'
     dma, makes_str = prompt_inputs(args)
     makes = parse_makes(makes_str)
 
@@ -313,13 +544,78 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     makes_slug   = ("_" + "_".join(makes)) if makes else ""
-    output_path  = output_dir / f"market_intelligence_{dma_slug}{makes_slug}_{today}.html"
+    stock_types  = [s.strip() for s in args.stock_types.split(",")] if args.stock_types else None
+
+    if args.mode == 'demand':
+        output_path = output_dir / f"market_demand_{dma_slug}{makes_slug}_{today}.html"
+    else:
+        output_path = output_dir / f"market_intelligence_{dma_slug}{makes_slug}_{today}.html"
 
     makes_label = ", ".join(makes) if makes else "All makes"
     print(f"\nGenerating report:")
+    print(f"  Mode:  {args.mode} ({'VDP/Lead demand chart' if args.mode == 'demand' else 'Search volume map (legacy)'})")
     print(f"  DMA:   {dma}")
     print(f"  Makes: {makes_label}")
     print(f"  Output: {output_path}\n")
+
+    # ── Demand mode (v2) ──────────────────────────────────────────────────────
+    if args.mode == 'demand':
+        csv_path = None
+        if args.csv:
+            csv_path = Path(args.csv).expanduser()
+            if not csv_path.exists():
+                print(f"CSV not found: {csv_path}")
+                sys.exit(1)
+        else:
+            csv_path_str = _find_demand_csv(dma, makes)
+            if csv_path_str:
+                csv_path = Path(csv_path_str)
+                print(f"Auto-detected demand signals CSV: {csv_path.name}")
+            else:
+                print(f"No demand signals CSV found in {TABLEAU_DIR}.")
+                print(f"Download Market Comparison from admin.cars.com/dealers/{{UUID}}/reports/demand_signals")
+                print(f"and pass it with --csv <path>")
+                sys.exit(1)
+
+        print(f"Loading demand signals data…")
+        df = load_demand_signals_csv(csv_path, makes=makes if makes else None, stock_types=stock_types)
+        if df.empty:
+            print("No rows after filtering. Check make/stock-type filters or CSV format.")
+            sys.exit(1)
+
+        dma_name = df['dma'].iloc[0] if 'dma' in df.columns else dma
+        data_date = datetime.now().strftime("%b %Y")
+        print(f"  Rows: {len(df)} | DMA: {dma_name}")
+        if makes:
+            print(f"  Make filter applied — {len(df['make'].unique())} make(s) loaded")
+
+        demand_df = aggregate_dma_demand(df, metric=args.metric, group_by='make')
+        model_df  = aggregate_dma_demand(df, metric=args.metric, group_by='make_model')
+        print(f"  {len(demand_df)} makes | metric: {_DEMAND_METRIC_LABEL[args.metric]}")
+
+        if not TEMPLATE_PATH.exists():
+            print(f"Template not found: {TEMPLATE_PATH}")
+            sys.exit(1)
+
+        final_html = inject_demand_into_template(
+            demand_df, model_df, dma_name, makes, args.metric,
+            TEMPLATE_PATH, data_date, stock_types=stock_types
+        )
+        output_path.write_text(final_html, encoding='utf-8')
+        print(f"\n✓ Demand report saved: {output_path}")
+
+        build_index = REPORTS_BASE / "build_index.py"
+        if build_index.exists():
+            import subprocess
+            print("Rebuilding index.html...")
+            subprocess.run([sys.executable, str(build_index), str(REPORTS_BASE)], check=False)
+        return
+
+    # ── Search mode (v1 legacy) ───────────────────────────────────────────────
+    if makes:
+        print(f"WARNING: make filter '{', '.join(makes)}' is cosmetic only.")
+        print(f"         Tableau ZIP view 39464986 returns all-make data — vf_make is silently ignored.")
+        print(f"         Report will be labeled '{', '.join(makes)}' but contains all makes.\n")
 
     # ── Step 1: Get CSV data ──────────────────────────────────────────────────
     # Lookup order: --csv flag > SearchVolume_{DMA}_{Make}.csv > generic > Tableau API
@@ -357,7 +653,9 @@ def main():
 
         try:
             print(f"Downloading view data...")
-            csv_text = download_view_csv(token, site_id, dma, makes)
+            if makes:
+                _qc_filter_check(token, site_id, dma, makes)
+            csv_text = download_view_csv(token, site_id, dma)
         finally:
             tableau_signout(token)
 
@@ -373,6 +671,7 @@ def main():
         e_parts = earliest_q.split()
         l_parts = latest_q.split()
         data_date = f"{e_parts[1]} {e_parts[0]} \u2013 {l_parts[1]} {l_parts[0]}"  # "Q4 2023 – Q1 2026"
+        _qc_quarter_coverage(df, quarter_cols_found)
     else:
         data_date = datetime.now().strftime("%b %Y")
 
@@ -392,7 +691,8 @@ def main():
     # ── Step 3: Identify & filter columns ────────────────────────────────────
     cols = df.columns.tolist()
     zip_col    = next((c for c in cols if "zip" in c.lower()), None)
-    search_col = next((c for c in cols if c == "searches"), None) or \
+    search_col = next((c for c in cols if c == "searches_avg_per_q"), None) or \
+                 next((c for c in cols if c == "searches"), None) or \
                  next((c for c in cols if "search" in c.lower() and "%" not in c.lower()), None)
     make_col   = next((c for c in cols if c.lower() == "make"), None)
 
@@ -413,7 +713,7 @@ def main():
         df = df[df[make_col].str.lower().isin([m.lower() for m in makes])]
         print(f"Make filter ({', '.join(makes)}): {before} → {len(df)} rows")
     elif makes and not make_col:
-        print(f"ℹ  Make '{', '.join(makes)}' applied as label only — data is already filtered by make in Tableau.")
+        print(f"ℹ  Make '{', '.join(makes)}' is label only — this view has no make column (vf_make filter silently ignored).")
 
     if df.empty:
         print("No data after filtering. Check DMA name or make filter.")
@@ -534,7 +834,9 @@ def run_config(config_path, args):
         else:
             try:
                 token, site_id = tableau_signin()
-                csv_text = download_view_csv(token, site_id, dma, makes)
+                if makes:
+                    _qc_filter_check(token, site_id, dma, makes)
+                csv_text = download_view_csv(token, site_id, dma)
                 tableau_signout(token)
             except Exception as e:
                 print(f"Tableau failed for {dma}: {e}")
@@ -550,11 +852,13 @@ def run_config(config_path, args):
             e_parts = earliest_q.split()
             l_parts = latest_q.split()
             data_date = f"{e_parts[1]} {e_parts[0]} \u2013 {l_parts[1]} {l_parts[0]}"
+            _qc_quarter_coverage(df, quarter_cols_found)
         else:
             data_date = datetime.now().strftime("%b %Y")
 
         zip_col = next((c for c in df.columns if "zip" in c.lower()), None)
-        search_col = next((c for c in df.columns if c == "searches"), None)
+        search_col = next((c for c in df.columns if c == "searches_avg_per_q"), None) or \
+                     next((c for c in df.columns if c == "searches"), None)
         dma_col = next((c for c in df.columns if "dma" in c.lower()), None)
         if dma_col:
             df = df[df[dma_col].str.contains(dma, na=False, case=False, regex=False)]

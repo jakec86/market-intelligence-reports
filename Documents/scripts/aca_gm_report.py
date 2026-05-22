@@ -66,11 +66,6 @@ TEMP_CONTACT_OVERRIDES = {
             "jramirez@southernteam.com",
         ],
     },
-    # Vision Kia of Canandaigua — not in GM sheet; Ziad Hasasneh confirmed
-    "vision kia of canandaigua": {
-        "gm_name": "Ziad Hasasneh", "first_name": "Ziad",
-        "email": "ziad@visionauto.com",
-    },
     # Vision Chevrolet — no entry in GM sheet; Jesus Francos manages multiple Vision stores
     "vision chevrolet": {
         "gm_name": "Jesus Francos", "first_name": "Jesus",
@@ -78,11 +73,11 @@ TEMP_CONTACT_OVERRIDES = {
     },
 }
 
-# NYE Automotive Group — one combined email per month to Dan Schirtz listing all stores
+# NYE Automotive Group — one combined email per month to Mike Sacco listing all stores
 NYE_GROUP = {
     "contact": {
-        "gm_name": "Dan Schirtz", "first_name": "Dan",
-        "email": "dschirtz@nyeauto.com",
+        "gm_name": "Mike Sacco", "first_name": "Mike",
+        "email": "msacco@nyeauto.com",
     },
     "store_keys": [
         "nye buick gmc",

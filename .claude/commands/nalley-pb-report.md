@@ -19,7 +19,7 @@ Run these before touching Tableau or admin.cars.com. Do not proceed with partial
 
 1. **TOTP Keychain** — run `bash ~/.claude/scripts/check-totp-keychain.sh`. If warning fires, TOTP is missing — MFA will fall back to push. Note this before proceeding.
 2. **Playwright MCP** — verify `browser_navigate` tool is available (`mcp__playwright__browser_navigate`). Required for both Tableau and admin.cars.com. If missing, abort and recommend `/mcp` check.
-3. **Gmail MCP** — run `bash ~/.claude/scripts/verify-gmail-mcp.sh`. If warning fires, stop — Gmail draft creation will fail.
+3. **Gmail MCP not required** — email is sent via Gmail API directly by `pb_report.py`.
 
 > **Note:** Tableau MCP PAT returns 401 for this view due to RLS — use Playwright only for all Tableau steps.
 
@@ -27,30 +27,16 @@ Run these before touching Tableau or admin.cars.com. Do not proceed with partial
 
 ## Step 1 — Tableau: LEI Crosstab Download
 
-**Navigate** to the full Tableau Cloud portal URL (not the embed URL):
+Navigate directly to the **Nalley Custom View** (pre-filtered: DMA=Atlanta+Detroit, Dealer=Nalley Lexus Galleria, Used inventory):
 ```
-https://us-west-2b.online.tableau.com/#/site/cars/views/LowEngagedInventoryReport/LEI-Localv2
+https://us-west-2b.online.tableau.com/#/site/cars/views/LowEngagedInventoryReport/LEI-Localv2/eaf9a030-bda1-4bc9-a771-574c63bacb9d/NalleyLexusGalleriaPBReport
 ```
 
-**Step A — Apply DMA filter (Atlanta):**
+If JumpCloud SSO fires, run the **JumpCloud MFA Sub-procedure** before continuing.
 
-1. Click the `Filter DMA Inclusive` combobox
-2. In the dialog, find and click the `Atlanta` checkbox (Detroit stays checked — do not uncheck it)
-3. Press Escape to close the DMA dialog
-4. **Wait for recompute** — a `tab-glass` overlay will cover the viz. Wait until it clears (~60 sec). Any click while the overlay is up will fail with a timeout.
+Wait for the viz to fully render (~15–30 sec). No filter changes needed — all filters are pre-applied in the saved view.
 
-**Step B — Apply Dealer Name filter (Nalley only):**
-
-1. Click the `Filter Dealer Name and ID Inclusive` combobox
-2. **Deselect everything first** (regardless of current state): click the **inner `<input>` checkbox** inside the `(All)` row — this toggles to all-off. If it was already in All state, one click deselects all. If a prior run left Nalley selected, clicking (All) inner checkbox first clears it then checks all; click it a second time to deselect all.
-3. Type `Nalley Lexus Galleria` in the search box and press Enter → "Found 1 matches"
-4. Check `Nalley Lexus Galleria - 109754`
-5. Clear the search box (fill with a space, then Backspace) — Apply is **disabled while search text is present**
-6. Click **Apply**
-7. Wait for recompute (~15–30 sec)
-
-> **Maj dealer name / Grp dealer name: skip entirely** — not needed for this report.
-> **Stock type: leave as "Used"** — correct for this report.
+> **Do NOT click any filters** — the custom view has DMA=Atlanta+Detroit and Dealer=Nalley Lexus Galleria pre-set. Any filter interaction will trigger a recompute.
 
 **Download the crosstab:**
 1. Click **Download** in the toolbar
@@ -60,6 +46,11 @@ https://us-west-2b.online.tableau.com/#/site/cars/views/LowEngagedInventoryRepor
 5. Click **Download**
 
 File lands at: `~/.playwright-mcp/Low-Engaged-Inventory-Report---Local-v2.csv`
+
+**Immediately rename to avoid collision with Hendrick:**
+```bash
+mv ~/.playwright-mcp/Low-Engaged-Inventory-Report---Local-v2.csv ~/.playwright-mcp/nalley_lei.csv
+```
 
 **CSV schema validation (required before import):**
 ```python
@@ -98,13 +89,14 @@ Expected: YMMT | Stock num | Stock type | Days live | Price | Price vs Market (%
 
 ## Step 3 — Run pb_report.py
 
-This script handles everything: import both CSVs → sort PBT → read stats → hide Data Import tab → create Gmail draft.
+This script handles everything: import both CSVs → sort PBT → read stats → hide Data Import tab → send email to recipients.
 
 ```bash
 python3 ~/Documents/scripts/pb_report.py \
   --dealer nalley \
-  --lei ~/.playwright-mcp/Low-Engaged-Inventory-Report---Local-v2.csv \
-  --dem ~/.playwright-mcp/Pricing.csv
+  --lei ~/.playwright-mcp/nalley_lei.csv \
+  --dem ~/.playwright-mcp/Pricing.csv \
+  --send
 ```
 
 Expected output:
@@ -132,16 +124,14 @@ If the script errors on Gmail auth, check `~/.claude/tokens/gmail_jcrawley.json`
 
 ---
 
-## Step 5 — Finalize Gmail Draft
+## Step 5 — Confirm Send
 
-The draft is created without recipients (Nalley `email_to` is blank in config). Add them:
+Email is sent automatically by `pb_report.py --send`. Recipients are baked into the script config:
 
-**To:** Grayson Caudill `gcaudill1@nalleycars.com`, Jason E. Brown `jbrown1@nalleycars.com`, Zlatan Ibrahimbegovic `zibrahimbegovic@asburyauto.com`, Rashad Saeed `rsaeed@nalleycars.com`
-**Cc:** Shashank Dharanendra `sdharanendra@asburyauto.com`
+**To:** Grayson Caudill, Jason E. Brown, Zlatan Ibrahimbegovic, Rashad Saeed
+**Cc:** Shashank Dharanendra
 
-> **Warning:** Do NOT guess `@nalleyauto.com` addresses — they bounce. All four primary contacts are at `@nalleycars.com` or `@asburyauto.com`. Confirmed from sent mail 2026-05-04.
-
-Use Gmail MCP to find the draft by ID (printed in pb_report.py output) and update recipients, OR open Gmail and add them manually before sending.
+Confirm the script output shows `✓ Email sent (message id: ...)`. If it shows only `✓ Gmail draft created` without a send line, re-run with `--send` explicitly.
 
 ---
 
@@ -151,15 +141,14 @@ Invoke whenever Playwright lands on `sso.jumpcloud.com`.
 
 **Primary method: TOTP**
 
-1. **Detect the factor form.** If only "Send Push" is visible, click "Try another way" / "Use authenticator code" to reveal the TOTP input. If no TOTP option exists, fall back to Push (step 5).
-2. **Retrieve code.** Run `python3 ~/.claude/scripts/jumpcloud-totp.py`. Capture stdout. If exit code is non-zero, fall back to Push (step 5) — surface the helper's stderr verbatim.
-3. **Submit.** Type the 6-digit code into the Verification Code input, click Submit/Verify.
-4. **Retry once if rejected.** Wait for next 30s TOTP boundary, fetch a fresh code, submit again. If rejected twice: abort with `"TOTP rejected twice — check Mac clock: sudo sntp -sS time.apple.com"`. Never log the code or seed.
+1. **Switch to TOTP.** Click "Try another way" / "Use authenticator code" immediately on landing — don't wait to detect the default. If the Verification Code input is already visible, the click will fail harmlessly; proceed to step 2.
+2. **Retrieve code.** Run `python3 ~/.claude/scripts/jumpcloud-totp.py`. Capture stdout. If exit code is non-zero, fall back to Push (step 4) — surface the helper's stderr verbatim.
+3. **Submit.** Type the 6-digit code into the Verification Code input, click Submit/Verify. Retry once at the next 30s boundary if rejected. If rejected twice: abort with `"TOTP rejected twice — check Mac clock: sudo sntp -sS time.apple.com"`. Never log the code or seed.
 
 **Push fallback (only when TOTP unavailable):**
-5. Click "Send Push". Output `"⏳ JumpCloud push sent — approve on your phone to continue."` Poll every 5s for up to 90s for redirect away from `sso.jumpcloud.com`. If no redirect after 90s: abort with `"⚠️ Push not approved after 90s — check JumpCloud app and re-run"`.
+4. Click "Send Push". Output `"⏳ JumpCloud push sent — approve on your phone to continue."` Poll every 5s for up to 90s for redirect away from `sso.jumpcloud.com`. If no redirect after 90s: abort with `"⚠️ Push not approved after 90s — check JumpCloud app and re-run"`.
 
-> **Current status:** TOTP Keychain seed not yet enrolled (IT reset pending). Push is the active fallback until seed is added.
+> **Current status:** TOTP active — seed enrolled in Keychain, verified 2026-05-18. Push fallback remains available if TOTP fails.
 
 ---
 
@@ -171,13 +160,13 @@ Invoke whenever Playwright lands on `sso.jumpcloud.com`.
 | Customer ID | 109754 |
 | admin.cars.com UUID | `156f9bb7-3c44-549c-b16b-0c3af73fdb1f` |
 | Sheet ID | `13Jn8vJSG7vRYW9xpuxrMi9kXNhiV_TaCrjQ5lNQRPP8` |
-| LEI Tableau URL | `https://us-west-2b.online.tableau.com/#/site/cars/views/LowEngagedInventoryReport/LEI-Localv2` |
+| LEI Tableau URL | `https://us-west-2b.online.tableau.com/#/site/cars/views/LowEngagedInventoryReport/LEI-Localv2/eaf9a030-bda1-4bc9-a771-574c63bacb9d/NalleyLexusGalleriaPBReport` |
 | Download path | `~/.playwright-mcp/` |
 | PBT sort range | `A4:L5000` (data rows only — headers on R3, empty R1–R2; script uses 5000 as upper bound) |
 | Sort col | J (Difference to Next Badge) |
 | Threshold cell | E1 |
-| Stock type filter | Used (leave as-is) |
-| DMA filter | Atlanta (click checkbox — Detroit stays checked; wait ~60s for tab-glass to clear) |
+| DMA filter | Pre-applied in custom view — do not touch |
+| Dealer filter | Pre-applied in custom view — do not touch |
 
 > ⚠️ **Always compose HTML email** — use `Content-Type: text/html` and base64url-encode as RFC 2822 `raw` parameter.
 

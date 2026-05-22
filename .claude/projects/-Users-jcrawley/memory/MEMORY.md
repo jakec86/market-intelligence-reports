@@ -2,6 +2,7 @@
 
 - [URL Sharing in Terminal](feedback_url_sharing.md) — Always use raw URLs in code blocks, never markdown hyperlinks; suggest `! open "url"` for direct browser open
 - [Price Badge Report Workflow](project_price_badge_report_workflow.md) — Weekly dealer report: download from Tableau LEI view + admin.cars.com Demand Signals → auto-feeds Google Sheet → email to dealer
+- [PB Report Production Status](project_pb_report_production.md) — Nalley + Hendrick fully automated with --send, custom view URLs, dealer-specific filenames, SAM diversity, dedup fix — approved 2026-05-22
 - [GitHub Copilot Access](project_github_copilot.md) — Cursor active now (free tier); Cars Commerce enterprise Copilot available 2026-04-24 via M365
 - [Folder Structure & Download Defaults](project_folder_structure.md) — Desktop stays clean (scripts/, templates/ only); reports → Documents/Reports/; Tableau CSVs → Documents/Tableau/
 - [Auto Research Learnings](auto_research_learnings.md) — Cumulative knowledge from /auto-research sessions: dealer patterns, market insights, data tips, effective framings
