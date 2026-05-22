@@ -217,6 +217,18 @@ FOCUS_OPTIONS = {
 
 TREND_ORDER   = {"CRITICAL": 0, "SUSTAINED": 1, "NEW": 2, "RESOLVED": 3}
 SEV_ORDER     = {"HIGH": 0, "MEDIUM": 1}
+
+# Map Tableau Maj Cust Name → short client label for the flag table
+MAJ_CUST_TO_CLIENT = {
+    "Sonic":                              "Sonic",
+    "EchoPark MA Group":                  "EchoPark",
+    "Hendrick Automotive Group":          "Hendrick",
+    "Atlantic Coast Automotive MA Group": "ACA",
+    "Asbury":                             "Asbury",
+    "Larry Miller":                       "LHM",
+    "Koons Automotive MA Group":          "Koons",
+    "Herb Chambers MA Group":             "Herb Chambers",
+}
 TREND_COLORS  = {
     "CRITICAL": "#c0392b", "SUSTAINED": "#d97706",
     "NEW": "#2563eb",      "RESOLVED": "#059669",
@@ -225,7 +237,7 @@ TREND_COLORS  = {
 
 # ─── DATA LAYER ───────────────────────────────────────────────────────────────
 
-@st.cache_data(ttl=1800, show_spinner=False)
+@st.cache_data(ttl=1200, show_spinner=False)  # 20 min — shorter than group cache so token refreshes first
 def _tableau_token() -> str:
     payload = json.dumps({
         "credentials": {
@@ -259,8 +271,19 @@ def _pull_group(filter_val: str) -> List[Dict]:
         f"/data?vf_Maj%20Cust%20Name={encoded}"
     )
     req = urllib.request.Request(url, headers={"X-Tableau-Auth": token})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        raw = r.read().decode("utf-8", errors="replace")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            raw = r.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            # Token expired — bust cache and get a fresh one, then retry once
+            st.cache_data.clear()
+            token = _tableau_token()
+            req2 = urllib.request.Request(url, headers={"X-Tableau-Auth": token})
+            with urllib.request.urlopen(req2, timeout=60) as r:
+                raw = r.read().decode("utf-8", errors="replace")
+        else:
+            raise
 
     stores: Dict[str, Dict] = {}
     for row in csv.DictReader(io.StringIO(raw)):
@@ -432,11 +455,18 @@ def run_investigation(stores: List[Dict], focus_scenarios=None) -> Dict:
     return results
 
 
-def enrich_with_trends(results: Dict, history: Dict) -> Dict:
+def enrich_with_trends(results: Dict, history: Dict, stores: List[Dict] = None) -> Dict:
+    """Add trend badges and maj_cust_name (client) to each flagged entry."""
+    # Build CCID → Maj Cust Name lookup from the scanned stores
+    ccid_to_maj = {}
+    if stores:
+        ccid_to_maj = {s.get("Legacy Id", ""): s.get("Maj Cust Name", "") for s in stores}
+
     for bucket in ("high", "medium"):
         for entry in results[bucket]:
             sev = "HIGH" if bucket == "high" else "MEDIUM"
             entry["trend"] = _trend(entry["store"], sev, history)
+            entry["maj_cust_name"] = ccid_to_maj.get(entry.get("ccid", ""), "")
     return results
 
 
@@ -451,8 +481,13 @@ def build_flag_dataframe(results: Dict) -> pd.DataFrame:
             flag_summary = "  ·  ".join(
                 f"S{f['scenario']} {f['severity'][:1]}" for f in entry["flags"][:4]
             )
+            # Resolve client display name from Maj Cust Name stored on entry
+            maj = entry.get("maj_cust_name", "")
+            client = MAJ_CUST_TO_CLIENT.get(maj, maj or "—")
+
             rows.append({
                 "trend":        trend,
+                "client":       client,
                 "store":        entry["store"],
                 "ccid":         entry["ccid"],
                 "severity":     sev,
@@ -827,7 +862,7 @@ if run:
     else:
         history = _load_history()
         results = run_investigation(stores, focus_scenarios)
-        results = enrich_with_trends(results, history)
+        results = enrich_with_trends(results, history, stores=stores)
 
         # Collect scanned CCIDs to scope SF queries to Jake's book only
         scanned_ccids = [s.get("Legacy Id", "") for s in stores if s.get("Legacy Id")]
@@ -893,7 +928,7 @@ with tab_book:
         filtered_df = flagged_df[flagged_df["trend"].isin(trend_filter)] if trend_filter else flagged_df
 
         # Display table (hide internal _entry column)
-        display_cols = ["trend", "store", "ccid", "severity", "flags", "top_scenario", "top_signal"]
+        display_cols = ["trend", "client", "store", "ccid", "severity", "flags", "top_scenario", "top_signal"]
         event = st.dataframe(
             filtered_df[display_cols],
             use_container_width=True,
@@ -901,11 +936,12 @@ with tab_book:
             on_select="rerun",
             selection_mode="single-row",
             column_config={
-                "trend":        st.column_config.TextColumn("Trend", width=90),
-                "store":        st.column_config.TextColumn("Store", width=220),
-                "ccid":         st.column_config.TextColumn("CCID", width=80),
-                "severity":     st.column_config.TextColumn("Sev", width=60),
-                "flags":        st.column_config.TextColumn("Flag Summary", width=130),
+                "trend":        st.column_config.TextColumn("Trend",  width=90),
+                "client":       st.column_config.TextColumn("Client", width=100),
+                "store":        st.column_config.TextColumn("Store",  width=200),
+                "ccid":         st.column_config.TextColumn("CCID",   width=75),
+                "severity":     st.column_config.TextColumn("Sev",    width=55),
+                "flags":        st.column_config.TextColumn("Flags",  width=110),
                 "top_scenario": st.column_config.TextColumn("Top Scenario"),
                 "top_signal":   st.column_config.TextColumn("Signal"),
             },
