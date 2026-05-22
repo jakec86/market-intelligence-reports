@@ -723,7 +723,6 @@ with st.sidebar:
 
     @st.cache_data(ttl=60)
     def _admin_session_ok() -> bool:
-        # Two-stage: Chrome up + actually authenticated to admin.cars.com
         if not _admin_cars.check_session():
             return False
         return _admin_cars.check_admin_auth()
@@ -736,36 +735,41 @@ with st.sidebar:
             st.cache_data.clear()
             st.rerun()
     else:
-        # Differentiate: Chrome not running vs. Chrome running but not signed in
-        _chrome_up = _admin_cars.check_session.__wrapped__() if hasattr(_admin_cars.check_session, "__wrapped__") else None
-        try:
-            import urllib.request as _ur
-            _ur.urlopen("http://localhost:9223/json/version", timeout=2)
-            _chrome_running = True
-        except Exception:
-            _chrome_running = False
-
-        if _chrome_running:
-            st.warning("● Chrome running — sign in to admin.cars.com")
-            st.caption(
-                "Chrome is up on port 9223 but not signed into admin.cars.com. "
-                "Open admin.cars.com in that Chrome window and sign in via JumpCloud, "
-                "then click Re-check."
-            )
-            st.caption("To open admin.cars.com in that Chrome window, run:")
-            st.code('open -a "Google Chrome" --args --profile-directory=Default https://admin.cars.com', language="bash")
-        else:
-            st.error("● Chrome not running on port 9223")
-            st.caption("Launch Chrome with remote debugging:")
-            st.code(
-                'mkdir -p ~/.chrome-dealer-health && '
-                'nohup "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" '
-                '--remote-debugging-port=9223 '
-                '--user-data-dir="$HOME/.chrome-dealer-health" '
-                "--remote-allow-origins='*' --no-first-run "
-                '> /tmp/chrome-debug.log 2>&1 &',
-                language="bash",
-            )
+        st.warning("● admin.cars.com — not connected")
+        st.caption(
+            "Click **Connect** to launch Chrome and open admin.cars.com. "
+            "Approve the JumpCloud push on your phone when prompted. "
+            "The session persists — you only need to do this once per day."
+        )
+        if st.button("🔗 Connect admin.cars.com", type="primary", use_container_width=True, key="connect_admin"):
+            with st.spinner("Launching Chrome and connecting to admin.cars.com…"):
+                try:
+                    # restart=True: kill stale Chrome, relaunch, open admin.cars.com
+                    # User approves JumpCloud push — session cookie then persists in profile
+                    _admin_cars._restart_chrome()
+                    import time as _time; _time.sleep(3)  # let Chrome settle
+                    from playwright.sync_api import sync_playwright as _spw
+                    with _spw() as _pw:
+                        _b = _pw.chromium.connect_over_cdp(_admin_cars.CDP_ENDPOINT, timeout=10_000)
+                        _ctx = _b.contexts[0] if _b.contexts else _b.new_context()
+                        _pg = _ctx.new_page()
+                        _pg.goto("https://admin.cars.com/dealers/all/reports",
+                                 timeout=60_000, wait_until="domcontentloaded")
+                        # Wait up to 60s for JumpCloud push approval
+                        try:
+                            _pg.wait_for_url("**/admin.cars.com/**", timeout=60_000)
+                        except Exception:
+                            pass
+                        _authed = "admin.cars.com" in _pg.url and "jumpcloud" not in _pg.url
+                        _pg.close()
+                        _b.close()
+                    if _authed:
+                        st.cache_data.clear()
+                        st.success("✓ Connected — admin.cars.com authenticated")
+                    else:
+                        st.warning("Waiting for JumpCloud approval… approve the push on your phone, then click Re-check.")
+                except Exception as _ce:
+                    st.error(f"Connection failed: {_ce}")
         if st.button("Re-check", use_container_width=True, key="recheck_cdp"):
             st.cache_data.clear()
             st.rerun()
@@ -1288,11 +1292,11 @@ with tab_expiry:
 with tab_health:
     st.subheader("🏥 Dealer Health Analysis")
     if _cdp_ok:
-        st.caption("Growth Triangle analysis — Salesforce + admin.cars.com + Claude. Chrome authenticated.")
+        st.caption("Full Growth Triangle analysis — Salesforce + admin.cars.com + Claude.")
     else:
         st.caption(
-            "Growth Triangle analysis — **Salesforce + Claude** (SF-only mode). "
-            "Sign into admin.cars.com in the dealer health Chrome window and click Re-check in the sidebar to enable full data."
+            "**SF-only mode** — click **Connect admin.cars.com** in the sidebar to enable "
+            "Performance Trends, Reputation, Listings Optimizer, and Demand data."
         )
 
     # Auto-populate from Tab 2 "Run Full Health Analysis" button
@@ -1317,17 +1321,15 @@ with tab_health:
     h_src_col1, h_src_col2 = st.columns(2)
     with h_src_col1:
         h_use_sf    = st.checkbox("Salesforce", value=True, key="h_sf")
-        # Default OFF — only enable when Chrome is confirmed signed in
         h_use_admin = st.checkbox(
-            "admin.cars.com" + (" ✓" if _cdp_ok else " (sign in required)"),
-            value=False,
+            "admin.cars.com" + (" ✓" if _cdp_ok else " (connect in sidebar →)"),
+            value=_cdp_ok,          # on by default when authenticated
             disabled=not _cdp_ok,
             key="h_admin",
-            help="Requires Chrome on port 9223 signed into admin.cars.com. See sidebar for setup." if not _cdp_ok else "Chrome authenticated — enable for full Performance Trends, Reputation, Listings Optimizer data."
         )
     with h_src_col2:
-        h_use_wid = st.checkbox("Walk-in Demand", value=False, disabled=not _cdp_ok or not h_use_admin, key="h_wid")
-        h_use_vd  = st.checkbox("Vehicle Demand", value=False, disabled=not _cdp_ok or not h_use_admin, key="h_vd")
+        h_use_wid = st.checkbox("Walk-in Demand", value=_cdp_ok, disabled=not _cdp_ok or not h_use_admin, key="h_wid")
+        h_use_vd  = st.checkbox("Vehicle Demand", value=_cdp_ok, disabled=not _cdp_ok or not h_use_admin, key="h_vd")
 
     run_health = st.button("Run Health Analysis", type="primary", key="run_health",
                             disabled=not health_dealer.strip())
