@@ -63,6 +63,8 @@ Custom slash commands defined in `~/.claude/commands/`. Plugin skills are namesp
 | `/sonic-billing` | Sonic & Hendrick billing reconciliation report | Monthly | Google Sheet + Gmail draft |
 | `/aca-monthly-report` | Atlantic Coast Automotive monthly store report (~72 stores) → Google Sheet → email to Danielle McJunkins | Monthly | Google Sheet + Gmail draft to Danielle McJunkins |
 | `/ecarone-vpm-report` | eCarOne VPM (Vehicle Performance Metrics) report | Monthly | Gmail draft |
+| `/echopark-monthly-report` | EchoPark Automotive monthly performance report (17 used-car stores, no rotation) — store scorecard + investigation flags + single group email | Monthly | Google Sheet + Gmail draft to EchoPark contact (TBD) |
+| `/asbury-monthly-report` | Asbury Group full-umbrella report (149 stores: Asbury + LHM + Koons + Herb Chambers) — per-sub-group emails + Umbrella Overview verification gate | Monthly | 4 sub-group Gmail drafts + Umbrella Overview; contacts TBD |
 | `/ep-review-report` | EchoPark DealerRater review report | Monthly | Gmail draft |
 | `/hcc4-vdp-report` | HCC4 VDP (Vehicle Detail Page) performance report | Monthly | Gmail draft |
 | `/herb-chambers-employee-update` | Herb Chambers quarterly DealerRater employee profile audit (~24 stores: adds/removes/title fixes) | Quarterly | Change summary + Gmail draft |
