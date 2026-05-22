@@ -144,24 +144,21 @@ Override with user input at Step 0.
 
 ## Recipient Mapping
 
-**Primary contact (all emails):** Anne Lewis — `anne.Lewis@hendrickauto.com`
+**Primary contact (all emails — until brand managers confirmed):** Anne Lewis — `anne.Lewis@hendrickauto.com`
 
-**Brand managers** (TBD — confirm before first production run):
+All drafts currently route to Anne with `[TEST]` prefix. When Hendrick brand managers are identified, swap recipients below per brand.
 
 ```yaml
 RECIPIENTS:
-  default_to: anne.Lewis@hendrickauto.com   # fallback until brand managers confirmed
+  default_to: anne.Lewis@hendrickauto.com
 
-  # Luxury brands
-  BMW:           {to: [anne.Lewis@hendrickauto.com], cc: []}   # TBD brand manager
+  BMW:           {to: [anne.Lewis@hendrickauto.com], cc: []}
   Acura:         {to: [anne.Lewis@hendrickauto.com], cc: []}
   Audi:          {to: [anne.Lewis@hendrickauto.com], cc: []}
   Lexus:         {to: [anne.Lewis@hendrickauto.com], cc: []}
   Mercedes_Benz: {to: [anne.Lewis@hendrickauto.com], cc: []}
   Porsche:       {to: [anne.Lewis@hendrickauto.com], cc: []}
-
-  # Volume brands
-  Honda:         {to: [anne.Lewis@hendrickauto.com], cc: []}   # TBD brand manager
+  Honda:         {to: [anne.Lewis@hendrickauto.com], cc: []}
   Chevrolet:     {to: [anne.Lewis@hendrickauto.com], cc: []}
   Chrysler_CDJR: {to: [anne.Lewis@hendrickauto.com], cc: []}
   Buick_GMC:     {to: [anne.Lewis@hendrickauto.com], cc: []}
@@ -174,7 +171,126 @@ RECIPIENTS:
   Volvo:         {to: [anne.Lewis@hendrickauto.com], cc: []}
 ```
 
-**Action required before first send:** Ask Anne for brand manager contacts at Hendrick HQ (same role as Sonic brand managers). Until confirmed, all drafts route to Anne only with `[TEST]` prefix.
+---
+
+## SAM Assignments (Cars Commerce Internal)
+
+GAE = Growth Account Executive · Sr. Ad Mgr = Senior Advertising Manager  
+Used for internal routing, investigation consultations, and flagged-store follow-up — **not copied on client emails unless instructed.**
+
+```yaml
+SAM_ASSIGNMENTS:
+  # ── Dwight Pope (25 stores) ────────────────────────────────────────────
+  "Audi Northlake":                              {gae: "Dwight Pope",        sr_ad_mgr: "Tyler Marovich"}
+  "Hendrick Acura":                              {gae: "Dwight Pope",        sr_ad_mgr: "Abby Livingston"}
+  "Hendrick BMW":                                {gae: "Dwight Pope",        sr_ad_mgr: "Tyler Marovich"}
+  "Hendrick BMW Certified Pre-Owned South Charlotte": {gae: "Dwight Pope",   sr_ad_mgr: "Tyler Marovich"}
+  "Hendrick BMW Northlake":                      {gae: "Dwight Pope",        sr_ad_mgr: "Tyler Marovich"}
+  "Hendrick Chevrolet Cadillac":                 {gae: "Dwight Pope",        sr_ad_mgr: "Tim Webster"}
+  "Hendrick Chrysler Dodge Jeep Ram FIAT of Concord": {gae: "Dwight Pope",   sr_ad_mgr: "Kim Kirchner"}
+  "Hendrick Honda":                              {gae: "Dwight Pope",        sr_ad_mgr: "Krystal Hines"}
+  "Hendrick Honda Hickory":                      {gae: "Dwight Pope",        sr_ad_mgr: "Krystal Hines"}
+  "Hendrick Honda of Charleston":                {gae: "Dwight Pope",        sr_ad_mgr: "Kim Kirchner"}
+  "Hendrick Honda of Easley":                    {gae: "Dwight Pope",        sr_ad_mgr: "Krystal Hines"}
+  "Hendrick Kia of Concord":                     {gae: "Dwight Pope",        sr_ad_mgr: "Robert Weisbach"}
+  "Hendrick Lexus Kansas City":                  {gae: "Dwight Pope",        sr_ad_mgr: "Mike Judge"}    # Note: sheet shows Blake Hoeber; confirm
+  "Hendrick MINI":                               {gae: "Dwight Pope",        sr_ad_mgr: "Mike Judge"}
+  "Hendrick Motors of Charlotte":                {gae: "Dwight Pope",        sr_ad_mgr: "Mike Judge"}
+  "Hendrick Porsche":                            {gae: "Dwight Pope",        sr_ad_mgr: "Abby Livingston"}
+  "Hendrick Toyota North Charleston":            {gae: "Dwight Pope",        sr_ad_mgr: "Kim Kirchner"}
+  "Hendrick Toyota Merriam":                     {gae: "Blake Hoeber",       sr_ad_mgr: "Kim Kirchner"}
+  "Hendrick Volkswagen of Concord":              {gae: "Dwight Pope",        sr_ad_mgr: "Krystal Hines"}
+  "Hendrick Volvo Cars of Charleston":           {gae: "Dwight Pope",        sr_ad_mgr: "Tyler Marovich"}
+  "Honda Cars of Rock Hill":                     {gae: "Dwight Pope",        sr_ad_mgr: "Kim Kirchner"}
+  "Honda of Concord":                            {gae: "Dwight Pope",        sr_ad_mgr: "Robert Weisbach"}
+  "Mercedes-Benz of Northlake":                  {gae: "Dwight Pope",        sr_ad_mgr: "Mike Judge"}
+  "Rick Hendrick BMW Charleston":                {gae: "Dwight Pope",        sr_ad_mgr: "Tyler Marovich"}
+  "Rick Hendrick Chevrolet Charleston":          {gae: "Dwight Pope",        sr_ad_mgr: "Virginia Shields"}
+  "Rick Hendrick City Chevrolet":                {gae: "Dwight Pope",        sr_ad_mgr: "Julia Rowe"}
+  "Rick Hendrick Toyota of Fayetteville":        {gae: "Dwight Pope",        sr_ad_mgr: "Kim Kirchner"}
+
+  # ── Andy Allen (14 stores) ─────────────────────────────────────────────
+  "Barbour-Hendrick Honda Greenville":           {gae: "Andy Allen",         sr_ad_mgr: "Krystal Hines"}
+  "BMW of Southpoint":                           {gae: "Andy Allen",         sr_ad_mgr: "Tyler Marovich"}
+  "Hendrick Cadillac Cary":                      {gae: "Andy Allen",         sr_ad_mgr: "Virginia Shields"}
+  "Hendrick Chevrolet Buick GMC Southpoint":     {gae: "Andy Allen",         sr_ad_mgr: "Virginia Shields"}
+  "Hendrick Chrysler Jeep FIAT":                 {gae: "Andy Allen",         sr_ad_mgr: "Reilly Jackson"}
+  "Hendrick Kia of Cary":                        {gae: "Andy Allen",         sr_ad_mgr: "Virginia Shields"}
+  "Hendrick Southpoint Auto Mall":               {gae: "Andy Allen",         sr_ad_mgr: "Abby Livingston"}
+  "Mercedes-Benz of Durham":                     {gae: "Andy Allen",         sr_ad_mgr: "Mike Judge"}
+  "Porsche Southpoint":                          {gae: "Andy Allen",         sr_ad_mgr: "Abby Livingston"}
+  "Reggie Jackson Airport Honda":                {gae: "Andy Allen",         sr_ad_mgr: "Kim Kirchner"}
+  "Stevenson Hendrick Mazda Wilmington":         {gae: "Andy Allen",         sr_ad_mgr: "Tim Webster"}
+  "Stevenson-Hendrick Honda Jacksonville":       {gae: "Andy Allen",         sr_ad_mgr: "Kim Kirchner"}
+  "Stevenson-Hendrick Honda Wilmington":         {gae: "Andy Allen",         sr_ad_mgr: "Krystal Hines"}
+  "Terry Labonte Chevrolet":                     {gae: "Andy Allen",         sr_ad_mgr: "Virginia Shields"}
+
+  # ── Dana Aderhold (11 stores) ──────────────────────────────────────────
+  "BMW of Murrieta":                             {gae: "Dana Aderhold",      sr_ad_mgr: "Abby Livingston"}
+  "Gwinnett Place Honda":                        {gae: "Dana Aderhold",      sr_ad_mgr: "Krystal Hines"}
+  "Hendrick Chevrolet":                          {gae: "Dana Aderhold",      sr_ad_mgr: "Julia Rowe"}
+  "Hendrick Chrysler Dodge Jeep Ram Hoover":     {gae: "Dana Aderhold",      sr_ad_mgr: "Tim Webster"}
+  "Hendrick Subaru":                             {gae: "Dana Aderhold",      sr_ad_mgr: "Tim Webster"}
+  "Honda of Newnan":                             {gae: "Dana Aderhold",      sr_ad_mgr: "Krystal Hines"}
+  "Mall of Georgia Mazda":                       {gae: "Dana Aderhold",      sr_ad_mgr: "Tim Webster"}
+  "Mall of Georgia MINI":                        {gae: "Dana Aderhold",      sr_ad_mgr: "Tim Webster"}
+  "Rick Hendrick Buick GMC":                     {gae: "Dana Aderhold",      sr_ad_mgr: "Virginia Shields"}
+  "Rick Hendrick Chevrolet of Buford":           {gae: "Dana Aderhold",      sr_ad_mgr: "Tim Webster"}
+  "Rick Hendrick Chrysler Dodge Jeep RAM Duluth": {gae: "Dana Aderhold",     sr_ad_mgr: "Tim Webster"}
+
+  # ── Blake Hoeber (5 stores) ────────────────────────────────────────────
+  "BMW of Kansas City South":                    {gae: "Blake Hoeber",       sr_ad_mgr: "Tyler Marovich"}
+  "Hendrick Chevrolet Shawnee Mission":          {gae: "Blake Hoeber",       sr_ad_mgr: "Tim Webster"}
+  "Hendrick Lexus Kansas City North":            {gae: "Blake Hoeber",       sr_ad_mgr: "Mike Judge"}
+  "Hendrick Volkswagen Frisco":                  {gae: "Chris Sadafsaz",     sr_ad_mgr: "Krystal Hines"}
+
+  # ── Other GAEs ─────────────────────────────────────────────────────────
+  "Audi South Austin":                           {gae: "Jaye Skidmore",      sr_ad_mgr: "Tyler Marovich"}
+  "BMW of South Austin":                         {gae: "Jaye Skidmore",      sr_ad_mgr: "Tyler Marovich"}
+  "Acura of Pleasanton":                         {gae: "Lisa Castro",        sr_ad_mgr: "Mike Judge"}
+  "East Bay BMW":                                {gae: "Lisa Castro",        sr_ad_mgr: "Tyler Marovich"}
+  "Dale Earnhardt Jr. Buick GMC Cadillac":       {gae: "Brenda Ashley",      sr_ad_mgr: "Tim Webster"}
+  "Dale Earnhardt Jr. Chevrolet":                {gae: "Brenda Ashley",      sr_ad_mgr: "Tim Webster"}
+  "Darrell Waltrip Buick GMC":                   {gae: "Jimmy Johnson",      sr_ad_mgr: "Abby Livingston"}
+  "Darrell Waltrip Honda":                       {gae: "Jimmy Johnson",      sr_ad_mgr: "Abby Livingston"}
+  "Darrell Waltrip Subaru":                      {gae: "Jimmy Johnson",      sr_ad_mgr: "Abby Livingston"}
+  "Honda Cars of McKinney":                      {gae: "Chris Sadafsaz",     sr_ad_mgr: "Krystal Hines"}
+  "Hendrick Honda Bradenton":                    {gae: "Rick Castillo",      sr_ad_mgr: "Krystal Hines"}
+  "Rick Hendrick Chevrolet of Duluth":           {gae: "Jennifer Carbonell", sr_ad_mgr: "Tim Webster"}
+  "Volkswagen of Murrieta":                      {gae: "Manny Sandoval",     sr_ad_mgr: "Krystal Hines"}
+  "Rick Hendrick Honda":                         {gae: "",                   sr_ad_mgr: "Kim Kirchner"}
+  "BMW of McKinney":                             {gae: "",                   sr_ad_mgr: "Tyler Marovich"}
+  "Rick Hendrick Jeep Chrysler Dodge RAM North Charleston": {gae: "",        sr_ad_mgr: "Virginia Shields"}
+  "Rick Hendrick Dodge Chrysler Jeep RAM Charleston": {gae: "",              sr_ad_mgr: "Virginia Shields"}
+```
+
+### SAM Coverage by Sr. Ad Mgr
+
+| Sr. Ad Mgr | Brands/Focus | Used for |
+|---|---|---|
+| **Krystal Hines** | Honda, VW, some Subaru | Volume account consults |
+| **Tyler Marovich** | BMW, Audi, Volvo, VW | Luxury/import consults |
+| **Tim Webster** | Chevy, Buick/GMC, CDJR, Mazda, Subaru | Domestic/volume consults |
+| **Kim Kirchner** | Honda (SC/FL), CDJR (Concord), Toyota | Southeast consults |
+| **Mike Judge** | Lexus, Acura, MB, Porsche, MINI | Luxury consults |
+| **Abby Livingston** | Porsche, BMW (Murrieta/DW), Darrell Waltrip | Mixed luxury/import |
+| **Virginia Shields** | Buick/GMC, Chevy (NC/VA), Kia | Southeast domestic |
+| **Julia Rowe** | Chevy (City, Buford area) | Volume southeast |
+| **Robert Weisbach** | Kia Concord, Honda of Concord | Concord market |
+| **Reilly Jackson** | CDJR Fayetteville area | FIAT/CDJR specialist |
+
+### Using SAM Data in Reports
+
+When a store is flagged HIGH or has an investigation flag:
+1. Note the GAE and Sr. Ad Mgr in the internal triage output
+2. If reaching out for deeper analysis, loop in the GAE by name in internal notes
+3. The `format_triage_report()` output can include SAM context:
+   ```
+   🔵 [HIGH/SUSTAINED] Hendrick Honda Hickory  (CCID 10023)
+      GAE: Dwight Pope · Sr. Ad Mgr: Krystal Hines
+      Scenario 1: Connections -18% MoM
+   ```
+4. **Client-facing emails (to Anne) do not include SAM names** unless instructed
 
 ---
 
@@ -302,7 +418,8 @@ sys.path.insert(0, os.path.expanduser("~/Documents/scripts"))
 from investigation_triggers import investigate_stores, format_triage_report
 
 brand_results = investigate_stores(brand_stores)
-print(format_triage_report(brand_results, title=f"Hendrick {brand} — {month} {year}"))
+print(format_triage_report(brand_results, title=f"Hendrick {brand} — {month} {year}",
+                           show_sams=True))  # surfaces GAE + Sr. Ad Mgr on each flagged store
 ```
 
 Flag assignment:

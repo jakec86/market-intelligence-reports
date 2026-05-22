@@ -354,8 +354,102 @@ def investigate_stores(stores: List[Dict], group_label: str = "") -> dict:
     return results
 
 
-def format_triage_report(results: dict, title: str = "Investigation Triage") -> str:
-    """Format investigate_stores() output as a readable triage report."""
+# ─── SAM LOOKUP ───────────────────────────────────────────────────────────────
+# Maps store name → {gae, sr_ad_mgr} for Cars Commerce internal routing.
+# Used to surface team context on flagged stores — not shown in client emails.
+
+SAM_LOOKUP: Dict[str, Dict[str, str]] = {
+    # Dwight Pope
+    "Audi Northlake":                               {"gae": "Dwight Pope",        "sr_ad_mgr": "Tyler Marovich"},
+    "Hendrick Acura":                               {"gae": "Dwight Pope",        "sr_ad_mgr": "Abby Livingston"},
+    "Hendrick BMW":                                 {"gae": "Dwight Pope",        "sr_ad_mgr": "Tyler Marovich"},
+    "Hendrick BMW Certified Pre-Owned South Charlotte": {"gae": "Dwight Pope",    "sr_ad_mgr": "Tyler Marovich"},
+    "Hendrick BMW Northlake":                       {"gae": "Dwight Pope",        "sr_ad_mgr": "Tyler Marovich"},
+    "Hendrick Chevrolet Cadillac":                  {"gae": "Dwight Pope",        "sr_ad_mgr": "Tim Webster"},
+    "Hendrick Chrysler Dodge Jeep Ram FIAT of Concord": {"gae": "Dwight Pope",    "sr_ad_mgr": "Kim Kirchner"},
+    "Hendrick Honda":                               {"gae": "Dwight Pope",        "sr_ad_mgr": "Krystal Hines"},
+    "Hendrick Honda Hickory":                       {"gae": "Dwight Pope",        "sr_ad_mgr": "Krystal Hines"},
+    "Hendrick Honda of Charleston":                 {"gae": "Dwight Pope",        "sr_ad_mgr": "Kim Kirchner"},
+    "Hendrick Honda of Easley":                     {"gae": "Dwight Pope",        "sr_ad_mgr": "Krystal Hines"},
+    "Hendrick Kia of Concord":                      {"gae": "Dwight Pope",        "sr_ad_mgr": "Robert Weisbach"},
+    "Hendrick MINI":                                {"gae": "Dwight Pope",        "sr_ad_mgr": "Mike Judge"},
+    "Hendrick Motors of Charlotte":                 {"gae": "Dwight Pope",        "sr_ad_mgr": "Mike Judge"},
+    "Hendrick Porsche":                             {"gae": "Dwight Pope",        "sr_ad_mgr": "Abby Livingston"},
+    "Hendrick Toyota North Charleston":             {"gae": "Dwight Pope",        "sr_ad_mgr": "Kim Kirchner"},
+    "Hendrick Volkswagen of Concord":               {"gae": "Dwight Pope",        "sr_ad_mgr": "Krystal Hines"},
+    "Hendrick Volvo Cars of Charleston":            {"gae": "Dwight Pope",        "sr_ad_mgr": "Tyler Marovich"},
+    "Honda Cars of Rock Hill":                      {"gae": "Dwight Pope",        "sr_ad_mgr": "Kim Kirchner"},
+    "Honda of Concord":                             {"gae": "Dwight Pope",        "sr_ad_mgr": "Robert Weisbach"},
+    "Mercedes-Benz of Northlake":                   {"gae": "Dwight Pope",        "sr_ad_mgr": "Mike Judge"},
+    "Rick Hendrick BMW Charleston":                 {"gae": "Dwight Pope",        "sr_ad_mgr": "Tyler Marovich"},
+    "Rick Hendrick Chevrolet Charleston":           {"gae": "Dwight Pope",        "sr_ad_mgr": "Virginia Shields"},
+    "Rick Hendrick City Chevrolet":                 {"gae": "Dwight Pope",        "sr_ad_mgr": "Julia Rowe"},
+    "Rick Hendrick Toyota of Fayetteville":         {"gae": "Dwight Pope",        "sr_ad_mgr": "Kim Kirchner"},
+    # Andy Allen
+    "Barbour-Hendrick Honda Greenville":            {"gae": "Andy Allen",         "sr_ad_mgr": "Krystal Hines"},
+    "BMW of Southpoint":                            {"gae": "Andy Allen",         "sr_ad_mgr": "Tyler Marovich"},
+    "Hendrick Cadillac Cary":                       {"gae": "Andy Allen",         "sr_ad_mgr": "Virginia Shields"},
+    "Hendrick Chevrolet Buick GMC Southpoint":      {"gae": "Andy Allen",         "sr_ad_mgr": "Virginia Shields"},
+    "Hendrick Chrysler Jeep FIAT":                  {"gae": "Andy Allen",         "sr_ad_mgr": "Reilly Jackson"},
+    "Hendrick Kia of Cary":                         {"gae": "Andy Allen",         "sr_ad_mgr": "Virginia Shields"},
+    "Hendrick Southpoint Auto Mall":                {"gae": "Andy Allen",         "sr_ad_mgr": "Abby Livingston"},
+    "Mercedes-Benz of Durham":                      {"gae": "Andy Allen",         "sr_ad_mgr": "Mike Judge"},
+    "Porsche Southpoint":                           {"gae": "Andy Allen",         "sr_ad_mgr": "Abby Livingston"},
+    "Reggie Jackson Airport Honda":                 {"gae": "Andy Allen",         "sr_ad_mgr": "Kim Kirchner"},
+    "Stevenson Hendrick Mazda Wilmington":          {"gae": "Andy Allen",         "sr_ad_mgr": "Tim Webster"},
+    "Stevenson-Hendrick Honda Jacksonville":        {"gae": "Andy Allen",         "sr_ad_mgr": "Kim Kirchner"},
+    "Stevenson-Hendrick Honda Wilmington":          {"gae": "Andy Allen",         "sr_ad_mgr": "Krystal Hines"},
+    "Terry Labonte Chevrolet":                      {"gae": "Andy Allen",         "sr_ad_mgr": "Virginia Shields"},
+    # Dana Aderhold
+    "BMW of Murrieta":                              {"gae": "Dana Aderhold",      "sr_ad_mgr": "Abby Livingston"},
+    "Gwinnett Place Honda":                         {"gae": "Dana Aderhold",      "sr_ad_mgr": "Krystal Hines"},
+    "Hendrick Chevrolet":                           {"gae": "Dana Aderhold",      "sr_ad_mgr": "Julia Rowe"},
+    "Hendrick Chrysler Dodge Jeep Ram Hoover":      {"gae": "Dana Aderhold",      "sr_ad_mgr": "Tim Webster"},
+    "Hendrick Subaru":                              {"gae": "Dana Aderhold",      "sr_ad_mgr": "Tim Webster"},
+    "Honda of Newnan":                              {"gae": "Dana Aderhold",      "sr_ad_mgr": "Krystal Hines"},
+    "Mall of Georgia Mazda":                        {"gae": "Dana Aderhold",      "sr_ad_mgr": "Tim Webster"},
+    "Mall of Georgia MINI":                         {"gae": "Dana Aderhold",      "sr_ad_mgr": "Tim Webster"},
+    "Rick Hendrick Buick GMC":                      {"gae": "Dana Aderhold",      "sr_ad_mgr": "Virginia Shields"},
+    "Rick Hendrick Chevrolet of Buford":            {"gae": "Dana Aderhold",      "sr_ad_mgr": "Tim Webster"},
+    "Rick Hendrick Chrysler Dodge Jeep RAM Duluth": {"gae": "Dana Aderhold",      "sr_ad_mgr": "Tim Webster"},
+    # Blake Hoeber
+    "BMW of Kansas City South":                     {"gae": "Blake Hoeber",       "sr_ad_mgr": "Tyler Marovich"},
+    "Hendrick Chevrolet Shawnee Mission":           {"gae": "Blake Hoeber",       "sr_ad_mgr": "Tim Webster"},
+    "Hendrick Lexus Kansas City":                   {"gae": "Blake Hoeber",       "sr_ad_mgr": "Mike Judge"},
+    "Hendrick Lexus Kansas City North":             {"gae": "Blake Hoeber",       "sr_ad_mgr": "Mike Judge"},
+    "Hendrick Toyota Merriam":                      {"gae": "Blake Hoeber",       "sr_ad_mgr": "Kim Kirchner"},
+    # Other GAEs
+    "Audi South Austin":                            {"gae": "Jaye Skidmore",      "sr_ad_mgr": "Tyler Marovich"},
+    "BMW of South Austin":                          {"gae": "Jaye Skidmore",      "sr_ad_mgr": "Tyler Marovich"},
+    "Acura of Pleasanton":                          {"gae": "Lisa Castro",        "sr_ad_mgr": "Mike Judge"},
+    "East Bay BMW":                                 {"gae": "Lisa Castro",        "sr_ad_mgr": "Tyler Marovich"},
+    "Dale Earnhardt Jr. Buick GMC Cadillac":        {"gae": "Brenda Ashley",      "sr_ad_mgr": "Tim Webster"},
+    "Dale Earnhardt Jr. Chevrolet":                 {"gae": "Brenda Ashley",      "sr_ad_mgr": "Tim Webster"},
+    "Darrell Waltrip Buick GMC":                    {"gae": "Jimmy Johnson",      "sr_ad_mgr": "Abby Livingston"},
+    "Darrell Waltrip Honda":                        {"gae": "Jimmy Johnson",      "sr_ad_mgr": "Abby Livingston"},
+    "Darrell Waltrip Subaru":                       {"gae": "Jimmy Johnson",      "sr_ad_mgr": "Abby Livingston"},
+    "Honda Cars of McKinney":                       {"gae": "Chris Sadafsaz",     "sr_ad_mgr": "Krystal Hines"},
+    "Hendrick Volkswagen Frisco":                   {"gae": "Chris Sadafsaz",     "sr_ad_mgr": "Krystal Hines"},
+    "Hendrick Honda Bradenton":                     {"gae": "Rick Castillo",      "sr_ad_mgr": "Krystal Hines"},
+    "Rick Hendrick Chevrolet of Duluth":            {"gae": "Jennifer Carbonell", "sr_ad_mgr": "Tim Webster"},
+    "Volkswagen of Murrieta":                       {"gae": "Manny Sandoval",     "sr_ad_mgr": "Krystal Hines"},
+    "Rick Hendrick Honda":                          {"gae": "",                   "sr_ad_mgr": "Kim Kirchner"},
+    "BMW of McKinney":                              {"gae": "",                   "sr_ad_mgr": "Tyler Marovich"},
+    "Rick Hendrick Jeep Chrysler Dodge RAM North Charleston": {"gae": "",         "sr_ad_mgr": "Virginia Shields"},
+    "Rick Hendrick Dodge Chrysler Jeep RAM Charleston":       {"gae": "",         "sr_ad_mgr": "Virginia Shields"},
+}
+
+
+def get_sam(store_name: str) -> Optional[Dict[str, str]]:
+    """Look up SAM context for a store. Returns {gae, sr_ad_mgr} or None."""
+    return SAM_LOOKUP.get(store_name)
+
+
+def format_triage_report(results: dict, title: str = "Investigation Triage",
+                         show_sams: bool = False) -> str:
+    """Format investigate_stores() output as a readable triage report.
+    show_sams=True: include GAE/Sr. Ad Mgr on each flagged store (internal use only).
+    """
     lines = [f"\n{'─'*60}", f"  {title.upper()}", f"{'─'*60}"]
 
     high = results["high"]
@@ -377,6 +471,12 @@ def format_triage_report(results: dict, title: str = "Investigation Triage") -> 
         lines.append("─" * 40)
         for i, entry in enumerate(bucket, 1):
             lines.append(f"\n  {i}. {entry['store']}  (CCID {entry['ccid']})")
+            if show_sams:
+                sam = get_sam(entry["store"])
+                if sam:
+                    gae = sam.get("gae") or "—"
+                    mgr = sam.get("sr_ad_mgr") or "—"
+                    lines.append(f"     GAE: {gae}  ·  Sr. Ad Mgr: {mgr}")
             seen_scenarios = set()
             for flag in entry["flags"]:
                 snum = flag["scenario"]
