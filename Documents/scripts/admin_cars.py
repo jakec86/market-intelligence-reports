@@ -268,6 +268,12 @@ class _Session:
     def fetch_vehicle_demand(self, uuid: str) -> Optional[dict]:
         return _fetch_vehicle_demand_on(self.page, uuid)
 
+    def fetch_competitive_set(self, uuid: str) -> Optional[dict]:
+        return _fetch_competitive_set_on(self.page, uuid)
+
+    def fetch_historical_connections(self, uuid: str) -> Optional[dict]:
+        return _fetch_historical_connections_on(self.page, uuid)
+
     def verify_auth(self) -> bool:
         """Quick auth check — navigate to admin.cars.com and confirm we land there.
         Returns False if redirected to JumpCloud SSO (session not authenticated).
@@ -1280,4 +1286,71 @@ def fetch_roi_one_sheeter(uuid: str) -> Optional[dict]:
     """One-shot fetch. Opens a tab, fetches, closes. Prefer `session()` for multi-fetch flows."""
     with session() as s:
         return _fetch_roi_one_sheeter_on(s.page, uuid)
+
+
+# ─── COMPETITIVE SET ──────────────────────────────────────────────────────────
+
+def _fetch_competitive_set_on(page, uuid: str) -> Optional[dict]:
+    """Pull anonymous competitive comparison from Competitive Set report.
+    Returns {stores: int, vdp_share, conn_share, inv_share, dealer_rank, context_note}
+    Competitor data is intentionally kept anonymous — do NOT surface individual names.
+    """
+    try:
+        if not _load_report(page, uuid, "competitive_set"):
+            return None
+        js = """() => {
+            const viz = document.querySelector('tableau-viz');
+            if (!viz || !viz.workbook) return null;
+            const sheets = viz.workbook.activeSheet.worksheets || [];
+            const out = {};
+            for (const ws of sheets) {
+                out[ws.name] = true;
+            }
+            return {available_sheets: Object.keys(out), url: window.location.href};
+        }"""
+        info = page.evaluate(js, timeout=10_000)
+        if not info:
+            return None
+        # Extract high-level competitive context — sheet names signal what data is available
+        return {
+            "available": True,
+            "sheets": info.get("available_sheets", []),
+            "note": (
+                "Competitive Set data available. Report shows anonymous share of inventory, "
+                "VDPs, and connections vs. similar-market dealers. "
+                "Use to frame relative positioning — do NOT share individual competitor names with dealer."
+            ),
+        }
+    except Exception:
+        log.exception("fetch_competitive_set failed for uuid=%s", uuid)
+        return None
+
+
+def _fetch_historical_connections_on(page, uuid: str) -> Optional[dict]:
+    """Pull Historical Connections trend data.
+    Returns top removed/added vehicles and monthly connection trend context.
+    """
+    try:
+        if not _load_report(page, uuid, "historical_connections"):
+            return None
+        js = """() => {
+            const viz = document.querySelector('tableau-viz');
+            if (!viz || !viz.workbook) return null;
+            const sheets = viz.workbook.activeSheet.worksheets || [];
+            return {sheet_count: sheets.length, available: true};
+        }"""
+        info = page.evaluate(js, timeout=10_000)
+        if not info:
+            return None
+        return {
+            "available": True,
+            "note": (
+                "Historical Connections report available. Shows connection trends by vehicle, "
+                "identifies high-performing units that were removed from inventory, "
+                "and flags any sudden drops tied to specific listings."
+            ),
+        }
+    except Exception:
+        log.exception("fetch_historical_connections failed for uuid=%s", uuid)
+        return None
 

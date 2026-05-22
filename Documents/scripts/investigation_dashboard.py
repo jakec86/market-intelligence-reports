@@ -36,7 +36,9 @@ from investigation_triggers import (
 )
 from health_analysis import (
     fetch_salesforce, fetch_salesforce_by_ccid, fetch_subscriptions,
-    build_data_context, parse_scores, render_score_bars,
+    build_data_context, build_extended_context,
+    fetch_dealerrater,
+    parse_scores, render_score_bars,
     extract_snapshot_header, run_health_analysis, create_health_doc,
 )
 import admin_cars as _admin_cars
@@ -1495,9 +1497,34 @@ with tab_expiry:
 
 # ═══════════════════════ TAB 4: HEALTH ANALYSIS ══════════════════════════════
 with tab_health:
-    st.subheader("🏥 Dealer Health Analysis")
+    # Mode banner
+    _h_mode_cols = st.columns([3, 2])
+    with _h_mode_cols[0]:
+        if _cdp_ok:
+            st.subheader("🏥 Dealer Health & Growth Analysis")
+        else:
+            st.subheader("🏥 Dealer Health Analysis")
+
+    with _h_mode_cols[1]:
+        h_extended = st.toggle(
+            "🔬 Extended / Auto-Research",
+            value=False,
+            key="h_extended_toggle",
+            help=(
+                "Pulls Competitive Set, Historical Connections, and DealerRater. "
+                "Uses the full Auto-Research analyst prompt — competitive framing, "
+                "market positioning, revenue-impact focus. ~2–3 min."
+            ),
+        )
+
     if _cdp_ok:
-        st.caption("Full Growth Triangle analysis — Salesforce + admin.cars.com + Claude.")
+        if h_extended:
+            st.caption(
+                "**Extended mode** — full competitive + demand + reputation analysis. "
+                "Salesforce · admin.cars.com (all reports + Competitive Set + Historical) · DealerRater · Claude."
+            )
+        else:
+            st.caption("Growth Triangle analysis — Salesforce + admin.cars.com + Claude.")
     else:
         st.caption(
             "**SF-only mode** — click **Connect admin.cars.com** in the sidebar to enable "
@@ -1534,17 +1561,24 @@ with tab_health:
         h_use_sf    = st.checkbox("Salesforce", value=True, key="h_sf")
         h_use_admin = st.checkbox(
             "admin.cars.com" + (" ✓" if _cdp_ok else " (connect in sidebar →)"),
-            value=_cdp_ok,          # on by default when authenticated
+            value=_cdp_ok,
             disabled=not _cdp_ok,
             key="h_admin",
         )
     with h_src_col2:
         h_use_wid = st.checkbox("Walk-in Demand", value=_cdp_ok, disabled=not _cdp_ok or not h_use_admin, key="h_wid")
         h_use_vd  = st.checkbox("Vehicle Demand", value=_cdp_ok, disabled=not _cdp_ok or not h_use_admin, key="h_vd")
+    if h_extended and h_use_admin:
+        _ext_col1, _ext_col2 = st.columns(2)
+        h_use_competitive  = _ext_col1.checkbox("Competitive Set",          value=True,  key="h_comp",  disabled=not _cdp_ok)
+        h_use_historical   = _ext_col1.checkbox("Historical Connections",   value=True,  key="h_hist",  disabled=not _cdp_ok)
+        h_use_dealerrater  = _ext_col2.checkbox("DealerRater",              value=True,  key="h_dr")
+    else:
+        h_use_competitive = h_use_historical = h_use_dealerrater = False
 
-    # Run when button clicked OR when Enter was pressed in the input (auto_run flag)
+    btn_label = "Run Extended Analysis" if h_extended else "Run Health Analysis"
     _auto_run = st.session_state.pop("health_auto_run", False)
-    run_health = st.button("Run Health Analysis", type="primary", key="run_health",
+    run_health = st.button(btn_label, type="primary", key="run_health",
                             disabled=not health_dealer.strip()) or _auto_run
 
     if run_health and health_dealer.strip():
@@ -1554,6 +1588,7 @@ with tab_health:
         h_effective_ccid = inp if inp.isdigit() else None
         h_sf_data = h_sub_data = None
         h_perf = h_rep = h_mkt = h_lo = h_si = h_roi = h_wid = h_vd = None
+        h_competitive = h_historical = h_dealerrater_data = None
         h_source_summary = []
 
         h_prog = st.empty()
@@ -1630,24 +1665,58 @@ with tab_health:
                             _h_progress("Pulling Vehicle Demand…")
                             h_vd = _admin.fetch_vehicle_demand(_uuid)
                             h_source_summary.append("Vehicle Demand: " + ("available" if h_vd else "not available"))
+                        # Extended mode: Competitive Set + Historical Connections
+                        if h_use_competitive:
+                            _h_progress("Pulling Competitive Set…")
+                            h_competitive = _admin.fetch_competitive_set(_uuid)
+                            if h_competitive and h_competitive.get("available"):
+                                h_source_summary.append("Competitive Set: available (anonymous)")
+                        if h_use_historical:
+                            _h_progress("Pulling Historical Connections…")
+                            h_historical = _admin.fetch_historical_connections(_uuid)
+                            if h_historical and h_historical.get("available"):
+                                h_source_summary.append("Historical Connections: available")
                     else:
                         h_source_summary.append("admin.cars.com: UUID not found")
             except Exception as _e:
                 st.warning(f"admin.cars.com skipped ({type(_e).__name__}: {str(_e)[:120]}). Proceeding with Salesforce data.")
 
-        _h_progress("Generating health snapshot…")
-        data_ctx = build_data_context(
-            dealer_name=h_dealer_name, sf_data=h_sf_data,
-            perf_data=h_perf, rep_data=h_rep, mkt_data=h_mkt,
-            sub_data=h_sub_data, lo_data=h_lo, si_data=h_si,
-            roi_data=h_roi, wid_data=h_wid, vd_data=h_vd,
-            use_prev_month=h_use_prev,
-        )
+        # DealerRater (no Chrome needed — HTTP fetch)
+        if h_use_dealerrater and h_dealer_name:
+            _h_progress("Fetching DealerRater…")
+            h_dealerrater_data = fetch_dealerrater(h_dealer_name, h_effective_ccid or "")
+            if h_dealerrater_data:
+                h_source_summary.append(f"DealerRater: {h_dealerrater_data.get('rating')}★ ({h_dealerrater_data.get('review_count', '?')} reviews)")
+            else:
+                h_source_summary.append("DealerRater: not found")
+
+        _h_progress("Generating analysis…" if h_extended else "Generating health snapshot…")
+        if h_extended:
+            data_ctx = build_extended_context(
+                dealer_name=h_dealer_name, sf_data=h_sf_data,
+                perf_data=h_perf, rep_data=h_rep, mkt_data=h_mkt,
+                sub_data=h_sub_data, lo_data=h_lo, si_data=h_si,
+                roi_data=h_roi, wid_data=h_wid, vd_data=h_vd,
+                competitive_data=h_competitive,
+                historical_data=h_historical,
+                dealerrater_data=h_dealerrater_data,
+                use_prev_month=h_use_prev,
+            )
+        else:
+            data_ctx = build_data_context(
+                dealer_name=h_dealer_name, sf_data=h_sf_data,
+                perf_data=h_perf, rep_data=h_rep, mkt_data=h_mkt,
+                sub_data=h_sub_data, lo_data=h_lo, si_data=h_si,
+                roi_data=h_roi, wid_data=h_wid, vd_data=h_vd,
+                use_prev_month=h_use_prev,
+            )
         h_prog.empty()
 
         period_label = _hpl if h_use_prev else _hcl
-        with st.spinner("Generating health snapshot… (~90s)"):
-            h_response = run_health_analysis(h_dealer_name, data_ctx, period_label)
+        spinner_msg = "Running extended analysis… (~2–3 min)" if h_extended else "Generating health snapshot… (~90s)"
+        with st.spinner(spinner_msg):
+            h_response = run_health_analysis(h_dealer_name, data_ctx, period_label,
+                                             extended=h_extended)
 
         if h_response.startswith("ERROR:"):
             st.error(h_response)
@@ -1659,6 +1728,7 @@ with tab_health:
                 "perf_data": h_perf, "rep_data": h_rep, "mkt_data": h_mkt,
                 "lo_data": h_lo, "wid_data": h_wid, "vd_data": h_vd,
                 "source_summary": h_source_summary,
+                "extended": h_extended,
             }
 
         if h_source_summary:
@@ -1668,6 +1738,14 @@ with tab_health:
     # Show results
     if "health_result" in st.session_state:
         h_res = st.session_state["health_result"]
+
+        if h_res.get("extended"):
+            st.markdown(
+                '<div style="background:linear-gradient(90deg,#5B2D8E,#00A88E);color:white;'
+                'padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;'
+                'display:inline-block;margin-bottom:8px;">🔬 Extended Analysis — Auto-Research Mode</div>',
+                unsafe_allow_html=True,
+            )
 
         h_c1, h_c2 = st.columns([1, 1])
         if h_c1.button("📄 Export to Google Doc", key="h_export_doc"):

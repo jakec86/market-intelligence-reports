@@ -423,16 +423,202 @@ def render_score_bars(scores: list) -> str:
 
 # ─── CLAUDE ANALYSIS ──────────────────────────────────────────────────────────
 
-def run_health_analysis(dealer_name: str, data_context: str, period_label: str) -> str:
-    """Run Claude CLI health snapshot. Returns raw response text."""
+# ─── EXTENDED SYSTEM PROMPT (Auto-Research merge) ─────────────────────────────
+
+SYSTEM_PROMPT_EXTENDED = """You are a senior Cars Commerce dealer growth analyst. Your job: deliver insights that drive measurable revenue impact. You are a consultative strategist — not a report printer. Every insight must answer: "So what? What should the dealer do differently — and what's the dollar impact?"
+
+## Dealer Growth Triangle
+
+    Pricing Position
+       /        \\
+      /          \\
+Days on Lot ---- Market Share
+
+- Right-priced inventory → earns badges → drives VDPs → generates leads → wins share
+- GROI = Gross % of Sale × Turn Rate. Target: minimum 120.
+
+## Required Output Structure
+
+**REQUIRED — start your response with this block:**
+
+---SCORES---
+Inventory Health|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key driver phrase>
+Pricing Position|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key driver phrase>
+Engagement (VDPs)|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key driver phrase>
+Reputation|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key driver phrase>
+Lead Performance|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key driver phrase>
+Competitive Position|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key driver phrase>
+Marketplace Investment|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key driver phrase>
+---END SCORES---
+
+Then continue with the full analysis:
+
+### 📊 Dealer Growth Analysis — [Dealer Name]
+
+---
+
+### 🔑 Key Findings
+Max 5 bullets. Bold headline (≤8 words) + one data point each.
+- **🟢 [Positive]** — metric: value
+- **🟡 [Watch]** — metric: value
+- **🔴 [Risk]** — metric: value
+
+---
+
+### 🏆 Competitive Position
+- How does this dealer rank vs. the local market? (use Competitive Set data if available, otherwise infer from badge %, pricing, and reputation vs. benchmarks)
+- Share of voice assessment — are they winning or losing visibility vs. market peers?
+- One specific competitive advantage and one vulnerability. Frame in revenue terms.
+
+---
+
+### 🚀 Growth Opportunities
+Up to 4 opportunities ranked by dollar impact:
+
+**1. [Action headline]**
+> **Do:** [specific vehicle / stock# / price move]
+> **Lift:** [$ revenue, +X VDPs, X badge upgrades, X leads/mo]
+> **Signal:** [metric that confirms success]
+
+---
+
+### 📈 Market Demand & Competitive Intelligence
+- Top 3 DMA demand signals (what shoppers are searching for vs. what's on lot)
+- Competitive pricing position: is this dealer above/at/below market?
+- If Competitive Set data available: share of inventory, VDPs, connections vs. peers
+- One inventory acquisition opportunity (make/model gap vs. market demand)
+
+---
+
+### 📣 Reputation & Lead Quality
+- Rating vs. DMA benchmark and national OEM avg
+- Review velocity and trend (is momentum building or stalling?)
+- Lead quality signals: response rate, cost/lead vs. peers, lead-to-connection ratio
+- If DealerRater data available: include review count, recent trend, any unresolved negatives
+
+---
+
+### ⚠️ Risks
+Bullets only. Bold metric, one-line risk + data point.
+
+---
+
+### 📋 Data Gaps
+DMS connectivity only. Skip if connected.
+
+## Analyst Rules
+
+- **Inventory metric = Avg Daily Vehicles**, never Unique VINs (inflated by wholesales/trades)
+- **Badge language = direct action**: "Reduce [YMMT stock#] by $X to earn [badge]"
+- **Revenue-frame everything** — "$X/mo" beats "down 7%"
+- **Competitive data must be anonymous** — never name competitor dealerships to the dealer
+- **Triangulate** — cross-reference ≥2 sources before stating a finding as fact
+- **Benchmarks**: Turn <30 days used, Aging <15% over 60d, GROI 120+, Reputation 4.5+, Response <5 min
+- **Marketplace products matter** — tie every growth opportunity to a specific product tier
+- SRPs not a focus — do not build findings around them"""
+
+
+def fetch_dealerrater(dealer_name: str, ccid: str = "") -> Optional[dict]:
+    """
+    Fetch DealerRater data via HTTP — no Playwright needed.
+    Returns {rating, review_count, recommended_pct, recent_reviews, url} or None.
+    """
+    import urllib.request, urllib.parse, re as _re3
+    search_q = urllib.parse.quote(dealer_name.replace("'", ""))
+    try:
+        req = urllib.request.Request(
+            f"https://www.dealerrater.com/search/?q={search_q}&distance=50",
+            headers={"User-Agent": "Mozilla/5.0 (compatible; research/1.0)"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as r:
+            html = r.read().decode("utf-8", errors="replace")
+
+        # Extract first result's rating and review count
+        rating_m  = _re3.search(r'"ratingValue"\s*:\s*"?([\d.]+)"?', html)
+        count_m   = _re3.search(r'"reviewCount"\s*:\s*"?(\d+)"?', html)
+        rec_m     = _re3.search(r'(\d+)%?\s*(?:of customers)?\s*recommend', html, _re3.I)
+        url_m     = _re3.search(r'href="(https://www\.dealerrater\.com/dealer/[^"]+)"', html)
+
+        if not rating_m:
+            return None
+
+        return {
+            "rating":           float(rating_m.group(1)),
+            "review_count":     int(count_m.group(1)) if count_m else None,
+            "recommended_pct":  int(rec_m.group(1)) if rec_m else None,
+            "url":              url_m.group(1) if url_m else f"https://www.dealerrater.com/search/?q={search_q}",
+        }
+    except Exception:
+        return None
+
+
+def build_extended_context(
+    dealer_name: str,
+    sf_data, perf_data, rep_data, mkt_data,
+    sub_data=None, lo_data=None, si_data=None,
+    roi_data=None, wid_data=None, vd_data=None,
+    competitive_data=None, historical_data=None,
+    dealerrater_data=None,
+    use_prev_month: bool = False,
+) -> str:
+    """Extends build_data_context() with competitive, historical, and DealerRater data."""
+    # Start with the standard context
+    base = build_data_context(
+        dealer_name=dealer_name, sf_data=sf_data,
+        perf_data=perf_data, rep_data=rep_data, mkt_data=mkt_data,
+        sub_data=sub_data, lo_data=lo_data, si_data=si_data,
+        roi_data=roi_data, wid_data=wid_data, vd_data=vd_data,
+        use_prev_month=use_prev_month,
+    )
+    parts = [base]
+
+    if competitive_data and competitive_data.get("available"):
+        parts.append(
+            "\n## Competitive Set (admin.cars.com — anonymous)\n"
+            f"{competitive_data.get('note', '')}\n"
+            "Sheets available: " + ", ".join(competitive_data.get("sheets", [])) +
+            "\nUse this data to frame relative market position. Do NOT name individual competitors."
+        )
+
+    if historical_data and historical_data.get("available"):
+        parts.append(
+            "\n## Historical Connections (admin.cars.com)\n"
+            f"{historical_data.get('note', '')}\n"
+            "Use to identify which vehicles drove connections historically and flag any "
+            "inventory changes correlated with the current connection decline."
+        )
+
+    if dealerrater_data:
+        rating = dealerrater_data.get("rating")
+        count  = dealerrater_data.get("review_count")
+        rec    = dealerrater_data.get("recommended_pct")
+        url    = dealerrater_data.get("url", "")
+        parts.append(
+            "\n## DealerRater\n"
+            + (f"- Overall Rating: {rating}★" if rating else "")
+            + (f" ({count:,} reviews)" if count else "")
+            + (f"\n- Recommended by: {rec}%" if rec else "")
+            + (f"\n- Source: {url}" if url else "")
+        )
+
+    return "\n".join(parts)
+
+
+def run_health_analysis(dealer_name: str, data_context: str, period_label: str,
+                        extended: bool = False) -> str:
+    """Run Claude CLI health/growth analysis. Returns raw response text.
+    extended=True uses the merged Auto-Research analyst prompt with competitive framing.
+    """
+    prompt_text = SYSTEM_PROMPT_EXTENDED if extended else SYSTEM_PROMPT
+    task_label  = "dealer growth analysis" if extended else "dealer health snapshot"
     env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        f.write(SYSTEM_PROMPT)
+        f.write(prompt_text)
         sys_path = f.name
     try:
         result = subprocess.run(
             ["claude", "-p",
-             f"Generate a dealer health snapshot for this dealer. Report period: {period_label}\n\n{data_context}",
+             f"Generate a {task_label} for this dealer. Report period: {period_label}\n\n{data_context}",
              "--system-prompt-file", sys_path,
              "--model", "claude-sonnet-4-6",
              "--output-format", "text",
