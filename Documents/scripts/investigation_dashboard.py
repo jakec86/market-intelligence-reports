@@ -186,6 +186,12 @@ GROUP_OPTIONS = {
     "Asbury — Herb Chambers":        "Herb Chambers MA Group",
 }
 
+# Group-level admin.cars.com base URLs (dealer_groups/{uuid}/reports/{slug})
+# These work for group-scoped reports regardless of individual store UUID
+GROUP_ADMIN_BASES = {
+    "Atlantic Coast Automotive MA Group": "https://admin.cars.com/dealer_groups/b5bfa8c4-9e2e-454e-a56a-5a1057a58f58/reports",
+}
+
 # Keys treated as Asbury sub-groups for "Full Book" display consolidation
 ASBURY_FILTER_VALS = {
     "Asbury", "Larry Miller", "Koons Automotive MA Group", "Herb Chambers MA Group"
@@ -716,77 +722,122 @@ def _admin_links(ccid: str, flags: Optional[List] = None) -> str:
     return f'<div class="qlink">{"".join(links)}</div>'
 
 
-def _next_steps_panel(ccid: str, store_name: str, flags: Optional[List] = None) -> None:
+def _resolve_uuid_live(ccid: str) -> Optional[str]:
+    """Try to resolve UUID from admin.cars.com if Chrome is available. Caches result."""
+    if not ccid:
+        return None
+    existing = _get_uuid(ccid)
+    if existing:
+        return existing
+    # Only attempt if Chrome is connected
+    try:
+        import urllib.request as _ur
+        _ur.urlopen("http://localhost:9223/json/version", timeout=2)
+    except Exception:
+        return None
+    try:
+        with _admin_cars.session(restart=False) as s:
+            uuid = s.resolve_uuid(ccid)
+        if uuid:
+            _save_uuid(ccid, uuid)
+            return uuid
+    except Exception:
+        pass
+    return None
+
+
+def _next_steps_panel(ccid: str, store_name: str, flags: Optional[List] = None,
+                      maj_cust: str = "") -> None:
     """
-    Render the Next Steps section in Tab 2 Store Brief.
-    Two tracks:
-      1. Dive In  — direct admin.cars.com report links (scenario-aware)
-      2. Go Deeper — analysis workflow triggers
+    Render Recommended Next Steps below talking points in Tab 2.
+    Always shows direct links — resolves UUID live if not cached and Chrome is up.
     """
-    uuid = _get_uuid(ccid)
-    base = f"https://admin.cars.com/dealers/{uuid}/reports" if uuid else None
-    search = f"https://admin.cars.com/dealers/all/reports?query={ccid}"
+    # Resolve UUID: cached → live resolution → group fallback → CCID search
+    uuid = _resolve_uuid_live(ccid)
+    store_base  = f"https://admin.cars.com/dealers/{uuid}/reports" if uuid else None
+    group_base  = GROUP_ADMIN_BASES.get(maj_cust)
+    search_url  = f"https://admin.cars.com/dealers/all/reports?query={ccid}"
+
+    def _url(slug: str) -> str:
+        if store_base:
+            return f"{store_base}/{slug}"
+        if group_base:
+            return f"{group_base}/{slug}"
+        return search_url
 
     st.divider()
-    st.markdown("**📊 Recommended Reports**")
 
-    # ── Listings Optimizer ────────────────────────────────────────────────
-    lo_url  = f"{base}/listings_optimizer"  if base else search
-    lo_note = "Best Match tab · badge distribution · vehicles within $500 of next tier"
-    st.markdown(
-        f'<div class="qlink" style="margin-bottom:8px;">'
-        f'<a href="{lo_url}" target="_blank">🏷️ Listings Optimizer</a>'
-        f'<span style="color:#6b7280;font-size:11px;margin-left:8px;">{lo_note}</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+    # ── Recommended Reports ───────────────────────────────────────────────
+    st.markdown("**📊 Recommended Next Steps**")
 
-    # ── Demand Signals — Price Comparison ────────────────────────────────
-    ds_url  = f"{base}/demand_signals" if base else search
-    ds_note = "Price Comparison tab · competitive position vs DMA · inventory vs demand mix"
-    st.markdown(
-        f'<div class="qlink" style="margin-bottom:8px;">'
-        f'<a href="{ds_url}" target="_blank">📈 Demand Signals — Price Comparison</a>'
-        f'<span style="color:#6b7280;font-size:11px;margin-left:8px;">{ds_note}</span>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+    REPORT_CARDS = [
+        {
+            "slug":  "listings_optimizer",
+            "label": "🏷️ Listings Optimizer",
+            "note":  "Best Match · badge distribution · vehicles within $500 of next badge tier",
+            "always": True,
+        },
+        {
+            "slug":  "demand_signals",
+            "label": "📈 Demand Signals — Price Comparison",
+            "note":  "Competitive pricing position vs DMA · inventory mix vs market demand",
+            "always": True,
+        },
+    ]
 
-    # ── Scenario-specific additional reports ────────────────────────────
-    extra_shown = set()
+    # Add scenario-specific extras (de-duplicated, max 2)
+    shown_extras: set = set()
     if flags:
         for flag in sorted(flags, key=lambda f: (0 if f["severity"] == "HIGH" else 1)):
             for label, slug in SCENARIO_REPORTS.get(flag["scenario"], []):
-                if slug in ("listings_optimizer", "demand_signals"):
-                    continue  # already shown above
-                if slug not in extra_shown:
-                    url = f"{base}/{slug}" if base else search
-                    st.markdown(
-                        f'<div class="qlink" style="margin-bottom:6px;">'
-                        f'<a href="{url}" target="_blank">→ {label}</a>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-                    extra_shown.add(slug)
-            if len(extra_shown) >= 2:
+                if slug in ("listings_optimizer", "demand_signals") or slug in shown_extras:
+                    continue
+                REPORT_CARDS.append({
+                    "slug":  slug,
+                    "label": f"→ {label}",
+                    "note":  "",
+                    "always": False,
+                })
+                shown_extras.add(slug)
+            if len(shown_extras) >= 2:
                 break
 
-    if not uuid:
-        st.caption(
-            "💡 Deep links activate automatically after running Health Analysis for this store. "
-            "Currently linking to admin.cars.com search by CCID."
+    for card in REPORT_CARDS:
+        url = _url(card["slug"])
+        is_direct = bool(store_base or group_base)
+        link_indicator = "" if is_direct else " 🔍"
+        note_html = (
+            f'<span style="color:#6b7280;font-size:11px;margin-left:8px;">{card["note"]}</span>'
+            if card["note"] else ""
+        )
+        st.markdown(
+            f'<div style="margin-bottom:10px;padding:8px 12px;background:white;'
+            f'border:1px solid #ede9fb;border-radius:8px;">'
+            f'<a href="{url}" target="_blank" style="font-weight:600;color:#5B2D8E;'
+            f'text-decoration:none;">{card["label"]}{link_indicator}</a>'
+            f'{note_html}'
+            f'</div>',
+            unsafe_allow_html=True,
         )
 
-    # ── Go Deeper ────────────────────────────────────────────────────────
+    if not uuid and not group_base:
+        st.caption(
+            "🔍 Links open admin.cars.com search — direct report links activate after "
+            "running Health Analysis for this store (resolves and caches the UUID)."
+        )
+
+    # ── Go Deeper ─────────────────────────────────────────────────────────
     st.markdown("**🔬 Go Deeper**")
     col_a, col_b = st.columns(2)
     if col_a.button("🏥 Full Health Analysis", key=f"ns_health_{ccid}",
-                     help="Run the full Growth Triangle analysis — Salesforce + admin.cars.com + Claude"):
+                     use_container_width=True,
+                     help="Growth Triangle snapshot — Salesforce + admin.cars.com + Claude"):
         st.session_state["health_prefill"] = ccid or store_name
         st.session_state["health_auto_run"] = True
 
     if col_b.button("🔎 Auto-Research Deep Dive", key=f"ns_research_{ccid}",
-                     help="Trigger the /auto-research workflow for a full market + demand analysis"):
+                     use_container_width=True,
+                     help="Full market + demand analysis via /auto-research"):
         st.session_state["autorun_research"] = store_name or ccid
 
 
@@ -1185,9 +1236,14 @@ with tab_brief:
                 tp_text = generate_talking_points(store_name, store_rec, all_flags, sf_acct)
 
             st.session_state["store_brief"] = {
-                "store": store_name, "ccid": ccid,
-                "flags": all_flags, "trend": trend,
-                "sf": sf_acct, "tp": tp_text, "metrics": store_rec,
+                "store":    store_name,
+                "ccid":     ccid,
+                "flags":    all_flags,
+                "trend":    trend,
+                "sf":       sf_acct,
+                "tp":       tp_text,
+                "metrics":  store_rec,
+                "maj_cust": store_rec.get("Maj Cust Name", ""),
             }
 
     if "store_brief" in st.session_state:
@@ -1276,6 +1332,7 @@ with tab_brief:
             ccid=brief.get("ccid", ""),
             store_name=brief.get("store", ""),
             flags=brief.get("flags"),
+            maj_cust=brief.get("maj_cust", ""),
         )
 
         st.markdown("</div>", unsafe_allow_html=True)
