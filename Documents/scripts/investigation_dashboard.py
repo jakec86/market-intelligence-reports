@@ -734,7 +734,7 @@ with st.sidebar:
     focus_scenarios = FOCUS_OPTIONS[focus_label]
 
     show_expirations = st.checkbox("Show expiring products (SF)", value=True)
-    expiry_days = st.slider("Expiration window (days)", 30, 180, 90) if show_expirations else 90
+    expiry_days = st.slider("Timeframe (days)", 30, 120, 30) if show_expirations else 30
 
     st.divider()
     run = st.button("Run Scan", type="primary", use_container_width=True)
@@ -1338,13 +1338,19 @@ with tab_health:
     # Auto-populate from Tab 2 "Run Full Health Analysis" button
     health_prefill = st.session_state.pop("health_prefill", "")
 
+    def _health_enter():
+        """Called when user presses Enter in the input — auto-triggers the analysis."""
+        if st.session_state.get("health_dealer_input", "").strip():
+            st.session_state["health_auto_run"] = True
+
     h_col1, h_col2 = st.columns([3, 1])
     with h_col1:
         health_dealer = st.text_input(
-            "Dealer name or CCID",
+            "Dealer name or CCID — press Enter to run",
             value=health_prefill,
             placeholder="e.g. Nalley Lexus Galleria or 109754",
             key="health_dealer_input",
+            on_change=_health_enter,
         )
     with h_col2:
         import datetime as _hdt
@@ -1367,8 +1373,10 @@ with tab_health:
         h_use_wid = st.checkbox("Walk-in Demand", value=_cdp_ok, disabled=not _cdp_ok or not h_use_admin, key="h_wid")
         h_use_vd  = st.checkbox("Vehicle Demand", value=_cdp_ok, disabled=not _cdp_ok or not h_use_admin, key="h_vd")
 
+    # Run when button clicked OR when Enter was pressed in the input (auto_run flag)
+    _auto_run = st.session_state.pop("health_auto_run", False)
     run_health = st.button("Run Health Analysis", type="primary", key="run_health",
-                            disabled=not health_dealer.strip())
+                            disabled=not health_dealer.strip()) or _auto_run
 
     if run_health and health_dealer.strip():
         inp = health_dealer.strip()
