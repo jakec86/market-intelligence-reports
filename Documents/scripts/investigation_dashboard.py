@@ -637,11 +637,14 @@ def _days_left(expiry_rec: Dict) -> int:
         return 999
 
 
+_UUID_CACHE_PATH = os.path.expanduser("~/.claude/uuid_cache.json")
+
+
 def _get_uuid(ccid: str) -> Optional[str]:
     """Look up cached admin.cars.com UUID for a CCID."""
     for cache_path in [
         os.path.expanduser("~/.claude/aca_uuid_cache.json"),
-        os.path.expanduser("~/.claude/uuid_cache.json"),
+        _UUID_CACHE_PATH,
     ]:
         try:
             with open(cache_path) as f:
@@ -651,6 +654,20 @@ def _get_uuid(ccid: str) -> Optional[str]:
         except Exception:
             pass
     return None
+
+
+def _save_uuid(ccid: str, uuid: str) -> None:
+    """Persist a CCID → UUID mapping so deep links activate on next load."""
+    try:
+        cache = {}
+        if os.path.exists(_UUID_CACHE_PATH):
+            with open(_UUID_CACHE_PATH) as f:
+                cache = json.load(f)
+        cache[ccid] = uuid
+        with open(_UUID_CACHE_PATH, "w") as f:
+            json.dump(cache, f)
+    except Exception:
+        pass
 
 
 def _admin_links(ccid: str, flags: Optional[List] = None) -> str:
@@ -697,6 +714,80 @@ def _admin_links(ccid: str, flags: Optional[List] = None) -> str:
         )
 
     return f'<div class="qlink">{"".join(links)}</div>'
+
+
+def _next_steps_panel(ccid: str, store_name: str, flags: Optional[List] = None) -> None:
+    """
+    Render the Next Steps section in Tab 2 Store Brief.
+    Two tracks:
+      1. Dive In  — direct admin.cars.com report links (scenario-aware)
+      2. Go Deeper — analysis workflow triggers
+    """
+    uuid = _get_uuid(ccid)
+    base = f"https://admin.cars.com/dealers/{uuid}/reports" if uuid else None
+    search = f"https://admin.cars.com/dealers/all/reports?query={ccid}"
+
+    st.divider()
+    st.markdown("**📊 Recommended Reports**")
+
+    # ── Listings Optimizer ────────────────────────────────────────────────
+    lo_url  = f"{base}/listings_optimizer"  if base else search
+    lo_note = "Best Match tab · badge distribution · vehicles within $500 of next tier"
+    st.markdown(
+        f'<div class="qlink" style="margin-bottom:8px;">'
+        f'<a href="{lo_url}" target="_blank">🏷️ Listings Optimizer</a>'
+        f'<span style="color:#6b7280;font-size:11px;margin-left:8px;">{lo_note}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Demand Signals — Price Comparison ────────────────────────────────
+    ds_url  = f"{base}/demand_signals" if base else search
+    ds_note = "Price Comparison tab · competitive position vs DMA · inventory vs demand mix"
+    st.markdown(
+        f'<div class="qlink" style="margin-bottom:8px;">'
+        f'<a href="{ds_url}" target="_blank">📈 Demand Signals — Price Comparison</a>'
+        f'<span style="color:#6b7280;font-size:11px;margin-left:8px;">{ds_note}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Scenario-specific additional reports ────────────────────────────
+    extra_shown = set()
+    if flags:
+        for flag in sorted(flags, key=lambda f: (0 if f["severity"] == "HIGH" else 1)):
+            for label, slug in SCENARIO_REPORTS.get(flag["scenario"], []):
+                if slug in ("listings_optimizer", "demand_signals"):
+                    continue  # already shown above
+                if slug not in extra_shown:
+                    url = f"{base}/{slug}" if base else search
+                    st.markdown(
+                        f'<div class="qlink" style="margin-bottom:6px;">'
+                        f'<a href="{url}" target="_blank">→ {label}</a>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                    extra_shown.add(slug)
+            if len(extra_shown) >= 2:
+                break
+
+    if not uuid:
+        st.caption(
+            "💡 Deep links activate automatically after running Health Analysis for this store. "
+            "Currently linking to admin.cars.com search by CCID."
+        )
+
+    # ── Go Deeper ────────────────────────────────────────────────────────
+    st.markdown("**🔬 Go Deeper**")
+    col_a, col_b = st.columns(2)
+    if col_a.button("🏥 Full Health Analysis", key=f"ns_health_{ccid}",
+                     help="Run the full Growth Triangle analysis — Salesforce + admin.cars.com + Claude"):
+        st.session_state["health_prefill"] = ccid or store_name
+        st.session_state["health_auto_run"] = True
+
+    if col_b.button("🔎 Auto-Research Deep Dive", key=f"ns_research_{ccid}",
+                     help="Trigger the /auto-research workflow for a full market + demand analysis"):
+        st.session_state["autorun_research"] = store_name or ccid
 
 
 # ─── PAGE SETUP ───────────────────────────────────────────────────────────────
@@ -1103,6 +1194,15 @@ with tab_brief:
         brief = st.session_state["store_brief"]
         sf = brief.get("sf") or {}
 
+        # Handle Auto-Research request from Next Steps panel
+        _ar_store = st.session_state.pop("autorun_research", None)
+        if _ar_store:
+            st.info(
+                f"**Auto-Research requested for {_ar_store}.**  \n"
+                f"Run this in Claude Code to start the full deep dive:  \n"
+                f"`/auto-research {_ar_store}`"
+            )
+
         st.markdown(
             f'<div class="brief-card">',
             unsafe_allow_html=True,
@@ -1159,13 +1259,6 @@ with tab_brief:
         else:
             st.success("No active flags — store is performing well.")
 
-        # Scenario-aware quick links
-        st.markdown(_admin_links(brief["ccid"], flags=brief.get("flags")), unsafe_allow_html=True)
-
-        if st.button("🏥 Run Full Health Analysis →", key="brief_to_health"):
-            st.session_state["health_prefill"] = brief.get("store", brief.get("ccid", ""))
-            st.session_state["active_tab"] = "health"
-
         # Talking points
         if brief["tp"]:
             st.divider()
@@ -1177,6 +1270,13 @@ with tab_brief:
                         f'<div class="tp-block"><div class="tp-num">{i}</div>{clean}</div>',
                         unsafe_allow_html=True,
                     )
+
+        # Next steps — recommended reports + deeper analysis options
+        _next_steps_panel(
+            ccid=brief.get("ccid", ""),
+            store_name=brief.get("store", ""),
+            flags=brief.get("flags"),
+        )
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -1437,6 +1537,8 @@ with tab_health:
             try:
                 with _admin_cars.session(restart=False) as _admin:
                     _uuid = _admin.resolve_uuid(h_effective_ccid)
+                    if _uuid and h_effective_ccid:
+                        _save_uuid(h_effective_ccid, _uuid)  # deep links activate after first visit
                     if _uuid:
                         for _report, _fetch, _label in [
                             ("Performance Trends", _admin.fetch_performance_trends,
