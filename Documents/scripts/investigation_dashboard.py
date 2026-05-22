@@ -37,7 +37,7 @@ from investigation_triggers import (
 from health_analysis import (
     fetch_salesforce, fetch_salesforce_by_ccid, fetch_subscriptions,
     build_data_context, parse_scores, render_score_bars,
-    run_health_analysis, create_health_doc,
+    extract_snapshot_header, run_health_analysis, create_health_doc,
 )
 import admin_cars as _admin_cars
 
@@ -1474,10 +1474,17 @@ with tab_health:
                 inp = h_res["sf_data"][0]["CCID__c"]
             st.session_state["brief_prefill"] = inp
 
+        _, _h_full = parse_scores(h_res["analysis"])
+        _h_header, _h_narrative = extract_snapshot_header(_h_full)
+
+        # Header first, then score bars, then narrative
+        if _h_header:
+            st.markdown(_re.sub(r'^###\s*', '## ', _h_header))
+
         _h_scores = h_res.get("scores", [])
         if _h_scores:
             st.markdown(render_score_bars(_h_scores), unsafe_allow_html=True)
-        _, _h_narrative = parse_scores(h_res["analysis"])
+
         st.markdown(_re.sub(r'\$(?!\$)', r'\\$', _h_narrative))
 
         with st.expander("Raw Salesforce & Subscription Data", expanded=False):

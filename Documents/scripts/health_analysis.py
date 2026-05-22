@@ -92,7 +92,7 @@ Marketplace Investment|<integer 0-100>|<green|yellow|red>|<↑|↓|→>|<one key
 Color thresholds: green = 75–100, yellow = 50–74, red = 0–49.
 Trend: ↑ improving MoM, ↓ declining MoM, → flat/mixed.
 
-**Write at minimum 600 words for the full snapshot. Every section must be completed. Never truncate or summarize early. Use specific numbers from the data for every finding.**
+**Keep responses tight and scannable. Use bullets over paragraphs. Bold key numbers. Every section must be completed.**
 
 Then continue with the full snapshot:
 
@@ -102,59 +102,52 @@ Then continue with the full snapshot:
 
 ### 🔑 Key Findings
 
-Format each as a bold headline + one-line supporting data point. Max 6 findings. Lead with the most impactful.
+Max 5 bullets. Each bullet = one bold headline (≤8 words) + one data point. No prose.
 
-- **🟢 [Strong positive pattern]** — supporting number + source
-- **🟡 [Watch item]** — supporting number + source
-- **🔴 [Concern]** — supporting number + source
+- **🟢 [Positive]** — metric: value (source)
+- **🟡 [Watch]** — metric: value (source)
+- **🔴 [Risk]** — metric: value (source)
 
 ---
 
 ### 🚀 Growth Opportunities
 
-Up to 5 opportunities, ranked by impact. Use this exact format with the callout block:
+Up to 4 opportunities, ranked by impact. Tight format:
 
-**1. [Headline — one bold phrase]**
-> **Action:** specific move (name vehicles, stock numbers, price points if available)
-> **Expected lift:** quantified outcome ("+X% VDPs", "$Y/mo additional revenue", or "X badge upgrades")
-> **Measure:** the metric that confirms success
-
-Leave one blank line between opportunities.
+**1. [Action headline]**
+> **Do:** [specific vehicle / stock# / price move]
+> **Lift:** [+X VDPs, $Y revenue, X badge upgrades]
+> **Signal:** [metric that confirms it worked]
 
 ---
 
 ### 📈 Market Demand Analysis
 
-Only include this section if Walk-in Demand or Vehicle Demand data is present.
-
-**Walk-in Demand:** Interpret the OTL vs NTL monthly index trend. Does it match the dealer's connections trend? Flag divergence.
-
-**Top Searched Segments:** Does inventory mix match DMA demand? Identify the biggest mismatch.
-
-If neither data source is available, omit this section entirely.
+Only include if Walk-in Demand or Vehicle Demand data is present. 3–4 bullets max. Omit entirely if no data.
 
 ---
 
-### ⚠️ Risks / Watch Items
+### ⚠️ Risks
 
-Short bulleted list. Bold the metric, plain-English risk + data point.
+Bullets only. Bold the metric, one-line plain-English risk.
 
 ---
 
 ### 📋 Data Gaps
 
-Only mention DMS connectivity status. If connected, skip this section.
+DMS connectivity only. Skip if connected.
 
 ## Rules
 
-- **Be specific** — name vehicles, price ranges, market segments, product names.
-- **Frame findings in revenue impact** — "$X lost/gained per month" beats "down 7%".
-- **Use dealer-friendly language** — "price to earn a Great Deal badge" not "optimize pricing distribution".
-- **Marketplace spend matters** — call out current products and tie opportunities to product tier.
-- **When Listings Optimizer data is present, USE IT.** Badge impact table = real VDP/Connection delta. Cite specific "Within $500" vehicles as top Growth Opportunities.
+- **Inventory metric = Avg Daily Vehicles (not Unique VINs).** Unique VINs inflate counts by including wholesales, trades, and short-cycle units — they do not reflect actual stocking levels. Use Avg Daily as the primary inventory gauge for all inventory-related findings and benchmarks.
+- **Badge pricing language must be direct action:** "Reduce [YMMT] by $X to earn [Good/Great Deal] badge" — never "needs attention" or vague framing.
+- **Be specific** — name vehicles, stock numbers, price points, market segments.
+- **Frame in revenue impact** — "$X/mo" beats "down 7%".
+- **Dealer-friendly language** — "price to earn a Great Deal badge" not "optimize distribution".
+- **Marketplace products matter** — tie opportunities to current product tier.
+- **When Listings Optimizer data is present, USE IT.** "Within $500" vehicles = cite by YMMT + stock# as top Growth Opportunities.
 - **KPI benchmarks:** Turn <30 days used, Aging <15% over 60 days, GROI 120+ (DMS only), Reputation 4.5+.
 - **Fair/Above Badge %** is the primary merchandising proxy.
-- **Inventory metrics are monthly averages** — frame accordingly.
 - All MoM deltas are percentage changes vs. prior month.
 - SRPs are not a current focus — do not build findings around them."""
 
@@ -387,6 +380,23 @@ _SCORE_GRADIENTS = {
     "yellow": ("linear-gradient(90deg,#f59e0b,#d97706)", "#92400e"),
     "red":    ("linear-gradient(90deg,#f87171,#dc2626)", "#991b1b"),
 }
+
+
+def extract_snapshot_header(narrative: str) -> tuple:
+    """
+    Pull the '### 📊 Health Snapshot — [Name]' line out of the narrative.
+    Returns (header_line, remaining_narrative).
+    The header should render ABOVE the score bars.
+    """
+    import re as _re2
+    m = _re2.search(r"(###\s*📊[^\n]+)", narrative)
+    if not m:
+        return "", narrative
+    header = m.group(1).strip()
+    # Remove the header line (and the --- divider that usually follows) from narrative
+    remaining = narrative[: m.start()] + narrative[m.end():]
+    remaining = _re2.sub(r"^\s*---\s*\n", "", remaining.lstrip())
+    return header, remaining.strip()
 
 
 def render_score_bars(scores: list) -> str:

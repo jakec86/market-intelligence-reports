@@ -18,7 +18,7 @@ from typing import Optional, List
 from health_analysis import (
     fetch_salesforce, fetch_salesforce_by_ccid, fetch_subscriptions,
     build_data_context, parse_scores, render_score_bars,
-    run_health_analysis, create_health_doc,
+    extract_snapshot_header, run_health_analysis, create_health_doc,
 )
 
 # ─── BRANDING ─────────────────────────────────────────────────────────────────
@@ -274,10 +274,17 @@ if "last_result" in st.session_state:
             except Exception as _e:
                 st.error(f"Doc creation failed: {_e}")
 
+    _, _full_narrative = parse_scores(result["analysis"])
+    _header, _narrative = extract_snapshot_header(_full_narrative)
+
+    # Header above score bars
+    if _header:
+        st.markdown(_re.sub(r'^###\s*', '## ', _header))  # promote to h2
+
     _scores = result.get("scores", [])
     if _scores:
         st.markdown(render_score_bars(_scores), unsafe_allow_html=True)
-    _, _narrative = parse_scores(result["analysis"])
+
     st.markdown(_re.sub(r'\$(?!\$)', r'\\$', _narrative))
 
     st.divider()
