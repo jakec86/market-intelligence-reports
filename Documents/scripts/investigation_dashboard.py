@@ -1287,10 +1287,13 @@ with tab_expiry:
 # ═══════════════════════ TAB 4: HEALTH ANALYSIS ══════════════════════════════
 with tab_health:
     st.subheader("🏥 Dealer Health Analysis")
-    st.caption(
-        "Full Growth Triangle analysis — Salesforce + admin.cars.com + Claude. "
-        "Requires Chrome running on port 9223 for admin.cars.com data."
-    )
+    if _cdp_ok:
+        st.caption("Growth Triangle analysis — Salesforce + admin.cars.com + Claude. Chrome authenticated.")
+    else:
+        st.caption(
+            "Growth Triangle analysis — **Salesforce + Claude** (SF-only mode). "
+            "Sign into admin.cars.com in the dealer health Chrome window and click Re-check in the sidebar to enable full data."
+        )
 
     # Auto-populate from Tab 2 "Run Full Health Analysis" button
     health_prefill = st.session_state.pop("health_prefill", "")
@@ -1314,10 +1317,17 @@ with tab_health:
     h_src_col1, h_src_col2 = st.columns(2)
     with h_src_col1:
         h_use_sf    = st.checkbox("Salesforce", value=True, key="h_sf")
-        h_use_admin = st.checkbox("admin.cars.com", value=_cdp_ok, disabled=not _cdp_ok, key="h_admin")
+        # Default OFF — only enable when Chrome is confirmed signed in
+        h_use_admin = st.checkbox(
+            "admin.cars.com" + (" ✓" if _cdp_ok else " (sign in required)"),
+            value=False,
+            disabled=not _cdp_ok,
+            key="h_admin",
+            help="Requires Chrome on port 9223 signed into admin.cars.com. See sidebar for setup." if not _cdp_ok else "Chrome authenticated — enable for full Performance Trends, Reputation, Listings Optimizer data."
+        )
     with h_src_col2:
-        h_use_wid = st.checkbox("Walk-in Demand", value=_cdp_ok, disabled=not _cdp_ok, key="h_wid")
-        h_use_vd  = st.checkbox("Vehicle Demand", value=_cdp_ok, disabled=not _cdp_ok, key="h_vd")
+        h_use_wid = st.checkbox("Walk-in Demand", value=False, disabled=not _cdp_ok or not h_use_admin, key="h_wid")
+        h_use_vd  = st.checkbox("Vehicle Demand", value=False, disabled=not _cdp_ok or not h_use_admin, key="h_vd")
 
     run_health = st.button("Run Health Analysis", type="primary", key="run_health",
                             disabled=not health_dealer.strip())
