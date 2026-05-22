@@ -4,6 +4,9 @@ Run the monthly ACA (Atlantic Coast Automotive) store reporting update. Manually
 
 ---
 
+> **⚠️ PRE-SEND REVIEW RULE:** All Gmail drafts must be addressed To: `jcrawley@cars.com` first. Do not use client recipient addresses until Jake reviews the format and gives explicit approval. This applies to every draft created by this skill.
+
+
 ## Overview
 
 Atlantic Coast Automotive, Inc. (CCID: 6051462) has ~72 stores. Each month, two Tableau data exports are downloaded by the user, then processed and imported into the Google Sheet via Python/gspread. A new monthly detail tab is created, Monthly Overview is updated, and a draft email is sent to Danielle McJunkins.

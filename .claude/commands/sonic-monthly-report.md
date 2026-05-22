@@ -4,6 +4,9 @@ Run the monthly Sonic Automotive Group brand performance report. Produces per-br
 
 ---
 
+> **⚠️ PRE-SEND REVIEW RULE:** All Gmail drafts must be addressed To: `jcrawley@cars.com` first. Do not use client recipient addresses until Jake reviews the format and gives explicit approval. This applies to every draft created by this skill.
+
+
 ## Overview
 
 Sonic Automotive Group (~101 active stores, 18 brands) gets brand-segmented monthly reporting on a **rotating schedule**:

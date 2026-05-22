@@ -4,6 +4,9 @@ Run the monthly EchoPark Automotive performance report. Covers all 17 used-car s
 
 ---
 
+> **⚠️ PRE-SEND REVIEW RULE:** All Gmail drafts must be addressed To: `jcrawley@cars.com` first. Do not use client recipient addresses until Jake reviews the format and gives explicit approval. This applies to every draft created by this skill.
+
+
 ## Overview
 
 EchoPark Automotive is a **used-car-only** brand (no new vehicles, no OEM franchise segmentation). All 17 stores share the "EchoPark Automotive [City]" naming convention. Monthly reporting is a single-group workflow — one scorecard, one email, no rotation.

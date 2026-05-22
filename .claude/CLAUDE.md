@@ -54,6 +54,10 @@ Custom slash commands defined in `~/.claude/commands/`. Plugin skills are namesp
 - `code-review`: `/code-review` — multi-agent PR review with confidence scoring
 - `security-guidance`: automatic security warnings when editing sensitive files
 
+### Pre-Send Review Rule (ALL reporting workflows)
+
+> **All Gmail drafts go to `jcrawley@cars.com` first.** Before any client-facing email is sent or finalized, create the draft addressed to Jake for review and format approval. Client recipients are set in the skill file but are not used until Jake explicitly approves the format and gives the go-ahead. This rule applies to every workflow below until further notice.
+
 **Recurring reporting workflows:**
 | Command | What it does | Cadence | Output |
 |---|---|---|---|

@@ -4,6 +4,9 @@ Run the monthly Asbury umbrella report covering all 4 sub-groups and 149 stores.
 
 ---
 
+> **⚠️ PRE-SEND REVIEW RULE:** All Gmail drafts must be addressed To: `jcrawley@cars.com` first. Do not use client recipient addresses until Jake reviews the format and gives explicit approval. This applies to every draft created by this skill.
+
+
 ## Overview
 
 The Asbury umbrella covers 4 sub-groups with a combined **149 active stores**:
