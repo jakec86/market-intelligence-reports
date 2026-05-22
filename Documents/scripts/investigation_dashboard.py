@@ -990,6 +990,7 @@ with tab_book:
             run_tp = col_tp.button("⚡ Generate Talking Points", key=f"tp_{ccid}")
             if col_brief.button("📋 Open Full Brief →", key=f"brief_nav_{ccid}"):
                 st.session_state["brief_prefill"] = store_name
+                st.session_state["brief_auto_run"] = True
                 st.session_state["active_tab"] = "brief"
             if run_tp:
                 with st.spinner("Generating talking points…"):
@@ -1032,20 +1033,31 @@ with tab_book:
 with tab_brief:
     st.subheader("Pre-Call Brief")
 
-    # Auto-populate from Tab 1 "Open Full Brief" or Tab 3 "Get Brief" buttons
+    # Auto-populate from Tab 1 "Open Full Brief", Tab 3, or Tab 4 "Investigation scan"
     prefill = st.session_state.pop("brief_prefill", "")
+    # If prefill arrived, auto-run immediately without clicking Get Brief
+    if prefill:
+        st.session_state["brief_auto_run"] = True
+
+    def _brief_enter():
+        if st.session_state.get("brief_store_input", "").strip():
+            st.session_state["brief_auto_run"] = True
 
     col_inp, col_btn = st.columns([4, 1])
     with col_inp:
         brief_store = st.text_input(
-            "Store name or CCID",
+            "Store name or CCID — press Enter to run",
             value=prefill,
             placeholder="e.g. Stevens Creek BMW or 25732",
             key="brief_store_input",
+            on_change=_brief_enter,
         )
     with col_btn:
         st.write("")
         run_brief = st.button("Get Brief", type="primary", key="run_brief_btn")
+
+    _brief_auto = st.session_state.pop("brief_auto_run", False)
+    run_brief = run_brief or _brief_auto
 
     if run_brief and brief_store.strip():
         inp = brief_store.strip()
@@ -1517,6 +1529,7 @@ with tab_health:
             if h_res.get("sf_data") and h_res["sf_data"][0].get("CCID__c"):
                 inp = h_res["sf_data"][0]["CCID__c"]
             st.session_state["brief_prefill"] = inp
+            st.session_state["brief_auto_run"] = True  # auto-run when Tab 2 renders
 
         _, _h_full = parse_scores(h_res["analysis"])
         _h_header, _h_narrative = extract_snapshot_header(_h_full)
