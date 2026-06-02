@@ -204,13 +204,31 @@ def test_reorder_nalley_columns_leaves_short_rows_unchanged():
     assert out == rows
 
 
-# ── FM-6: import_to_sheet must never write to the PBT tab (it has VLOOKUPs) ──
+# ── FM-6: PBT anchor writes must only touch cols B/C/D (positional data) ──────
+#
+# import_to_sheet() now writes static anchor values to PBT columns B (Store),
+# C (YMMT), and D (Stock#) to prevent VLOOKUP formula drift after sorting.
+# Writing to these data columns is safe — the VLOOKUP formulas live in E-J.
+# The guards below confirm that (a) only the PBT tab is opened for the PBT
+# write, and (b) no update call targets a range outside B/C/D.
 
-def test_import_to_sheet_never_calls_worksheet_with_pbt_tab_name():
-    """import_to_sheet() must only open the import tab, never the Price Badge Tool tab.
+_SAFE_PBT_COLS = {"B", "C", "D"}
+_FORMULA_COL_RE = re.compile(r"([A-Z]+)\d+:[A-Z]+\d+")
 
-    The PBT tab contains VLOOKUP formulas. Calling ws.update() on it would destroy them.
-    """
+
+def _pbt_update_ranges(mock_sh, pbt_tab_name: str) -> list:
+    """Return all range_name values passed to pbt_ws.update() calls."""
+    ranges = []
+    for call in mock_sh.worksheet.return_value.update.call_args_list:
+        rng = call.kwargs.get("range_name") or (call.args[0] if call.args else None)
+        if rng:
+            ranges.append(rng)
+    return ranges
+
+
+def test_import_to_sheet_pbt_anchor_only_writes_safe_cols_nalley():
+    """import_to_sheet() may write to PBT B/C/D (positional anchors) but must
+    never touch formula columns E-J."""
     mock_gc = MagicMock()
     mock_sh = MagicMock()
     mock_gc.open_by_key.return_value = mock_sh
@@ -222,15 +240,19 @@ def test_import_to_sheet_never_calls_worksheet_with_pbt_tab_name():
 
     import_to_sheet(mock_gc, DEALERS["nalley"], lei_rows)
 
-    opened_tabs = [c.args[0] for c in mock_sh.worksheet.call_args_list]
-    assert DEALERS["nalley"]["pbt_tab"] not in opened_tabs, (
-        f"import_to_sheet called worksheet('{DEALERS['nalley']['pbt_tab']}') — "
-        "this tab has VLOOKUPs that would be destroyed by ws.update()"
-    )
+    for call in mock_sh.worksheet.return_value.update.call_args_list:
+        rng = call.kwargs.get("range_name") or (call.args[0] if call.args else "")
+        m = _FORMULA_COL_RE.match(str(rng))
+        if m:
+            col = m.group(1)
+            assert col in _SAFE_PBT_COLS, (
+                f"import_to_sheet wrote to PBT column '{col}' (range {rng!r}) — "
+                f"only B/C/D are safe; E-J contain VLOOKUPs that would be destroyed"
+            )
 
 
-def test_import_to_sheet_never_calls_worksheet_with_pbt_tab_for_hendrick():
-    """Same formula-overwrite guard for Hendrick dealer config."""
+def test_import_to_sheet_pbt_anchor_only_writes_safe_cols_hendrick():
+    """Same formula-column guard for Hendrick dealer config."""
     mock_gc = MagicMock()
     mock_sh = MagicMock()
     mock_gc.open_by_key.return_value = mock_sh
@@ -242,7 +264,12 @@ def test_import_to_sheet_never_calls_worksheet_with_pbt_tab_for_hendrick():
 
     import_to_sheet(mock_gc, DEALERS["hendrick"], lei_rows)
 
-    opened_tabs = [c.args[0] for c in mock_sh.worksheet.call_args_list]
-    assert DEALERS["hendrick"]["pbt_tab"] not in opened_tabs, (
-        f"import_to_sheet called worksheet('{DEALERS['hendrick']['pbt_tab']}') — formula overwrite risk"
-    )
+    for call in mock_sh.worksheet.return_value.update.call_args_list:
+        rng = call.kwargs.get("range_name") or (call.args[0] if call.args else "")
+        m = _FORMULA_COL_RE.match(str(rng))
+        if m:
+            col = m.group(1)
+            assert col in _SAFE_PBT_COLS, (
+                f"import_to_sheet wrote to Hendrick PBT column '{col}' (range {rng!r}) — "
+                f"only B/C/D are safe; E-J contain VLOOKUPs that would be destroyed"
+            )

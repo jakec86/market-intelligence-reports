@@ -204,7 +204,10 @@ def _load_report(page, uuid: str, report_slug: str) -> bool:
             check();
         })""", VIZ_LOAD_MS)
     except Exception:
-        page.wait_for_timeout(2_000)
+        try:
+            page.wait_for_timeout(2_000)
+        except Exception:
+            return False  # page/context closed — abort cleanly
 
     # Probe required worksheets and record any that are missing
     required = REQUIRED_WORKSHEETS.get(report_slug, [])
@@ -662,7 +665,10 @@ def _fetch_reputation_on(page, uuid: str) -> Optional[dict]:
         if raw:
             break
         if attempt < 2:
-            page.wait_for_timeout(6_000)
+            try:
+                page.wait_for_timeout(6_000)
+            except Exception:
+                break  # page/context closed — exit retry loop
     if not raw:
         return None
 

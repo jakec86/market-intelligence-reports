@@ -137,6 +137,30 @@ Bullets only. Bold the metric, one-line plain-English risk.
 
 DMS connectivity only. Skip if connected.
 
+## Dimension Scoring Guidance
+
+Score each dimension using ALL available signals:
+
+**Inventory Health** — Avg DOL vs. 30-day benchmark, aging % over 60 days, Fair/Above Badge distribution, under-merchandised %, Listings Optimizer data.
+
+**Pricing Position** — % above/at/under market from Market Comparison, Fair vs. Good/Great badge split, vehicles within $500 of next badge tier.
+
+**Engagement (VDPs)** — VDP MoM delta, VDPs/VIN by badge tier, photo completeness, new vs. used VDP split.
+
+**Reputation** — Overall rating vs. DMA avg and OEM avg, review volume, response rate, lead handling rating, DealerRater data if present.
+
+**Lead Performance** — Score this dimension using the FULL lead source picture:
+  - **Connections MoM trend** (Performance Trends) — primary signal
+  - **Lead type mix** from ROI One-Sheeter (even if current MTD): Email, Phone, Chat, Walk-in, Website transfers — a healthy store has a diversified mix; over-reliance on one channel is a risk signal
+  - **Connections/VIN ratio** by badge tier (Listings Optimizer) — engagement efficiency
+  - **Cost per lead** — if rising, flag as a revenue-impact risk
+  - **DMS attribution** (Sales Influence) — influenced sales %, GROI context
+  - Walk-in Demand index is ONE input, not the primary driver — weight it alongside email/phone/chat signals, not above them.
+
+**Marketplace Investment** — Product tier, MRR vs. benchmark, missing products that would directly address identified gaps.
+
+---
+
 ## Rules
 
 - **Inventory metric = Avg Daily Vehicles (not Unique VINs).** Unique VINs inflate counts by including wholesales, trades, and short-cycle units — they do not reflect actual stocking levels. Use Avg Daily as the primary inventory gauge for all inventory-related findings and benchmarks.
@@ -247,8 +271,15 @@ def build_data_context(
         _td = datetime.date.today()
         _pm_dt = (_td.replace(day=1) - datetime.timedelta(days=1))
         _period_label = (f"{_pm_dt.strftime('%B %Y')} (complete month)" if use_prev_month
-                         else f"{_td.strftime('%B %Y')} (MTD)")
+                         else f"{_td.strftime('%B %Y')} (MTD — day {_td.day} of month)")
         parts.append(f"\n## Performance Trends (admin.cars.com — {_period_label})")
+        # Early-month advisory: flag partial data so Claude doesn't misread low MTD numbers
+        if not use_prev_month and _td.day <= 5:
+            parts.append(
+                f"> ⚠️ **Early-month data:** Only {_td.day} day(s) of {_td.strftime('%B')} are included. "
+                f"MTD figures will appear very low — this is expected. "
+                f"Use Prior Month ({_pm_dt.strftime('%B %Y')}) for a complete picture."
+            )
         labels = {
             "avg_inventory": "Monthly Avg Inventory",
             "avg_days_live": "Avg Days Live (days on lot)",
@@ -266,7 +297,9 @@ def build_data_context(
                 delta_str = f" ({delta:+.1f}% MoM)" if delta is not None else ""
                 value_str = f"{primary:.1f}" if key == "avg_days_live" else f"{primary:,.0f}"
                 parts.append(f"- {label}: {value_str}{delta_str}")
-                if key in _split_keys:
+                # Only show CP used/new split when viewing current period —
+                # these fields are always CP-only so skip them for prior-month reports
+                if key in _split_keys and not use_prev_month:
                     used_cp = perf_data.get(f"{key}_used_cp")
                     new_cp  = perf_data.get(f"{key}_new_cp")
                     if used_cp is not None or new_cp is not None:
@@ -319,18 +352,32 @@ def build_data_context(
 
     if roi_data and roi_data.get("lead_sources"):
         ls = roi_data["lead_sources"]
-        parts.append(f"\n## Lead Source Breakdown (ROI One-Sheeter — {ls.get('month','current month')})")
+        _td2 = datetime.date.today()
+        _pm2 = (_td2.replace(day=1) - datetime.timedelta(days=1))
+        # ROI One-Sheeter is always current-period — label clearly when reporting prior month
+        _roi_period_note = (
+            f" — ⚠️ CURRENT MTD ({_td2.strftime('%B %Y')}, day {_td2.day}), NOT the selected prior month"
+            if use_prev_month else ls.get('month', '')
+        )
+        parts.append(f"\n## Lead Source Breakdown (ROI One-Sheeter{_roi_period_note})")
+        if use_prev_month:
+            parts.append(
+                f"> Note: ROI One-Sheeter data always reflects the CURRENT period "
+                f"({_td2.strftime('%B %Y')} MTD). "
+                f"For {_pm2.strftime('%B %Y')} totals use the Performance Trends figures above."
+            )
         total = ls.get("total") or 0
         for label, key in [("Phone leads","phone"),("Email leads","email"),("Chat","chat"),("Website transfers","website_transfers"),("Walk-ins","walk_ins")]:
             val = ls.get(key) or 0
             if val:
                 parts.append(f"- {label}: **{val}** ({(val/total*100) if total else 0:.0f}% of connections)")
-        parts.append(f"- **Total connections: {total}**")
+        parts.append(f"- **Total connections (current MTD only): {total}**")
         if roi_data.get("leads_per_vin") is not None:
             parts.append(f"- Leads per VIN: {roi_data['leads_per_vin']:.2f}")
 
     if si_data:
-        parts.append("\n## Sales Influence Summary (admin.cars.com — DMS-backed)")
+        _si_period_note = " — ⚠️ current MTD, NOT prior month" if use_prev_month else ""
+        parts.append(f"\n## Sales Influence Summary (admin.cars.com — DMS-backed{_si_period_note})")
         if si_data.get("dms_connected"):
             for field, label in [("leads","Leads (attributed)"),("connections","Connections (attributed)"),("influenced_sales","Cars.com-influenced sales"),("influenced_sales_pct","% of sales influenced")]:
                 if si_data.get(field) is not None:
@@ -506,6 +553,34 @@ Bullets only. Bold metric, one-line risk + data point.
 ### 📋 Data Gaps
 DMS connectivity only. Skip if connected.
 
+## Dimension Scoring Guidance
+
+Score each dimension using ALL available signals:
+
+**Inventory Health** — Avg DOL vs. 30-day benchmark, aging % over 60 days, Fair/Above Badge distribution, under-merchandised %, Listings Optimizer.
+
+**Pricing Position** — % above/at/under market (Market Comparison), Fair vs. Good/Great badge split, vehicles within $500 of next tier.
+
+**Engagement (VDPs)** — VDP MoM delta, VDPs/VIN by badge tier, photo completeness, new vs. used VDP split.
+
+**Reputation** — Rating vs. DMA avg and OEM avg, review velocity, response rate, DealerRater data.
+
+**Lead Performance** — Score using the FULL lead source picture:
+  - **Connections MoM trend** (Performance Trends) — primary signal for direction
+  - **Lead type mix** from ROI One-Sheeter: Email, Phone, Chat, Walk-in, Website transfers — a healthy dealer has diversified channels; a dealer over-reliant on a single type is exposed when that channel weakens
+  - **Email and Phone leads are the highest-intent channels** — weight these most heavily in the score
+  - **Chat leads** indicate digital engagement quality — growing chat share vs. phone is generally positive
+  - **Connections/VIN by badge tier** (Listings Optimizer) — engagement efficiency signal
+  - **Cost per lead trend** — rising CPL with flat or falling leads = compounding risk
+  - **DMS attribution** (Sales Influence) — influenced sales %, GROI context when available
+  - Walk-in Demand index is supplementary context only — do NOT make it the primary driver of this score.
+
+**Competitive Position** — Competitive Set rank, share of VDPs/inventory vs. peers, rating vs. local market.
+
+**Marketplace Investment** — Product tier vs. identified gaps, MRR, missing products that address active weaknesses.
+
+---
+
 ## Analyst Rules
 
 - **Inventory metric = Avg Daily Vehicles**, never Unique VINs (inflated by wholesales/trades)
@@ -573,12 +648,72 @@ def build_extended_context(
     parts = [base]
 
     if competitive_data and competitive_data.get("available"):
-        parts.append(
-            "\n## Competitive Set (admin.cars.com — anonymous)\n"
-            f"{competitive_data.get('note', '')}\n"
-            "Sheets available: " + ", ".join(competitive_data.get("sheets", [])) +
-            "\nUse this data to frame relative market position. Do NOT name individual competitors."
-        )
+        source = competitive_data.get("source", "admin.cars.com")
+        if source == "tableau":
+            # Rich Tableau Competitive Set data
+            dealer_name_cs  = competitive_data.get("dealer_name", dealer_name)
+            vdp_rank        = competitive_data.get("vdp_rank")
+            n_competitors   = competitive_data.get("competitor_count", 0)
+            comp_type       = competitive_data.get("competitor_type", "")
+            comp_rows       = competitive_data.get("competitors", [])
+
+            lines = [f"\n## Competitive Set (Tableau — Radius Competitive Set — anonymous)"]
+            lines.append(
+                f"Data for: {dealer_name_cs} | "
+                f"{n_competitors} competitors in set"
+                + (f" | Competitor type: {comp_type}" if comp_type else "")
+                + (f" | Dealer VDP Rank: #{vdp_rank}" if vdp_rank else "")
+            )
+            lines.append("")
+
+            if comp_rows:
+                lines.append("### Competitor breakdown (anonymized — DO NOT name individual competitors)")
+                lines.append("| Competitor | % VDPs | % Email Leads | % Phone Leads | % Inventory | Avg Rating | SRP→VDP Conv |")
+                lines.append("|---|---|---|---|---|---|---|")
+                for c in comp_rows:
+                    name    = c.get("name", "—")
+                    vdp_pct = c.get("pct_vdp")
+                    em_pct  = c.get("pct_email")
+                    ph_pct  = c.get("pct_phone")
+                    inv_pct = c.get("pct_vehicles")
+                    rating  = c.get("avg_rating")
+                    srp2vdp = c.get("srp_to_vdp")
+                    row = (
+                        f"| {name} "
+                        f"| {vdp_pct*100:.1f}% " if vdp_pct is not None else f"| {name} | — "
+                    )
+                    row += f"| {em_pct*100:.1f}% " if em_pct is not None else "| — "
+                    row += f"| {ph_pct*100:.1f}% " if ph_pct is not None else "| — "
+                    row += f"| {inv_pct*100:.1f}% " if inv_pct is not None else "| — "
+                    row += f"| {rating} " if rating is not None else "| — "
+                    row += f"| {srp2vdp*100:.2f}% |" if srp2vdp is not None else "| — |"
+                    lines.append(row)
+
+            if vdp_rank == 1:
+                lines.append(
+                    f"\nNote: VDP Rank #{vdp_rank} means {dealer_name_cs} leads this "
+                    f"competitive set in VDP generation. The competitor percentages above "
+                    f"show each competitor's share of VDPs in the set."
+                )
+            elif vdp_rank:
+                lines.append(f"\nNote: Dealer VDP Rank #{vdp_rank} within this competitive set.")
+
+            lines.append(
+                "\nInstruction: Use this competitive data to frame the dealer's relative positioning. "
+                "Reference competitors as 'Competitor N' or 'a same-brand competitor'. "
+                "Do NOT attempt to identify competitors by name. "
+                "Key signals: VDP share gap vs. top competitor, SRP-to-VDP efficiency, "
+                "rating differential — use these to identify strengths and vulnerabilities."
+            )
+            parts.append("\n".join(lines))
+        else:
+            # Legacy admin.cars.com fallback (availability signal only)
+            parts.append(
+                "\n## Competitive Set (admin.cars.com — anonymous)\n"
+                f"{competitive_data.get('note', '')}\n"
+                "Sheets available: " + ", ".join(competitive_data.get("sheets", [])) +
+                "\nUse this data to frame relative market position. Do NOT name individual competitors."
+            )
 
     if historical_data and historical_data.get("available"):
         parts.append(
@@ -624,13 +759,26 @@ def run_health_analysis(dealer_name: str, data_context: str, period_label: str,
              "--output-format", "text",
              "--mcp-config", '{"mcpServers":{}}',
              "--strict-mcp-config"],
-            capture_output=True, text=True, timeout=180, env=env,
+            capture_output=True, text=True, timeout=600, env=env,
         )
         if result.returncode != 0:
             return f"ERROR: {result.stderr[:500]}"
-        return result.stdout.strip()
+        raw = result.stdout.strip()
+        # Strip any preamble lines Claude emits before the actual analysis content.
+        # Session hooks (e.g. pre-flight skill, CLAUDE.md context) can produce
+        # one or more lines before the SCORES block or the ### header.
+        # Keep only from the first ---SCORES--- or ### 📊 line onward.
+        import re as _re_strip
+        score_match  = _re_strip.search(r'---SCORES---', raw)
+        header_match = _re_strip.search(r'###\s*📊', raw)
+        start_pos = len(raw)
+        if score_match:  start_pos = min(start_pos, score_match.start())
+        if header_match: start_pos = min(start_pos, header_match.start())
+        if start_pos < len(raw):
+            raw = raw[start_pos:]
+        return raw
     except subprocess.TimeoutExpired:
-        return "ERROR: Claude timed out after 3 minutes."
+        return "ERROR: Claude timed out after 10 minutes."
     finally:
         if os.path.exists(sys_path):
             os.unlink(sys_path)

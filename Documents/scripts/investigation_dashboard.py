@@ -121,16 +121,16 @@ BY_STORE_VIEW   = "a0b9bdce-2db3-4ea0-a2fc-365fd08c5786"
 
 # Scenario → admin.cars.com report slug mapping (used for scenario-aware quick links)
 SCENARIO_REPORTS = {
-    1: [("Historical Connections",   "historical_connections"),
-        ("Low Engaged Inventory",    "listings_optimizer")],
-    2: [("Listings Optimizer",       "listings_optimizer"),
-        ("Performance Trends",       "performance_trends")],
-    3: [("Performance Trends",       "performance_trends"),
-        ("Demand Signals",           "demand_signals")],
-    4: [("Demand Signals",           "demand_signals"),
-        ("Market Opportunities",     "market_opportunities")],
-    5: [("Connections & Contact Details", "connections_contact_details"),
-        ("ROI One-Sheeter",          "roi_one_sheeter")],
+    1: [("Performance Trends",              "performance_trends"),
+        ("Listings Optimizer — Inventory",  "listings_optimizer")],
+    2: [("Listings Optimizer — Inventory",  "listings_optimizer"),
+        ("Performance Trends",              "performance_trends")],
+    3: [("Performance Trends",              "performance_trends"),
+        ("Demand Signals — Price Comparison", "demand_signals")],
+    4: [("Demand Signals — Price Comparison", "demand_signals"),
+        ("Market Opportunities",            "market_opportunities")],
+    5: [("Connections & Contact Details",   "connections_contact_details"),
+        ("ROI One-Sheeter",                 "roi_one_sheeter")],
 }
 def _load_tableau_pat() -> tuple:
     """
@@ -170,6 +170,138 @@ def _load_tableau_pat() -> tuple:
 
 
 PAT_NAME, PAT_SECRET = _load_tableau_pat()
+
+# Tableau Competitive Set view IDs (Competitive Set - Radius & DMA Comparisons workbook)
+COMP_SET_DATA_VIEW  = "ac634cc0-a5ed-4b10-9d04-82dab8a4410a"  # New & Used Data tab
+COMP_SET_RADIUS_VIEW = "609a2451-6837-4b06-a136-03f79c8a05ef"  # Radius Competitive Set tab
+
+
+def _pull_comp_set_tableau(ccid: str, dealer_name: str) -> Optional[Dict]:
+    """
+    Pull competitive set data from the Tableau 'Competitive Set New & Used Data' view.
+
+    This view is RLS-locked — it returns data for the default dealer associated with
+    Jake's PAT. We check whether the returned dealer matches the requested store.
+    If it doesn't match, we return None so the caller can fall back to admin.cars.com.
+
+    Returns a structured dict suitable for build_extended_context():
+      {
+        "available": True,
+        "source": "tableau",
+        "dealer_name": str,
+        "dealer_ccid": str,
+        "matches_request": bool,
+        "vdp_rank": int | None,
+        "competitor_count": int,
+        "competitor_type": str,
+        "competitors": [{"name", "pct_vdp", "pct_email", "pct_phone", "pct_vehicles",
+                         "avg_rating", "srp_to_vdp"}, ...],
+        "dealer_implied_vdp_share": float | None,
+      }
+    """
+    try:
+        token = _tableau_token()
+    except Exception as _e:
+        return {"available": False, "source": "tableau", "error": f"token error: {type(_e).__name__}: {str(_e)[:120]}"}
+
+    try:
+        req = urllib.request.Request(
+            f"{TABLEAU_HOST}/api/3.22/sites/{SITE_ID}/views/{COMP_SET_DATA_VIEW}/data?maxAge=5",
+            headers={"X-Tableau-Auth": token},
+        )
+        with urllib.request.urlopen(req, timeout=60) as r:
+            raw = r.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as _e:
+        return {"available": False, "source": "tableau", "error": f"HTTP {_e.code}: {_e.reason}"}
+    except Exception as _e:
+        return {"available": False, "source": "tableau", "error": f"{type(_e).__name__}: {str(_e)[:120]}"}
+
+    rows = list(csv.DictReader(io.StringIO(raw)))
+    if not rows:
+        return {"available": False, "source": "tableau", "error": "empty response"}
+
+    # Identify the RLS-locked dealer from the data
+    first = rows[0]
+    rls_dealer_name = first.get("Customer Name", "").strip()
+    rls_dealer_ccid_raw = first.get("Dealer Name (CCID)", "")
+    # Extract CCID from "Name (CCID)" pattern
+    import re as _re2
+    ccid_match = _re2.search(r'\((\d+)\)\s*$', rls_dealer_ccid_raw)
+    rls_ccid = ccid_match.group(1) if ccid_match else ""
+
+    # Check if this matches the requested store
+    matches = False
+    if ccid and rls_ccid and ccid.strip() == rls_ccid.strip():
+        matches = True
+    elif dealer_name and rls_dealer_name:
+        matches = dealer_name.lower() in rls_dealer_name.lower() or rls_dealer_name.lower() in dealer_name.lower()
+
+    # VDP rank and competitor type from the first row
+    vdp_rank_raw = first.get("VDP Rank", "")
+    try:
+        vdp_rank = int(vdp_rank_raw) if vdp_rank_raw.strip().isdigit() else None
+    except Exception:
+        vdp_rank = None
+    comp_type = first.get("Select Competitor Type", "").strip()
+
+    # Pivot: competitor name → measure → float value
+    by_comp: Dict[str, Dict] = {}
+    for row in rows:
+        comp  = row.get("Competitor Name", "").strip()
+        mname = row.get("Measure Names", "").strip()
+        mval  = row.get("Measure Values", "").strip()
+        if not comp or not mname:
+            continue
+        if comp not in by_comp:
+            by_comp[comp] = {}
+        try:
+            by_comp[comp][mname] = float(mval) if mval else None
+        except ValueError:
+            by_comp[comp][mname] = None
+
+    def _m(comp_data: dict, *keys) -> Optional[float]:
+        for k in keys:
+            v = comp_data.get(k)
+            if v is not None:
+                return v
+        return None
+
+    competitors = []
+    total_vdp_share = 0.0
+    for comp_name, metrics in by_comp.items():
+        vdp_pct = _m(metrics, "% of Total  VDPs")
+        if vdp_pct is not None:
+            total_vdp_share += vdp_pct
+        competitors.append({
+            "name":        comp_name,
+            "pct_vdp":     vdp_pct,
+            "pct_email":   _m(metrics, "% of Total  Email"),
+            "pct_phone":   _m(metrics, "% of Total  Phone"),
+            "pct_leads":   _m(metrics, "% of Total  Leads"),
+            "pct_vehicles": _m(metrics, "% of Total Vehicles"),
+            "pct_srps":    _m(metrics, "% of Total SRPs"),
+            "avg_rating":  _m(metrics, "Avg Rating"),
+            "srp_to_vdp":  _m(metrics, "SRP to VDP - All"),
+        })
+
+    # Sort competitors by VDP share descending
+    competitors.sort(key=lambda c: -(c.get("pct_vdp") or 0))
+
+    dealer_implied_vdp = max(0.0, 1.0 - total_vdp_share) if total_vdp_share > 0 else None
+
+    return {
+        "available":                True,
+        "source":                   "tableau",
+        "dealer_name":              rls_dealer_name,
+        "dealer_ccid":              rls_ccid,
+        "matches_request":          matches,
+        "vdp_rank":                 vdp_rank,
+        "competitor_count":         len(competitors),
+        "competitor_type":          comp_type,
+        "competitors":              competitors,
+        "dealer_implied_vdp_share": dealer_implied_vdp,
+    }
+
 
 SF_CLI = "/Users/jcrawley/.npm-global/bin/sf"
 SF_ORG = "cars-commerce"
@@ -543,14 +675,14 @@ def generate_talking_points(store_name: str, metrics: Dict, flags: List[Dict], s
     if flags:
         top_scenario = flags[0]["scenario"]
         report_map = {
-            1: ("Listings Optimizer (Best Match tab + Low Engaged Inventory)",
-                "admin.cars.com → Reports → Listings Optimizer"),
-            2: ("Listings Optimizer (Best Match tab — photo bucket, price-to-market)",
-                "admin.cars.com → Reports → Listings Optimizer"),
-            3: ("Demand Signals (inventory mix vs. what local shoppers are searching for)",
-                "admin.cars.com → Reports → Demand Signals"),
-            4: ("Demand Signals (make/model demand vs. inventory — what's missing from the lot)",
-                "admin.cars.com → Reports → Demand Signals"),
+            1: ("Listings Optimizer — Inventory (Low Engaged Inventory + badge distribution)",
+                "admin.cars.com → Reports → Listings Optimizer → Inventory tab"),
+            2: ("Listings Optimizer — Inventory (photo bucket, price-to-market, badge gaps)",
+                "admin.cars.com → Reports → Listings Optimizer → Inventory tab"),
+            3: ("Demand Signals — Price Comparison (competitive pricing vs DMA)",
+                "admin.cars.com → Reports → Demand Signals → Price Comparison tab"),
+            4: ("Demand Signals — Price Comparison (make/model demand vs. inventory mix)",
+                "admin.cars.com → Reports → Demand Signals → Price Comparison tab"),
             5: ("Connections & Contact Details (lead source breakdown and cost-per-lead by type)",
                 "admin.cars.com → Reports → Connections & Contact Details"),
         }
@@ -590,14 +722,18 @@ Output format:
     env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
     try:
         r = subprocess.run(
-            ["claude", "-p", prompt, "--model", "claude-sonnet-4-6",
-             "--output-format", "text", "--mcp-config", '{"mcpServers":{}}',
+            ["claude", "-p", prompt,
+             "--model", "claude-haiku-4-5-20251001",  # Haiku: faster for short structured output
+             "--output-format", "text",
+             "--mcp-config", '{"mcpServers":{}}',
              "--strict-mcp-config"],
-            capture_output=True, text=True, timeout=60, env=env,
+            capture_output=True, text=True, timeout=180, env=env,
         )
         return r.stdout.strip() if r.returncode == 0 else f"_(Error generating talking points: {r.stderr[:200]})_"
+    except subprocess.TimeoutExpired:
+        return "_(Talking points timed out — try again or use the Store Brief tab for a fresh run.)_"
     except Exception as e:
-        return f"_(Talking points unavailable: {e})_"
+        return f"_(Talking points unavailable: {type(e).__name__})_"
 
 
 # ─── RENDERING HELPERS ────────────────────────────────────────────────────────
@@ -711,8 +847,8 @@ def _admin_links(ccid: str, flags: Optional[List] = None) -> str:
             # No flags — show standard set for a healthy store (upsell/optimize focus)
             links += [
                 f'<a href="{base}/performance_trends" target="_blank">Performance Trends</a>',
-                f'<a href="{base}/listings_optimizer" target="_blank">Listings Optimizer</a>',
-                f'<a href="{base}/demand_signals" target="_blank">Demand Signals</a>',
+                f'<a href="{base}/listings_optimizer" target="_blank">Listings Optimizer — Inventory</a>',
+                f'<a href="{base}/demand_signals" target="_blank">Demand Signals — Price Comparison</a>',
             ]
     else:
         # No UUID cached — give instructions to resolve
@@ -775,14 +911,14 @@ def _next_steps_panel(ccid: str, store_name: str, flags: Optional[List] = None,
     REPORT_CARDS = [
         {
             "slug":  "listings_optimizer",
-            "label": "🏷️ Listings Optimizer",
-            "note":  "Best Match · badge distribution · vehicles within $500 of next badge tier",
+            "label": "🏷️ Listings Optimizer — Inventory",
+            "note":  "Inventory tab · badge distribution · vehicles within $500 of next badge tier",
             "always": True,
         },
         {
             "slug":  "demand_signals",
             "label": "📈 Demand Signals — Price Comparison",
-            "note":  "Competitive pricing position vs DMA · inventory mix vs market demand",
+            "note":  "Price Comparison tab · competitive pricing position vs DMA",
             "always": True,
         },
     ]
@@ -843,6 +979,462 @@ def _next_steps_panel(ccid: str, store_name: str, flags: Optional[List] = None,
         st.session_state["autorun_research"] = store_name or ccid
 
 
+# ─── GSHEET EXPORT ────────────────────────────────────────────────────────────
+
+def _gsheet_client():
+    """Return an authenticated gspread client using the shared sheets token."""
+    import gspread
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+
+    TOKEN_PATH  = os.path.expanduser("~/.claude/tokens/sheets_token.json")
+    CLIENT_PATH = os.path.expanduser("~/gcp-oauth.keys.json")
+    SCOPES      = ["https://www.googleapis.com/auth/spreadsheets",
+                   "https://www.googleapis.com/auth/drive"]
+
+    with open(TOKEN_PATH) as f:
+        tok = json.load(f)
+
+    creds = Credentials(
+        token         = tok.get("access_token"),
+        refresh_token = tok.get("refresh_token"),
+        token_uri     = "https://oauth2.googleapis.com/token",
+        client_id     = None,
+        client_secret = None,
+        scopes        = SCOPES,
+    )
+    # Pull client_id / client_secret from the oauth keys file
+    try:
+        with open(CLIENT_PATH) as f:
+            ck = json.load(f)
+        web = ck.get("web") or ck.get("installed") or {}
+        creds._client_id     = web.get("client_id")
+        creds._client_secret = web.get("client_secret")
+    except Exception:
+        pass
+
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+        # Persist refreshed token
+        try:
+            with open(TOKEN_PATH) as f:
+                raw = json.load(f)
+            raw["access_token"] = creds.token
+            with open(TOKEN_PATH, "w") as f:
+                json.dump(raw, f)
+        except Exception:
+            pass
+
+    from gspread.http_client import BackOffHTTPClient
+    return gspread.Client(auth=creds, http_client=BackOffHTTPClient)
+
+
+# RGB tuples → gspread color dicts
+_CC_PURPLE = {"red": 0.357, "green": 0.176, "blue": 0.557}
+_CC_TEAL   = {"red": 0.0,   "green": 0.659, "blue": 0.557}
+_CC_AMBER  = {"red": 0.980, "green": 0.600, "blue": 0.000}
+_CC_RED    = {"red": 0.753, "green": 0.224, "blue": 0.169}
+_CC_GREEN  = {"red": 0.082, "green": 0.647, "blue": 0.365}
+_CC_LIGHT  = {"red": 0.973, "green": 0.969, "blue": 0.996}  # light lavender bg
+_WHITE     = {"red": 1.0,   "green": 1.0,   "blue": 1.0}
+_DARK_TXT  = {"red": 0.067, "green": 0.094, "blue": 0.153}
+
+
+def _fmt_header(sheet_id: int, row: int, num_cols: int, bg=None) -> dict:
+    """Return a batchUpdate request that bolds + colors a header row."""
+    bg = bg or _CC_PURPLE
+    return {
+        "repeatCell": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": row,
+                "endRowIndex": row + 1,
+                "startColumnIndex": 0,
+                "endColumnIndex": num_cols,
+            },
+            "cell": {
+                "userEnteredFormat": {
+                    "backgroundColor": bg,
+                    "textFormat": {
+                        "bold": True,
+                        "foregroundColor": _WHITE,
+                        "fontSize": 10,
+                    },
+                    "horizontalAlignment": "LEFT",
+                    "verticalAlignment": "MIDDLE",
+                }
+            },
+            "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)",
+        }
+    }
+
+
+def _fmt_section_title(sheet_id: int, row: int, num_cols: int) -> dict:
+    """Teal section-title row."""
+    return _fmt_header(sheet_id, row, num_cols, bg=_CC_TEAL)
+
+
+def _freeze_row(sheet_id: int, rows: int = 1, cols: int = 0) -> dict:
+    return {
+        "updateSheetProperties": {
+            "properties": {
+                "sheetId": sheet_id,
+                "gridProperties": {"frozenRowCount": rows, "frozenColumnCount": cols},
+            },
+            "fields": "gridProperties.frozenRowCount,gridProperties.frozenColumnCount",
+        }
+    }
+
+
+def _col_width(sheet_id: int, col: int, px: int) -> dict:
+    return {
+        "updateDimensionProperties": {
+            "range": {
+                "sheetId": sheet_id,
+                "dimension": "COLUMNS",
+                "startIndex": col,
+                "endIndex": col + 1,
+            },
+            "properties": {"pixelSize": px},
+            "fields": "pixelSize",
+        }
+    }
+
+
+def _color_row(sheet_id: int, row: int, num_cols: int, bg: dict) -> dict:
+    return {
+        "repeatCell": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": row,
+                "endRowIndex": row + 1,
+                "startColumnIndex": 0,
+                "endColumnIndex": num_cols,
+            },
+            "cell": {"userEnteredFormat": {"backgroundColor": bg}},
+            "fields": "userEnteredFormat.backgroundColor",
+        }
+    }
+
+
+def export_digest_to_gsheet(
+    group_label: str,
+    stores: List[Dict],
+    results: Dict,
+    expirations: List[Dict],
+    upsell_candidates: List[Dict],
+    store_brief: Optional[Dict] = None,
+    health_result: Optional[Dict] = None,
+) -> str:
+    """
+    Build a multi-tab Google Sheet digest from scan results.
+    Returns the spreadsheet URL.
+    """
+    gc = _gsheet_client()
+    title = f"Investigation Digest — {group_label} — {date.today().strftime('%b %d, %Y')}"
+    sh = gc.create(title)
+    sh.share(None, perm_type="anyone", role="reader")  # view-only link
+
+    flagged = results["high"] + results["medium"]
+    brights = results["bright_spots"]
+
+    # ── Helper: write rows + return worksheet ─────────────────────────────────
+    def _write(ws, rows: List[List]):
+        if rows:
+            ws.update(rows, value_input_option="USER_ENTERED")
+
+    # ── Sheet IDs will be filled after creation ───────────────────────────────
+    fmt_reqs = []
+
+    # ══ Tab 1: Summary ════════════════════════════════════════════════════════
+    ws_sum = sh.sheet1
+    ws_sum.update_title("📋 Summary")
+    sid_sum = ws_sum.id
+
+    today_str = date.today().strftime("%B %d, %Y")
+    scanned_at_str = datetime.now().strftime("%b %d %Y %H:%M")
+    sum_rows = [
+        ["Investigation Digest", "", "", ""],
+        [f"Scope: {group_label}", "", "Generated:", scanned_at_str],
+        [""],
+        ["Metric", "Count", "", ""],
+        ["Stores Scanned",         str(len(stores)),       "", ""],
+        ["HIGH Flags",             str(len(results["high"])),     "", ""],
+        ["Medium Flags",           str(len(results["medium"])),   "", ""],
+        ["Bright Spots",           str(len(brights)),       "", ""],
+        ["Critical Trends",        str(sum(1 for e in flagged if e.get("trend") == "CRITICAL")), "", ""],
+        ["Expiring ≤ 90 days",     str(len(expirations)),   "", ""],
+        ["Upsell Candidates",      str(len(upsell_candidates)), "", ""],
+    ]
+    _write(ws_sum, sum_rows)
+
+    fmt_reqs += [
+        # Title row — large purple
+        {
+            "repeatCell": {
+                "range": {"sheetId": sid_sum, "startRowIndex": 0, "endRowIndex": 1,
+                          "startColumnIndex": 0, "endColumnIndex": 4},
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": _CC_PURPLE,
+                        "textFormat": {"bold": True, "foregroundColor": _WHITE, "fontSize": 14},
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat)",
+            }
+        },
+        _fmt_header(sid_sum, 3, 4, bg=_CC_TEAL),   # "Metric / Count" sub-header
+        _freeze_row(sid_sum, rows=1),
+        _col_width(sid_sum, 0, 200),
+        _col_width(sid_sum, 1, 100),
+    ]
+
+    # ══ Tab 2: Flagged Stores ════════════════════════════════════════════════
+    ws_flag = sh.add_worksheet("🚩 Flagged Stores", rows=max(len(flagged) + 5, 20), cols=10)
+    sid_flag = ws_flag.id
+
+    flag_header = ["Trend", "Client", "Store", "CCID", "Severity", "Flags", "Top Scenario", "Signal"]
+    flag_rows   = [flag_header]
+    row_colors_flag = {}
+
+    for i, entry in enumerate(flagged, start=1):
+        sev = "HIGH" if entry in results["high"] else "MED"
+        trend = entry.get("trend", "NEW")
+        maj = entry.get("maj_cust_name", "")
+        client = MAJ_CUST_TO_CLIENT.get(maj, maj or "—")
+        top_s = entry["flags"][0]["scenario"] if entry["flags"] else 0
+        top_sig = entry["flags"][0]["signal"] if entry["flags"] else ""
+        flag_summary = "  ·  ".join(f"S{f['scenario']} {f['severity'][:1]}" for f in entry["flags"][:4])
+        flag_rows.append([
+            trend, client, entry["store"], entry.get("ccid", ""),
+            sev, flag_summary,
+            f"Scenario {top_s} — {SCENARIO_META.get(top_s, {}).get('name', '')}", top_sig,
+        ])
+        # Color by trend
+        if trend == "CRITICAL":
+            row_colors_flag[i] = {"red": 1.0, "green": 0.937, "blue": 0.922}
+        elif trend == "SUSTAINED":
+            row_colors_flag[i] = {"red": 1.0, "green": 0.976, "blue": 0.867}
+        elif sev == "HIGH":
+            row_colors_flag[i] = {"red": 1.0, "green": 0.961, "blue": 0.949}
+
+    _write(ws_flag, flag_rows)
+
+    fmt_reqs += [
+        _fmt_header(sid_flag, 0, len(flag_header)),
+        _freeze_row(sid_flag, rows=1),
+        _col_width(sid_flag, 0, 90),   # Trend
+        _col_width(sid_flag, 1, 90),   # Client
+        _col_width(sid_flag, 2, 220),  # Store
+        _col_width(sid_flag, 3, 75),   # CCID
+        _col_width(sid_flag, 4, 60),   # Sev
+        _col_width(sid_flag, 5, 120),  # Flags
+        _col_width(sid_flag, 6, 240),  # Scenario
+        _col_width(sid_flag, 7, 320),  # Signal
+    ]
+    for row_i, bg in row_colors_flag.items():
+        fmt_reqs.append(_color_row(sid_flag, row_i, len(flag_header), bg))
+
+    # ══ Tab 3: Bright Spots ══════════════════════════════════════════════════
+    ws_bright = sh.add_worksheet("✨ Bright Spots", rows=max(len(brights) + 5, 10), cols=4)
+    sid_bright = ws_bright.id
+
+    bright_header = ["Store", "CCID", "Client", "Signal"]
+    bright_rows   = [bright_header]
+    for b in brights:
+        maj = b.get("maj_cust_name", "")
+        client = MAJ_CUST_TO_CLIENT.get(maj, maj or "—")
+        bright_rows.append([b.get("store", ""), b.get("ccid", ""), client, b.get("signal", "")])
+    _write(ws_bright, bright_rows)
+
+    fmt_reqs += [
+        _fmt_header(sid_bright, 0, 4, bg=_CC_TEAL),
+        _freeze_row(sid_bright, rows=1),
+        _col_width(sid_bright, 0, 220),
+        _col_width(sid_bright, 1, 75),
+        _col_width(sid_bright, 2, 100),
+        _col_width(sid_bright, 3, 380),
+    ]
+
+    # ══ Tab 4: Expirations ═══════════════════════════════════════════════════
+    ws_exp = sh.add_worksheet("⚠️ Expirations", rows=max(len(expirations) + 5, 10), cols=6)
+    sid_exp = ws_exp.id
+
+    exp_header = ["Days Left", "Account", "CCID", "Product", "MRR", "Expires"]
+    exp_rows   = [exp_header]
+    row_colors_exp = {}
+    for i, e in enumerate(sorted(expirations, key=_days_left), start=1):
+        days = _days_left(e)
+        acct = e.get("SBQQ__Account__r") or {}
+        name = acct.get("Name", "Unknown") if isinstance(acct, dict) else "Unknown"
+        ccid_e = acct.get("CCID__c", "") if isinstance(acct, dict) else ""
+        exp_rows.append([
+            days, name, ccid_e,
+            e.get("SBQQ__ProductName__c", ""),
+            f"${e.get('SBQQ__NetPrice__c', 0):,.0f}",
+            e.get("SBQQ__SubscriptionEndDate__c", ""),
+        ])
+        if days <= 30:
+            row_colors_exp[i] = {"red": 1.0, "green": 0.918, "blue": 0.910}
+        elif days <= 60:
+            row_colors_exp[i] = {"red": 1.0, "green": 0.976, "blue": 0.867}
+
+    _write(ws_exp, exp_rows)
+    fmt_reqs += [
+        _fmt_header(sid_exp, 0, len(exp_header)),
+        _freeze_row(sid_exp, rows=1),
+        _col_width(sid_exp, 0, 80),
+        _col_width(sid_exp, 1, 220),
+        _col_width(sid_exp, 2, 75),
+        _col_width(sid_exp, 3, 200),
+        _col_width(sid_exp, 4, 80),
+        _col_width(sid_exp, 5, 100),
+    ]
+    for row_i, bg in row_colors_exp.items():
+        fmt_reqs.append(_color_row(sid_exp, row_i, len(exp_header), bg))
+
+    # ══ Tab 5: Upsell Opportunities ══════════════════════════════════════════
+    ws_up = sh.add_worksheet("📈 Upsell", rows=max(len(upsell_candidates) + 5, 10), cols=6)
+    sid_up = ws_up.id
+
+    up_header = ["Score", "Store", "CCID", "Metric Trend", "Conversation Starter"]
+    up_rows   = [up_header]
+    row_colors_up = {}
+    for i, u in enumerate(upsell_candidates, start=1):
+        up_rows.append([
+            u["Score"], u["Store"], u.get("CCID", ""),
+            u.get("Metric Trend", ""), u.get("Conversation", ""),
+        ])
+        score = u["Score"]
+        if score >= 60:
+            row_colors_up[i] = {"red": 0.820, "green": 0.980, "blue": 0.910}
+        elif score >= 35:
+            row_colors_up[i] = {"red": 1.0,   "green": 0.976, "blue": 0.867}
+
+    _write(ws_up, up_rows)
+    fmt_reqs += [
+        _fmt_header(sid_up, 0, len(up_header)),
+        _freeze_row(sid_up, rows=1),
+        _col_width(sid_up, 0, 65),
+        _col_width(sid_up, 1, 220),
+        _col_width(sid_up, 2, 75),
+        _col_width(sid_up, 3, 160),
+        _col_width(sid_up, 4, 340),
+    ]
+    for row_i, bg in row_colors_up.items():
+        fmt_reqs.append(_color_row(sid_up, row_i, len(up_header), bg))
+
+    # ══ Tab 6: Store Brief (if available) ════════════════════════════════════
+    if store_brief:
+        sf = store_brief.get("sf") or {}
+        m  = store_brief.get("metrics") or {}
+        brief_rows = []
+        brief_rows.append(["Store Brief", "", ""])
+        brief_rows.append([store_brief.get("store", ""), "", ""])
+        brief_rows.append([
+            f"{sf.get('BillingCity','')}, {sf.get('BillingState','')}".strip(", "),
+            f"MRR: ${sf.get('Product_Amount__c', 0):,.0f}/mo" if sf.get("Product_Amount__c") else "",
+            sf.get("Products__c", ""),
+        ])
+        brief_rows.append([""])
+        # Metrics
+        brief_rows.append(["Key Metrics", "Current Period", "MoM Change"])
+        vdp_cp = _get(m, "vdp_cp")
+        conn_cp = _get(m, "conn_cp")
+        inv_cp = _get(m, "inv_cp")
+        cost_cp = _get(m, "cost_lead_cp")
+        if vdp_cp:
+            vdp_d = _delta(m, "vdp_cp", "vdp_pp", "vdp_delta")
+            brief_rows.append(["VDPs", f"{int(vdp_cp):,}", _pct(vdp_d) if vdp_d else ""])
+        if conn_cp:
+            conn_d = _delta(m, "conn_cp", "conn_pp", "conn_delta")
+            brief_rows.append(["Connections", f"{int(conn_cp):,}", _pct(conn_d) if conn_d else ""])
+        if inv_cp:
+            brief_rows.append(["Avg Inventory", f"{int(inv_cp)}/day", ""])
+        if cost_cp:
+            brief_rows.append(["Cost / Lead", f"${cost_cp:.0f}", ""])
+        brief_rows.append([""])
+        # Flags
+        brief_rows.append(["Active Flags", "Scenario", "Signal"])
+        for flag in store_brief.get("flags", []):
+            meta = SCENARIO_META.get(flag["scenario"], {})
+            brief_rows.append([
+                flag["severity"],
+                f"Scenario {flag['scenario']} — {meta.get('name', '')}",
+                flag["signal"],
+            ])
+        if not store_brief.get("flags"):
+            brief_rows.append(["—", "No active flags", ""])
+        brief_rows.append([""])
+        # Talking points
+        brief_rows.append(["Talking Points", "", ""])
+        for i, line in enumerate(store_brief.get("tp", "").strip().split("\n\n"), 1):
+            clean = line.strip().lstrip("0123456789. ")
+            if clean:
+                brief_rows.append([f"TP {i}", clean, ""])
+
+        ws_brief = sh.add_worksheet("🔍 Store Brief", rows=max(len(brief_rows) + 5, 20), cols=3)
+        sid_brief = ws_brief.id
+        _write(ws_brief, brief_rows)
+
+        fmt_reqs += [
+            _fmt_header(sid_brief, 0, 3),                      # "Store Brief" title
+            _fmt_header(sid_brief, 4, 3, bg=_CC_TEAL),         # "Key Metrics" sub-header
+            _fmt_header(sid_brief, 4 + sum(1 for x in [vdp_cp, conn_cp, inv_cp, cost_cp] if x) + 2,
+                        3, bg=_CC_TEAL),                        # "Active Flags" sub-header
+            _freeze_row(sid_brief, rows=1),
+            _col_width(sid_brief, 0, 140),
+            _col_width(sid_brief, 1, 360),
+            _col_width(sid_brief, 2, 220),
+        ]
+
+    # ══ Tab 7: Health Analysis (if available) ════════════════════════════════
+    if health_result:
+        h_rows = []
+        h_rows.append(["Health Analysis", ""])
+        h_rows.append([health_result.get("dealer", ""), ""])
+        h_rows.append([""])
+
+        # Score bars
+        scores = health_result.get("scores", [])
+        if scores:
+            h_rows.append(["Dimension Scores", "Score"])
+            for dim, score in scores:
+                h_rows.append([dim, score])
+            h_rows.append([""])
+
+        # Narrative — split into rows
+        _, narrative = parse_scores(health_result["analysis"])
+        header_txt, body_txt = extract_snapshot_header(narrative)
+        if header_txt:
+            h_rows.append(["Snapshot", header_txt.strip().lstrip("#").strip()])
+            h_rows.append([""])
+        for para in body_txt.strip().split("\n\n"):
+            clean = para.strip()
+            if clean:
+                h_rows.append(["", clean])
+
+        ws_h = sh.add_worksheet("🏥 Health Analysis", rows=max(len(h_rows) + 5, 30), cols=2)
+        sid_h = ws_h.id
+        _write(ws_h, h_rows)
+
+        score_header_row = 3 if scores else None
+        fmt_reqs += [
+            _fmt_header(sid_h, 0, 2),
+            _freeze_row(sid_h, rows=1),
+            _col_width(sid_h, 0, 180),
+            _col_width(sid_h, 1, 620),
+        ]
+        if score_header_row is not None:
+            fmt_reqs.append(_fmt_header(sid_h, score_header_row, 2, bg=_CC_TEAL))
+
+    # ── Apply all formatting in one batch ─────────────────────────────────────
+    if fmt_reqs:
+        sh.batch_update({"requests": fmt_reqs})
+
+    return sh.url
+
+
 # ─── PAGE SETUP ───────────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -882,6 +1474,23 @@ with st.sidebar:
 
     st.divider()
     run = st.button("Run Scan", type="primary", use_container_width=True)
+
+    # Run All: fires Investigation + Brief + Health in one pass (store mode only)
+    _run_all = False
+    if mode == "Store / CCID" and store_input.strip():
+        _run_all = st.button(
+            "🚀 Run All Tabs",
+            use_container_width=True,
+            help="Runs Investigation scan + Pre-Call Brief + Health Analysis for this store in one pass.",
+        )
+        if _run_all:
+            st.session_state["brief_prefill"]  = store_input.strip()
+            st.session_state["brief_auto_run"] = True
+            st.session_state["health_prefill"] = store_input.strip()
+            st.session_state["health_auto_run"] = True
+
+    run = run or _run_all
+
     if st.button("Clear Cache", use_container_width=True):
         st.cache_data.clear()
         st.session_state.clear()
@@ -1554,7 +2163,10 @@ with tab_health:
         _hpm = (_ht.replace(day=1) - _hdt.timedelta(days=1))
         _hcl = f"Current MTD ({_ht.strftime('%B %Y')})"
         _hpl = f"Prior Month ({_hpm.strftime('%B %Y')})"
-        health_period = st.radio("Period", [_hcl, _hpl], horizontal=True, key="health_period")
+        # Default to Prior Month in the first 5 days — current MTD is too partial for useful analysis
+        _h_default_idx = 1 if _ht.day <= 5 else 0
+        health_period = st.radio("Period", [_hcl, _hpl], index=_h_default_idx,
+                                  horizontal=True, key="health_period")
 
     h_src_col1, h_src_col2 = st.columns(2)
     with h_src_col1:
@@ -1575,6 +2187,17 @@ with tab_health:
         h_use_dealerrater  = _ext_col2.checkbox("DealerRater",              value=True,  key="h_dr")
     else:
         h_use_competitive = h_use_historical = h_use_dealerrater = False
+
+    # Early-month advisory: warn before running Current MTD in the first 5 days
+    import datetime as _hdt2
+    if _hdt2.date.today().day <= 5 and health_period == _hcl:
+        _pm_label_warn = _hdt2.date.today().replace(day=1) - _hdt2.timedelta(days=1)
+        st.warning(
+            f"📅 **Early-month data only** — today is day {_hdt2.date.today().day} of "
+            f"{_hdt2.date.today().strftime('%B')}. Current MTD figures (connections, VDPs) "
+            f"will appear very low. Switch to **Prior Month ({_pm_label_warn.strftime('%B %Y')})** "
+            f"for a complete view of last month's performance."
+        )
 
     btn_label = "Run Extended Analysis" if h_extended else "Run Health Analysis"
     _auto_run = st.session_state.pop("health_auto_run", False)
@@ -1642,7 +2265,9 @@ with tab_health:
                             ("Listings Optimizer", _admin.fetch_listings_optimizer,
                              lambda d: f"Listings Optimizer: {len(d.get('within_500_good',[]))+len(d.get('within_500_great',[]))} pricing opps"),
                             ("ROI One-Sheeter",    _admin.fetch_roi_one_sheeter,
-                             lambda d: f"Lead sources: {d['lead_sources'].get('total',0)} connections" if d.get("lead_sources") else None),
+                             lambda d: (f"Lead sources: {d['lead_sources'].get('total',0)} connections"
+                                        + (" (current MTD)" if h_use_prev else ""))
+                                       if d.get("lead_sources") else None),
                             ("Sales Influence",    _admin.fetch_sales_influence,
                              lambda d: "DMS: connected" if d and d.get("dms_connected") else "DMS: not connected"),
                         ]:
@@ -1665,12 +2290,38 @@ with tab_health:
                             _h_progress("Pulling Vehicle Demand…")
                             h_vd = _admin.fetch_vehicle_demand(_uuid)
                             h_source_summary.append("Vehicle Demand: " + ("available" if h_vd else "not available"))
-                        # Extended mode: Competitive Set + Historical Connections
+                        # Extended mode: Competitive Set (Tableau first, admin.cars.com fallback)
                         if h_use_competitive:
-                            _h_progress("Pulling Competitive Set…")
-                            h_competitive = _admin.fetch_competitive_set(_uuid)
+                            _h_progress("Pulling Competitive Set (Tableau)…")
+                            h_competitive = _pull_comp_set_tableau(
+                                h_effective_ccid or "", h_dealer_name
+                            )
                             if h_competitive and h_competitive.get("available"):
-                                h_source_summary.append("Competitive Set: available (anonymous)")
+                                if not h_competitive.get("available"):
+                                    # Tableau pull failed — surface the reason, skip admin stub
+                                    err = h_competitive.get("error", "unknown error")
+                                    h_source_summary.append(f"Competitive Set: Tableau unavailable ({err})")
+                                    h_competitive = None
+                                elif h_competitive.get("matches_request"):
+                                    n_c = h_competitive.get("competitor_count", 0)
+                                    rk  = h_competitive.get("vdp_rank")
+                                    h_source_summary.append(
+                                        f"Competitive Set (Tableau): {n_c} competitors"
+                                        + (f", VDP rank #{rk}" if rk else "")
+                                    )
+                                else:
+                                    # RLS mismatch — Tableau view locked to a different dealer.
+                                    # Admin.cars.com stub adds no value, so skip it.
+                                    rls_name = h_competitive.get("dealer_name", "unknown")
+                                    h_source_summary.append(
+                                        f"Competitive Set: not available for {h_dealer_name} "
+                                        f"(Tableau RLS returns {rls_name} — store-specific data unavailable via API)"
+                                    )
+                                    h_competitive = None
+                            else:
+                                # _pull_comp_set_tableau returned None (unexpected)
+                                h_source_summary.append("Competitive Set: Tableau pull returned no data")
+                                h_competitive = None
                         if h_use_historical:
                             _h_progress("Pulling Historical Connections…")
                             h_historical = _admin.fetch_historical_connections(_uuid)
@@ -1713,7 +2364,7 @@ with tab_health:
         h_prog.empty()
 
         period_label = _hpl if h_use_prev else _hcl
-        spinner_msg = "Running extended analysis… (~2–3 min)" if h_extended else "Generating health snapshot… (~90s)"
+        spinner_msg = "Running extended analysis… (~3–5 min)" if h_extended else "Generating health snapshot… (~90s)"
         with st.spinner(spinner_msg):
             h_response = run_health_analysis(h_dealer_name, data_ctx, period_label,
                                              extended=h_extended)
@@ -1797,9 +2448,75 @@ with tab_health:
             st.info("Enter a dealer name or CCID above and click **Run Health Analysis**.")
 
 # ─── EXPORT ───────────────────────────────────────────────────────────────────
+
+def _build_upsell_candidates(results: Dict, stores: List[Dict],
+                              include_flagged: bool = True) -> List[Dict]:
+    """Rebuild upsell candidates from scan results (same logic as Tab 3)."""
+    SCENARIO_UPSELL_WEIGHT = {
+        1: ("Connections drop → Listings Optimizer / MAE conversation", 20),
+        2: ("Merch gap → Listings Optimizer Premium",                    25),
+        3: ("VDP decline → Demand Signals / Market Area Expansion",      20),
+        4: ("Demand mismatch → AccuTrade / inventory mix conversation",  25),
+        5: ("High Cost/Lead → lead quality product or package review",   15),
+    }
+    all_scan_stores = results["high"] + results["medium"] + results["bright_spots"] + results["clean"]
+    candidates = []
+    for entry in all_scan_stores:
+        is_flagged = entry in (results["high"] + results["medium"])
+        if is_flagged and not include_flagged:
+            continue
+        ccid  = entry.get("ccid", "")
+        name  = entry.get("store", "") or entry.get("Customer Name", "")
+        flags = entry.get("flags", [])
+        store_rec = next((s for s in stores if s.get("Legacy Id") == ccid), {})
+        vdp_d  = _delta(store_rec, "vdp_cp", "vdp_pp", "vdp_delta") or 0
+        conn_d = _delta(store_rec, "conn_cp", "conn_pp", "conn_delta") or 0
+        traj_score = min(50, int(max(0, vdp_d) * 120 + max(0, conn_d) * 120))
+        gap_score, gap_labels, seen = 0, [], set()
+        for f in flags:
+            s = f["scenario"]
+            if s not in seen:
+                label, weight = SCENARIO_UPSELL_WEIGHT.get(s, ("", 0))
+                gap_score += weight
+                if label: gap_labels.append(label)
+                seen.add(s)
+        gap_score = min(50, gap_score)
+        total = traj_score + gap_score
+        if total < 15:
+            continue
+        candidates.append({
+            "Score":        total,
+            "Store":        name,
+            "CCID":         ccid,
+            "Metric Trend": f"VDPs {_pct(vdp_d) if vdp_d else '→'}  Conn {_pct(conn_d) if conn_d else '→'}",
+            "Conversation": gap_labels[0] if gap_labels else "Growth momentum — package review",
+        })
+    candidates.sort(key=lambda r: -r["Score"])
+    return candidates
+
+
 st.divider()
-col_exp1, col_exp2, _ = st.columns([2, 2, 6])
+col_exp1, col_exp2, col_exp3, _ = st.columns([2, 2, 2, 4])
+
 with col_exp1:
+    if st.button("📊 Export to Google Sheet"):
+        with st.spinner("Creating Google Sheet digest…"):
+            try:
+                _upsell = _build_upsell_candidates(results, stores, include_flagged=True)
+                sheet_url = export_digest_to_gsheet(
+                    group_label      = group_label,
+                    stores           = stores,
+                    results          = results,
+                    expirations      = expirations,
+                    upsell_candidates= _upsell,
+                    store_brief      = st.session_state.get("store_brief"),
+                    health_result    = st.session_state.get("health_result"),
+                )
+                st.success(f"[Open Google Sheet]({sheet_url})")
+            except Exception as _e:
+                st.error(f"Export failed: {_e}")
+
+with col_exp2:
     if st.button("💾 Export HTML Digest"):
         sys.path.insert(0, os.path.dirname(__file__))
         from biz_scan import build_html_digest
@@ -1822,7 +2539,7 @@ with col_exp1:
             f.write(html)
         st.success(f"Saved → `{fname}`")
 
-with col_exp2:
+with col_exp3:
     if st.button("🔄 Refresh Data"):
         st.cache_data.clear()
         st.session_state.pop("scan", None)
