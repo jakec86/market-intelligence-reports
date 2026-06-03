@@ -38,7 +38,7 @@
   .panel h3{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
     color:var(--violet);margin-bottom:10px;border-bottom:2px solid var(--lavender);padding-bottom:6px;}
 
-  #legend{position:absolute;bottom:24px;left:16px;z-index:1000;}
+  #legend{position:absolute;bottom:24px;right:16px;z-index:1000;}
   .legend-item{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:11px;color:var(--gray);}
   .legend-circle{border-radius:50%;background:rgba(129,54,178,.18);border:2px solid rgba(129,54,178,.65);flex-shrink:0;}
 
@@ -61,7 +61,7 @@
   .tier-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;}
 
   /* ── Radius Panel ── */
-  #radius-panel{position:absolute;top:74px;left:16px;z-index:1000;width:228px;max-height:calc(100vh - 310px);overflow-y:auto;}
+  #radius-panel{position:absolute;top:130px;left:16px;z-index:1000;width:228px;max-height:calc(100vh - 310px);overflow-y:auto;}
   #radius-panel h3{margin-bottom:8px;}
   #radius-input-row{display:flex;gap:6px;margin-bottom:7px;}
   #radius-address{
@@ -212,7 +212,7 @@
   <button class="mode-btn" id="mode-btn-search" onclick="setMode('search')">Search Map</button>
 </div>
 
-<div id="cs-social-panel" style="position:absolute;top:74px;left:260px;z-index:1000;background:#fff;
+<div id="cs-social-panel" style="position:absolute;top:130px;left:252px;z-index:1000;background:#fff;
   border:1px solid #ddd;border-radius:10px;padding:12px 16px;
   box-shadow:0 2px 10px rgba(55,11,85,.12);font-family:Inter,sans-serif;min-width:280px;">
   <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
@@ -221,7 +221,7 @@
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
     <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.8px;">Total Sessions</div>
       <div style="font-size:18px;font-weight:700;color:#370B55;letter-spacing:-.5px;">25,486</div></div>
-    <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.8px;">New Users</div>
+    <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.8px;">New Users (59%)</div>
       <div style="font-size:18px;font-weight:700;color:#370B55;letter-spacing:-.5px;">15,261</div></div>
     <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.8px;">Conversions</div>
       <div style="font-size:18px;font-weight:700;color:#370B55;letter-spacing:-.5px;">11</div></div>
@@ -236,9 +236,9 @@
 <div id="demand-view">
   <div id="dv-inner">
     <div id="dv-controls">
-      <button class="dv-metric-btn active" id="dv-btn-vdp" onclick="dvSetMetric('vdp')">Sessions</button>
-      <button class="dv-metric-btn" id="dv-btn-connections" onclick="dvSetMetric('connections')">Engaged</button>
-      <button class="dv-metric-btn" id="dv-btn-vehicles" onclick="dvSetMetric('vehicles')">Social Ads</button>
+      <button class="dv-metric-btn active" id="dv-btn-vdp" onclick="dvSetMetric('vdp')">Buick GMC</button>
+      <button class="dv-metric-btn" id="dv-btn-connections" onclick="dvSetMetric('connections')">Hyundai</button>
+      <button class="dv-metric-btn" id="dv-btn-vehicles" onclick="dvSetMetric('vehicles')">Combined</button>
       <select id="dv-stock-select" onchange="dvSetStock(this.value)">
         <option value="all">All Stock Types</option>
         <option value="New">New</option>
@@ -1669,7 +1669,7 @@ function getTierStyle(t){
 const map = L.map('map',{center:mapConfig.center,zoom:mapConfig.zoom,zoomControl:false,attributionControl:false});
 
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; <a href="https://carto.com/">CARTO</a>'}).addTo(map);
-L.control.zoom({position:'bottomleft'}).addTo(map);
+L.control.zoom({position:'topleft'}).addTo(map);
 
 // City markers are now rendered via renderCityMarkers() into cityLayerGroup
 
@@ -1834,27 +1834,7 @@ const competitorDealers = [
 })();
 }, 100);
 
-// Tier legend
-const tl=L.control({position:'bottomright'});
-tl.onAdd=function(){
-  const d=L.DomUtil.create('div','panel tier-legend');
-  d.innerHTML=`
-    <h3 style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#8136B2;margin-bottom:10px;border-bottom:2px solid #D9BAEE;padding-bottom:6px;">Volume Tiers</h3>
-    ${[
-      ['rgba(55,11,85,0.72)','#370B55','5,000+'],
-      ['rgba(100,30,150,0.65)','#6A1E96','2,000 – 5,000'],
-      ['rgba(129,54,178,0.60)','#8136B2','3,000 – 10,000'],
-      ['rgba(171,116,207,0.55)','#AB74CF','1,000 – 3,000'],
-      ['rgba(217,186,238,0.65)','#C8A0E4','300 – 1,000'],
-      ['rgba(240,230,250,0.75)','#D9BAEE','< 300'],
-    ].map(([f,s,l])=>`
-      <div class="tier-item">
-        <div class="tier-dot" style="background:${f};border:2px solid ${s};"></div>
-        <span>${l}</span>
-      </div>`).join('')}`;
-  return d;
-};
-tl.addTo(map);
+// Tier legend shown in #legend panel
 
 // ── Radius Tool Tool ────────────────────────────────────────────────────────
 const RADIUS_M = 48280; // 30 miles in meters
@@ -2187,78 +2167,9 @@ document.getElementById('radius-address').addEventListener('keydown', function(e
 
 // ---- Demand Chart (v2) -------------------------------------------------------
 
-const demandData = [
-  {
-    "make": "GMC",
-    "vdps": 1068,
-    "connections": 527,
-    "vehicles": 830,
-    "stock_type": "New"
-  },
-  {
-    "make": "Buick",
-    "vdps": 286,
-    "connections": 141,
-    "vehicles": 220,
-    "stock_type": "New"
-  }
-];
+const demandData = [{"make": "asc_form_engagement", "vdps": 4003, "connections": 54299, "vehicles": 58302, "stock_type": "All"}, {"make": "asc_item_pageview", "vdps": 24567, "connections": 23084, "vehicles": 47651, "stock_type": "All"}, {"make": "asc_pageview", "vdps": 27911, "connections": 26686, "vehicles": 54597, "stock_type": "All"}, {"make": "asc_media_interaction", "vdps": 7212, "connections": 16346, "vehicles": 23558, "stock_type": "All"}, {"make": "asc_itemlist_pageview", "vdps": 2053, "connections": 1437, "vehicles": 3490, "stock_type": "All"}, {"make": "asc_cta_interaction", "vdps": 962, "connections": 923, "vehicles": 1885, "stock_type": "All"}, {"make": "asc_menu_interaction", "vdps": 1142, "connections": 494, "vehicles": 1636, "stock_type": "All"}, {"make": "asc_element_config", "vdps": 653, "connections": 572, "vehicles": 1225, "stock_type": "All"}, {"make": "asc_click_to_call KEY", "vdps": 6, "connections": 3, "vehicles": 9, "stock_type": "KEY"}, {"make": "asc_form_sub_sales KEY", "vdps": 5, "connections": 2, "vehicles": 7, "stock_type": "KEY"}, {"make": "asc_form_sub_other KEY", "vdps": 0, "connections": 1, "vehicles": 1, "stock_type": "KEY"}, {"make": "asc_form_submission", "vdps": 5, "connections": 3, "vehicles": 8, "stock_type": "All"}];
 
-const modelData = {
-  "GMC": [
-    {
-      "model": "HUMMER EV (all trims)",
-      "stock_type": "New",
-      "vdps": 473,
-      "connections": 233,
-      "vehicles": 370
-    },
-    {
-      "model": "Yukon Denali (all trims)",
-      "stock_type": "New",
-      "vdps": 332,
-      "connections": 164,
-      "vehicles": 260
-    },
-    {
-      "model": "Acadia AT4",
-      "stock_type": "New",
-      "vdps": 140,
-      "connections": 69,
-      "vehicles": 110
-    },
-    {
-      "model": "Sierra 2500 HD AT4",
-      "stock_type": "New",
-      "vdps": 108,
-      "connections": 53,
-      "vehicles": 85
-    },
-    {
-      "model": "Terrain AT4",
-      "stock_type": "New",
-      "vdps": 92,
-      "connections": 45,
-      "vehicles": 72
-    }
-  ],
-  "Buick": [
-    {
-      "model": "Enclave Avenir",
-      "stock_type": "New",
-      "vdps": 184,
-      "connections": 91,
-      "vehicles": 145
-    },
-    {
-      "model": "Encore GX Preferred",
-      "stock_type": "New",
-      "vdps": 102,
-      "connections": 50,
-      "vehicles": 80
-    }
-  ]
-};
+const modelData = {"asc_form_engagement": [{"model": "Buick GMC", "vdps": 4003, "connections": 4003, "vehicles": 4003, "stock_type": "All"}, {"model": "Hyundai", "vdps": 54299, "connections": 54299, "vehicles": 54299, "stock_type": "All"}], "asc_item_pageview": [{"model": "Buick GMC", "vdps": 24567, "connections": 24567, "vehicles": 24567, "stock_type": "All"}, {"model": "Hyundai", "vdps": 23084, "connections": 23084, "vehicles": 23084, "stock_type": "All"}], "asc_pageview": [{"model": "Buick GMC", "vdps": 27911, "connections": 27911, "vehicles": 27911, "stock_type": "All"}, {"model": "Hyundai", "vdps": 26686, "connections": 26686, "vehicles": 26686, "stock_type": "All"}], "asc_media_interaction": [{"model": "Buick GMC", "vdps": 7212, "connections": 7212, "vehicles": 7212, "stock_type": "All"}, {"model": "Hyundai", "vdps": 16346, "connections": 16346, "vehicles": 16346, "stock_type": "All"}], "asc_itemlist_pageview": [{"model": "Buick GMC", "vdps": 2053, "connections": 2053, "vehicles": 2053, "stock_type": "All"}, {"model": "Hyundai", "vdps": 1437, "connections": 1437, "vehicles": 1437, "stock_type": "All"}], "asc_cta_interaction": [{"model": "Buick GMC", "vdps": 962, "connections": 962, "vehicles": 962, "stock_type": "All"}, {"model": "Hyundai", "vdps": 923, "connections": 923, "vehicles": 923, "stock_type": "All"}], "asc_menu_interaction": [{"model": "Buick GMC", "vdps": 1142, "connections": 1142, "vehicles": 1142, "stock_type": "All"}, {"model": "Hyundai", "vdps": 494, "connections": 494, "vehicles": 494, "stock_type": "All"}], "asc_element_config": [{"model": "Buick GMC", "vdps": 653, "connections": 653, "vehicles": 653, "stock_type": "All"}, {"model": "Hyundai", "vdps": 572, "connections": 572, "vehicles": 572, "stock_type": "All"}], "asc_click_to_call KEY": [{"model": "Buick GMC", "vdps": 6, "connections": 6, "vehicles": 6, "stock_type": "All"}, {"model": "Hyundai", "vdps": 3, "connections": 3, "vehicles": 3, "stock_type": "All"}], "asc_form_sub_sales KEY": [{"model": "Buick GMC", "vdps": 5, "connections": 5, "vehicles": 5, "stock_type": "All"}, {"model": "Hyundai", "vdps": 2, "connections": 2, "vehicles": 2, "stock_type": "All"}], "asc_form_sub_other KEY": [{"model": "Buick GMC", "vdps": 0, "connections": 0, "vehicles": 0, "stock_type": "All"}, {"model": "Hyundai", "vdps": 1, "connections": 1, "vehicles": 1, "stock_type": "All"}], "asc_form_submission": [{"model": "Buick GMC", "vdps": 5, "connections": 5, "vehicles": 5, "stock_type": "All"}, {"model": "Hyundai", "vdps": 3, "connections": 3, "vehicles": 3, "stock_type": "All"}]};
 
 const demandConfig = {
   "mode": "search",
