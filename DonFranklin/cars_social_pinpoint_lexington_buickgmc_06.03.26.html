@@ -307,7 +307,7 @@
     </div>
     <div id="radius-zip-list" style="max-height:180px;overflow-y:auto;font-size:10px;">
       <div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
-        <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
+        <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Demand</span><span class="rz-hl"></span>
       </div>
     </div>
     <div id="radius-totals" style="display:flex;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid #f0ecf5;">
@@ -316,7 +316,7 @@
     </div>
   </div>
   <div id="radius-note" style="font-size:9.5px;color:#aaa;margin-top:8px;line-height:1.5;border-top:1px solid #f0ecf5;padding-top:8px;">
-    ZIP-level breakdown available when ZIP data is loaded. City view uses city-center approximation.
+    ZIP view shows demand trend score (Q1 2026 YoY). ★ = Active / Pinpoint target.
   </div>
 </div>
 
@@ -1678,7 +1678,7 @@ let cityLayerGroup = L.layerGroup();
 let zipLayerGroup = L.layerGroup();
 let hitlistLayerGroup = L.layerGroup();
 let dealerLayerGroup = L.layerGroup();
-let currentView = 'city';
+let currentView = 'zip';
 
 // Move city markers into a layer group (re-render)
 function renderCityMarkers() {
@@ -1770,10 +1770,14 @@ function setView(view) {
 }
 
 // Initialize
-renderCityMarkers();
-cityLayerGroup.addTo(map);
+renderCityMarkers();  // pre-render for toggle
+renderZipMarkers();  // default view
+zipLayerGroup.addTo(map);
 renderDealerPin();
 dealerLayerGroup.addTo(map);
+// Set ZIP button active by default
+document.getElementById('btn-zip').classList.add('active');
+document.getElementById('btn-city').classList.remove('active');
 // ── Competitor Dealers (rendered after map init) ───────────────────────────
 const competitorDealers = [
   {
@@ -1909,21 +1913,8 @@ function getAllRadiusZips() {
     });
   });
 
-  // Ensure ALL hitlist ZIPs appear even if outside every radius
-  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
-  if (hasHitlist && typeof zipData !== 'undefined') {
-    hitlistZips.forEach(hlZip => {
-      if (!zipMap.has(hlZip)) {
-        const zd = zipData.find(z => z.zip === hlZip);
-        if (zd) {
-          zipMap.set(hlZip, {
-            zip: zd.zip, city: zd.city, state: zd.state, total: zd.total,
-            hitlist: true, dist: -1, radii: ['Outside Radii'],
-          });
-        }
-      }
-    });
-  }
+  // Only show ZIPs actually within a placed radius (hitlist marks them ★)
+  
 
   return Array.from(zipMap.values()).sort((a, b) => b.total - a.total);
 }
@@ -1981,7 +1972,7 @@ function renderRadiusPanel() {
 
   list.innerHTML =
     `<div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
-      <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Searches</span><span class="rz-hl"></span>
+      <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Demand</span><span class="rz-hl"></span>
     </div>` +
     sorted.map(z =>
       `<div class="rz-row${z.hitlist ? ' rz-hitlist' : ''}">
@@ -2007,7 +1998,7 @@ function copyRadiusTable() {
   const data = getDisplayCapture();
   if (!data.length) return;
   const multi = placedRadii.length > 1;
-  const header = multi ? 'ZIP\tCity\tState\tSearches\tHitlist\tRadius' : 'ZIP\tCity\tState\tSearches\tHitlist';
+  const header = multi ? 'ZIP\tCity\tState\tDemand\tHitlist\tRadius' : 'ZIP\tCity\tState\tDemand\tHitlist';
   const rows = data.map(z =>
     multi
       ? `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}\t${z.radii.join('; ')}`
@@ -2023,7 +2014,7 @@ function downloadRadiusCsv() {
   const data = getDisplayCapture();
   if (!data.length) return;
   const multi = placedRadii.length > 1;
-  const header = multi ? 'ZIP,City,State,Searches,Hitlist,Radius' : 'ZIP,City,State,Searches,Hitlist';
+  const header = multi ? 'ZIP,City,State,Demand,Hitlist,Radius' : 'ZIP,City,State,Demand,Hitlist';
   const rows = data.map(z =>
     multi
       ? `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''},"${z.radii.join('; ')}"`
@@ -2043,11 +2034,12 @@ function downloadRadiusCsv() {
 function makeBadgeIcon(sessions, count) {
   return L.divIcon({
     html: `<div style="
-      background:rgba(55,11,85,0.88);color:#fff;
-      font-family:Inter,sans-serif;font-size:10px;font-weight:600;
+      background:#fff;color:#370B55;
+      font-family:Inter,sans-serif;font-size:10px;font-weight:700;
       padding:3px 8px;border-radius:10px;white-space:nowrap;
       transform:translate(-50%, 14px);pointer-events:none;
-      box-shadow:0 2px 8px rgba(55,11,85,.35);letter-spacing:.2px;
+      box-shadow:0 2px 8px rgba(55,11,85,.25);letter-spacing:.2px;
+      border:1.5px solid rgba(55,11,85,.3);
     ">${sessions.toLocaleString()} sessions · ${count} ${count === 1 ? 'city' : 'cities'}</div>`,
     className: '',
     iconSize: [0, 0],
