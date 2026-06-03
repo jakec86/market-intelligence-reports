@@ -2113,15 +2113,14 @@ function geocodeAndPlace() {
   setStatus('Searching…');
 
   fetch(
-    'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(addr),
-    { headers: { 'Accept-Language': 'en', 'User-Agent': 'DonFranklinPinpointMap/1.0' } }
+    'https://photon.komoot.io/api/?q=' + encodeURIComponent(addr) + '&limit=1&lang=en'
   )
     .then(r => r.json())
     .then(data => {
-      if (!data.length) { setStatus('Address not found.'); return; }
-      const lat = parseFloat(data[0].lat);
-      const lng = parseFloat(data[0].lon);
-      const label = data[0].display_name.split(',')[0];
+      const feat = data && data.features && data.features[0];
+      if (!feat) { setStatus('Address not found — click map to place.'); return; }
+      const [lng, lat] = feat.geometry.coordinates;
+      const label = feat.properties.name || addr.split(',')[0];
       placeRadius(lat, lng, label);
       map.panTo([lat, lng]);
       const result = sessionsInRadius(lat, lng);
