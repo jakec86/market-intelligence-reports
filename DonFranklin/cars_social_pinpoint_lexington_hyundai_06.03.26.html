@@ -2089,7 +2089,7 @@ function geocodeAndPlace() {
       placeRadius(lat, lng, label);
       map.panTo([lat, lng]);
       const result = sessionsInRadius(lat, lng);
-      setStatus('✓ ' + result.sessions.toLocaleString() + ' sessions captured', 4000);
+      setStatus('✓ ' + result.sessions.toLocaleString() + ' sessions in radius · drag to adjust', 4000);
     })
     .catch(() => setStatus('Geocoding failed — check connection.'));
 }
@@ -2125,7 +2125,7 @@ map.on('click', function(e) {
   if (!clickModeActive) return;
   placeRadius(e.latlng.lat, e.latlng.lng, null);
   const result = sessionsInRadius(e.latlng.lat, e.latlng.lng);
-  setStatus(result.sessions.toLocaleString() + ' sessions · drag to reposition');
+  setStatus(result.sessions.toLocaleString() + ' sessions in radius · drag to reposition');
 });
 
 document.getElementById('radius-address').addEventListener('keydown', function(e) {
