@@ -201,7 +201,7 @@
       <text x="51" y="23" font-family="Inter,sans-serif" font-weight="800" font-size="22" fill="#AB74CF" letter-spacing="-0.5">.com</text>
     </svg>
     <div id="logo-divider"></div>
-    <span id="logo-subtitle">Cars Social · Lexington Hyundai · Pinpoint Map</span><span id="data-date">· Data as of Jun 3, 2026</span>
+    <span id="logo-subtitle">Cars Social · Lexington Hyundai · Pinpoint + Conquest Map</span><span id="data-date">· Data as of Jun 3, 2026</span>
   </div>
   <div id="total-badge">
     <div class="num" id="total-num">—</div>
@@ -215,10 +215,9 @@
   <button class="mode-btn" id="mode-btn-search" onclick="setMode('search')">Search Map</button>
 </div>
 
-
-<div style="position:absolute;top:74px;left:260px;z-index:1000;background:#fff;border:1px solid #ddd;
-  border-radius:10px;padding:12px 16px;box-shadow:0 2px 10px rgba(55,11,85,.12);
-  font-family:Inter,sans-serif;min-width:280px;">
+<div style="position:absolute;top:74px;left:260px;z-index:1000;background:#fff;
+  border:1px solid #ddd;border-radius:10px;padding:12px 16px;
+  box-shadow:0 2px 10px rgba(55,11,85,.12);font-family:Inter,sans-serif;min-width:280px;">
   <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
     color:#8136B2;margin-bottom:10px;border-bottom:2px solid #D9BAEE;padding-bottom:6px;">
     Cars Social Performance · Jan–May 2026</div>
@@ -227,16 +226,15 @@
       <div style="font-size:18px;font-weight:700;color:#370B55;letter-spacing:-.5px;">28,132</div></div>
     <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.8px;">New Users</div>
       <div style="font-size:18px;font-weight:700;color:#370B55;letter-spacing:-.5px;">21,913</div></div>
-    <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.8px;">Hard Conversions</div>
+    <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.8px;">Conversions</div>
       <div style="font-size:18px;font-weight:700;color:#370B55;letter-spacing:-.5px;">6</div></div>
     <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.8px;">Traffic Rank</div>
       <div style="font-size:18px;font-weight:700;color:#370B55;letter-spacing:-.5px;">#3 Source</div></div>
   </div>
   <div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0ecf5;font-size:10px;color:#999;">
-    ★ Gold = Active Lex ZIPs + Pinpoint Targets · Switch to ZIP view to explore
+    ★ Gold = Active/Pinpoint ZIPs · 🔴 Red = Competitor dealers · Demand Chart = model breakdown
   </div>
 </div>
-
 <div id="map"></div>
 
 <!-- Demand View (v2) -->
@@ -256,7 +254,7 @@
     </div>
     <div id="dv-body">
       <div class="dv-card">
-        <h3>Market Demand by Make <span id="dv-make-count" style="font-size:10px;color:#aaa;font-weight:400;text-transform:none;letter-spacing:0;"></span></h3>
+        <h3>Top Makes — Cars Social Traffic (28d) <span id="dv-make-count" style="font-size:10px;color:#aaa;font-weight:400;text-transform:none;letter-spacing:0;"></span></h3>
         <div id="dv-chart"></div>
       </div>
       <div class="dv-card">
@@ -266,11 +264,11 @@
     </div>
     <div id="dv-footer">
       <div class="dv-stat">
-        <div class="dv-stat-label">Total CS Sessions</div>
+        <div class="dv-stat-label">Total CS Sessions (28d)</div>
         <div class="dv-stat-value" id="dv-total-vdps">—</div>
       </div>
       <div class="dv-stat">
-        <div class="dv-stat-label">Engaged Sessions</div>
+        <div class="dv-stat-label">Engaged Sessions (28d)</div>
         <div class="dv-stat-value" id="dv-total-conns">—</div>
       </div>
       <div class="dv-stat">
@@ -481,30 +479,9 @@ const cities = [
     "lng": -84.0833,
     "total": 142,
     "zips": ""
-  },
-  {
-    "name": "Lawrenceburg",
-    "lat": 38.0373,
-    "lng": -84.8983,
-    "total": 149,
-    "zips": ""
-  },
-  {
-    "name": "La Grange",
-    "lat": 38.4098,
-    "lng": -85.3797,
-    "total": 151,
-    "zips": ""
-  },
-  {
-    "name": "Cynthiana",
-    "lat": 38.3901,
-    "lng": -84.2942,
-    "total": 121,
-    "zips": ""
   }
 ];
-const mapConfig = {center: [38.05, -84.50], zoom: 9};
+const mapConfig = {center:[38.05,-84.50],zoom:9};
 const zipData = [
   {
     "zip": "42566",
@@ -1632,7 +1609,7 @@ const zipData = [
     "trend": -24.8
   }
 ];
-const hitlistZips = ["40384", "41031", "40472", "40456", "40437", "40442", "41049", "40502", "40503", "40504", "40505", "40509", "40511", "40514", "40515", "40516", "40517", "40522"];
+const hitlistZips = ["40340", "40356", "40384", "40391", "40437", "40442", "40456", "40472", "40502", "40503", "40504", "40505", "40506", "40507", "40508", "40509", "40511", "40513", "40514", "40515", "40516", "40517", "40522", "40523", "40544", "40550", "40555", "40574", "40576", "40577", "40578", "40580", "40581", "40582", "40583", "40588", "40598", "41031", "41049"];
 const dealerPin = {"lat": 37.9904, "lng": -84.4257, "name": "Don Franklin Lexington Hyundai", "address": "3440 Richmond Road, Lexington KY 40509"};
 
 const maxTotal = Math.max(...cities.map(c=>c.total));
@@ -2149,56 +2126,49 @@ document.getElementById('radius-address').addEventListener('keydown', function(e
 const demandData = [
   {
     "make": "Hyundai",
-    "vdps": 28132,
-    "connections": 16276,
-    "vehicles": 28132,
-    "stock_type": "All"
+    "vdps": 341,
+    "connections": 205,
+    "vehicles": 285,
+    "stock_type": "New"
   }
 ];
 
 const modelData = {
   "Hyundai": [
     {
-      "model": "January 2026",
-      "vdps": 5962,
-      "connections": 3681,
-      "vehicles": 5132,
-      "stock_type": "All"
+      "model": "Palisade (all trims)",
+      "stock_type": "New",
+      "vdps": 188,
+      "connections": 113,
+      "vehicles": 157
     },
     {
-      "model": "February 2026",
-      "vdps": 5637,
-      "connections": 3645,
-      "vehicles": 4227,
-      "stock_type": "All"
+      "model": "Sonata N-Line",
+      "stock_type": "New",
+      "vdps": 48,
+      "connections": 29,
+      "vehicles": 40
     },
     {
-      "model": "March 2026",
-      "vdps": 6438,
-      "connections": 3915,
-      "vehicles": 4690,
-      "stock_type": "All"
+      "model": "Santa Fe Limited",
+      "stock_type": "New",
+      "vdps": 38,
+      "connections": 23,
+      "vehicles": 32
     },
     {
-      "model": "April 2026",
-      "vdps": 5389,
-      "connections": 2732,
-      "vehicles": 4336,
-      "stock_type": "All"
+      "model": "IONIQ 9 SEL",
+      "stock_type": "New",
+      "vdps": 34,
+      "connections": 20,
+      "vehicles": 28
     },
     {
-      "model": "May 2026",
-      "vdps": 4706,
-      "connections": 2116,
-      "vehicles": 3774,
-      "stock_type": "All"
-    },
-    {
-      "model": "June 2026*",
-      "vdps": 329,
-      "connections": 170,
-      "vehicles": 252,
-      "stock_type": "All"
+      "model": "Santa Cruz XRT",
+      "stock_type": "New",
+      "vdps": 33,
+      "connections": 20,
+      "vehicles": 28
     }
   ]
 };
@@ -2206,16 +2176,16 @@ const modelData = {
 const demandConfig = {
   "mode": "search",
   "metric": "vdp",
-  "metricLabel": "Cars Social Sessions",
+  "metricLabel": "CS Sessions (last 28d)",
   "dma": "Lexington, KY",
   "makes": [
     "Hyundai"
   ],
   "makesLabel": "Hyundai",
-  "stockLabel": "All",
-  "period": "Jan\u2013Jun 2026",
-  "totalVdps": 28132,
-  "totalConnections": 16276
+  "stockLabel": "New",
+  "period": "Last 28 Days \u00b7 GA4",
+  "totalVdps": 341,
+  "totalConnections": 205
 };
 
 // Active state
