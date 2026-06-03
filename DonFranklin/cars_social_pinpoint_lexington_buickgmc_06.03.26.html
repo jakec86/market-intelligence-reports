@@ -285,7 +285,7 @@
 <div id="radius-panel" class="panel">
   <h3>Radius Tool</h3>
   <div id="radius-input-row">
-    <input id="radius-address" type="text" placeholder="Address, city, or ZIP…" autocomplete="off">
+    <input id="radius-address" type="text" placeholder="Address, city, or ZIP…" autocomplete="off" value="3340 Richmond Road, Lexington KY">
     <button id="radius-go" onclick="geocodeAndPlace()">Place</button>
   </div>
   <div id="radius-btn-row">
@@ -1776,6 +1776,9 @@ zipLayerGroup.addTo(map);
 renderDealerPin();
 dealerLayerGroup.addTo(map);
 // ZIP Codes is default view (set in HTML)
+setTimeout(() => { map.invalidateSize(); }, 150);
+// Auto-enable click mode so radius can be placed without geocoding
+setTimeout(() => { toggleClickMode(); }, 200);
 // ── Competitor Dealers (rendered after map init) ───────────────────────────
 setTimeout(function() {
 const competitorDealers = [
@@ -2111,7 +2114,7 @@ function geocodeAndPlace() {
 
   fetch(
     'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(addr),
-    { headers: { 'Accept-Language': 'en' } }
+    { headers: { 'Accept-Language': 'en', 'User-Agent': 'DonFranklinPinpointMap/1.0' } }
   )
     .then(r => r.json())
     .then(data => {
