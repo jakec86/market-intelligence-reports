@@ -1742,65 +1742,19 @@ function setView(view) {
 }
 
 // Initialize
-renderCityMarkers();  // pre-render for toggle
-renderZipMarkers();  // default view
+renderCityMarkers();
+renderZipMarkers();
 zipLayerGroup.addTo(map);
 renderDealerPin();
 dealerLayerGroup.addTo(map);
-// ZIP Codes is default view (set in HTML)
-setTimeout(() => { map.invalidateSize(); }, 150);
-// Auto-enable click mode so radius can be placed without geocoding
-setTimeout(() => { toggleClickMode(); }, 200);
-// ── Competitor Dealers (rendered after map init) ───────────────────────────
-setTimeout(function() {
-const competitorDealers = [
-  {
-    "name": "Gates Hyundai Richmond KY",
-    "lat": 37.7479,
-    "lng": -84.2947,
-    "dist": 18,
-    "on_cars": true
-  },
-  {
-    "name": "Kerry Hyundai Florence NKY",
-    "lat": 38.994,
-    "lng": -84.6263,
-    "dist": 70,
-    "on_cars": true
-  },
-  {
-    "name": "Kerry Hyundai of Alexandria",
-    "lat": 38.9578,
-    "lng": -84.3877,
-    "dist": 67,
-    "on_cars": true
-  },
-  {
-    "name": "Hyundai of Louisville",
-    "lat": 38.2527,
-    "lng": -85.7585,
-    "dist": 74,
-    "on_cars": true
-  }
-];
-(function renderCompetitors() {
-  if (typeof competitorDealers === 'undefined' || !competitorDealers.length) return;
-  competitorDealers.forEach(function(d) {
-    var icon = L.divIcon({
-      html: '<div style="width:14px;height:14px;background:#E53935;border:2.5px solid #B71C1C;' +
-            'border-radius:50%;box-shadow:0 1px 5px rgba(183,28,28,.5);"></div>',
-      className:'', iconSize:[14,14], iconAnchor:[7,7]
-    });
-    L.marker([d.lat,d.lng],{icon:icon,zIndexOffset:2000})
-      .bindTooltip(
-        '<div class="tt-city">'+d.name+'</div>'+
-        '<div class="tt-count" style="color:#E53935;">Competitor · '+d.dist+' mi</div>'+
-        '<div class="tt-zips">'+(d.on_cars?'✓ On Cars.com':'Not on Cars.com')+'</div>',
-        {className:'cars-tooltip',offset:[10,0]}
-      ).addTo(map);
-  });
-})();
-}, 100);
+
+// Competitor red dots
+L.marker([37.7479,-84.2947],{icon:L.divIcon({html:'<div style="width:14px;height:14px;background:#E53935;border:2.5px solid #B71C1C;border-radius:50%;box-shadow:0 1px 5px rgba(183,28,28,.5);"></div>',className:"",iconSize:[14,14],iconAnchor:[7,7]}),zIndexOffset:2000}).bindTooltip('<div class="tt-city">Gates Hyundai Richmond KY</div><div class="tt-count" style="color:#E53935;">Competitor · 18 mi</div>',{className:"cars-tooltip",offset:[10,0]}).addTo(map);
+L.marker([38.994,-84.6263],{icon:L.divIcon({html:'<div style="width:14px;height:14px;background:#E53935;border:2.5px solid #B71C1C;border-radius:50%;box-shadow:0 1px 5px rgba(183,28,28,.5);"></div>',className:"",iconSize:[14,14],iconAnchor:[7,7]}),zIndexOffset:2000}).bindTooltip('<div class="tt-city">Kerry Hyundai Florence NKY</div><div class="tt-count" style="color:#E53935;">Competitor · 70 mi</div>',{className:"cars-tooltip",offset:[10,0]}).addTo(map);
+L.marker([38.2527,-85.7585],{icon:L.divIcon({html:'<div style="width:14px;height:14px;background:#E53935;border:2.5px solid #B71C1C;border-radius:50%;box-shadow:0 1px 5px rgba(183,28,28,.5);"></div>',className:"",iconSize:[14,14],iconAnchor:[7,7]}),zIndexOffset:2000}).bindTooltip('<div class="tt-city">Hyundai of Louisville</div><div class="tt-count" style="color:#E53935;">Competitor · 74 mi</div>',{className:"cars-tooltip",offset:[10,0]}).addTo(map);
+
+// Recalculate map size so ZIP markers show on load
+setTimeout(function() { map.invalidateSize(); }, 400);
 
 // Tier legend shown in #legend panel
 
