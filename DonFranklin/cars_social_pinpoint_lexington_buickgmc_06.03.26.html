@@ -323,8 +323,8 @@
 <div id="view-toggle" class="panel">
   <h3>Map View</h3>
   <div class="toggle-row">
-    <button id="btn-city" class="view-btn active" onclick="setView('city')">Cities</button>
-    <button id="btn-zip" class="view-btn" onclick="setView('zip')">ZIP Codes</button>
+    <button id="btn-city" class="view-btn" onclick="setView('city')">Cities</button>
+    <button id="btn-zip" class="view-btn active" onclick="setView('zip')">ZIP Codes</button>
   </div>
 </div>
 
@@ -1775,10 +1775,9 @@ renderZipMarkers();  // default view
 zipLayerGroup.addTo(map);
 renderDealerPin();
 dealerLayerGroup.addTo(map);
-// Set ZIP button active by default
-document.getElementById('btn-zip').classList.add('active');
-document.getElementById('btn-city').classList.remove('active');
+// ZIP Codes is default view (set in HTML)
 // ── Competitor Dealers (rendered after map init) ───────────────────────────
+setTimeout(function() {
 const competitorDealers = [
   {
     "name": "Dan Cummins Buick Georgetown",
@@ -1824,7 +1823,7 @@ const competitorDealers = [
             'border-radius:50%;box-shadow:0 1px 5px rgba(183,28,28,.5);"></div>',
       className:'', iconSize:[14,14], iconAnchor:[7,7]
     });
-    L.marker([d.lat,d.lng],{icon:icon,zIndexOffset:800})
+    L.marker([d.lat,d.lng],{icon:icon,zIndexOffset:2000})
       .bindTooltip(
         '<div class="tt-city">'+d.name+'</div>'+
         '<div class="tt-count" style="color:#E53935;">Competitor · '+d.dist+' mi</div>'+
@@ -1833,6 +1832,7 @@ const competitorDealers = [
       ).addTo(map);
   });
 })();
+}, 100);
 
 // Tier legend
 const tl=L.control({position:'bottomright'});
