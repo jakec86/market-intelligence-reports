@@ -1153,10 +1153,10 @@ async () => {
 """
 
 
-def _aggregate_lead_sources(entry) -> dict:
+def _aggregate_lead_sources(entry, target_date_str: str = None) -> dict:
     """Aggregate the fine-grained Connections worksheet into high-level lead-source buckets.
     Returns {"phone", "email", "chat", "website_transfers", "walk_ins", "vdp_print",
-             "instant_offer", "total"} — all counts from the most-recent month."""
+             "instant_offer", "total", "month"} for the given target_date_str (or most-recent)."""
     if not entry or not entry.get("rows"):
         return {}
     cols = entry["cols"]
@@ -1167,21 +1167,28 @@ def _aggregate_lead_sources(entry) -> dict:
     except ValueError:
         return {}
 
-    # Find the most-recent Begin date so we only aggregate the current month
+    # Collect all distinct Begin dates, sorted descending
     from datetime import datetime
-    most_recent = None
+    dates_seen = set()
     for r in entry["rows"]:
         if len(r) <= date_idx:
             continue
         try:
             dt = datetime.strptime(r[date_idx], "%m/%d/%Y")
+            dates_seen.add(dt)
         except (ValueError, TypeError):
             continue
-        if most_recent is None or dt > most_recent:
-            most_recent = dt
-    if most_recent is None:
+    if not dates_seen:
         return {}
-    target_date = most_recent.strftime("%-m/%-d/%Y")
+    # Build per-date buckets for current (most recent) and prior month
+    sorted_dates = sorted(dates_seen, reverse=True)
+    most_recent   = sorted_dates[0]
+    prior_month_d = sorted_dates[1] if len(sorted_dates) > 1 else None
+    # Allow caller to override the target date (e.g. prior month)
+    if target_date_str:
+        target_date = target_date_str
+    else:
+        target_date = most_recent.strftime("%-m/%-d/%Y")
 
     buckets = {"phone": 0.0, "email": 0.0, "chat": 0.0, "website_transfers": 0.0,
                "walk_ins": 0.0, "vdp_print": 0.0, "instant_offer": 0.0, "other": 0.0}
@@ -1239,7 +1246,26 @@ def _fetch_roi_one_sheeter_on(page, uuid: str) -> Optional[dict]:
         if not raw:
             return None
 
-        result: dict = {"lead_sources": _aggregate_lead_sources(raw.get("Connections"))}
+        conn_entry = raw.get("Connections")
+        # Gather both current (most-recent) and prior month lead source buckets
+        # so build_data_context() can choose the right period
+        current_ls = _aggregate_lead_sources(conn_entry)
+        prior_ls   = None
+        if conn_entry and conn_entry.get("rows"):
+            from datetime import datetime as _dt
+            dates = sorted({
+                _dt.strptime(r[conn_entry["cols"].index("Begin date")], "%m/%d/%Y")
+                for r in conn_entry["rows"]
+                if len(r) > conn_entry["cols"].index("Begin date")
+                and r[conn_entry["cols"].index("Begin date")]
+            }, reverse=True)
+            if len(dates) > 1:
+                prior_date_str = dates[1].strftime("%-m/%-d/%Y")
+                prior_ls = _aggregate_lead_sources(conn_entry, target_date_str=prior_date_str)
+        result: dict = {
+            "lead_sources":       current_ls,
+            "lead_sources_prior": prior_ls,
+        }
 
         # Pull Leads Per VIN (any non-null value; take the most recent)
         per_vin = raw.get("Per VIN")

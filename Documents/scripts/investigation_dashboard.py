@@ -171,136 +171,9 @@ def _load_tableau_pat() -> tuple:
 
 PAT_NAME, PAT_SECRET = _load_tableau_pat()
 
-# Tableau Competitive Set view IDs (Competitive Set - Radius & DMA Comparisons workbook)
-COMP_SET_DATA_VIEW  = "ac634cc0-a5ed-4b10-9d04-82dab8a4410a"  # New & Used Data tab
-COMP_SET_RADIUS_VIEW = "609a2451-6837-4b06-a136-03f79c8a05ef"  # Radius Competitive Set tab
-
-
 def _pull_comp_set_tableau(ccid: str, dealer_name: str) -> Optional[Dict]:
-    """
-    Pull competitive set data from the Tableau 'Competitive Set New & Used Data' view.
-
-    This view is RLS-locked — it returns data for the default dealer associated with
-    Jake's PAT. We check whether the returned dealer matches the requested store.
-    If it doesn't match, we return None so the caller can fall back to admin.cars.com.
-
-    Returns a structured dict suitable for build_extended_context():
-      {
-        "available": True,
-        "source": "tableau",
-        "dealer_name": str,
-        "dealer_ccid": str,
-        "matches_request": bool,
-        "vdp_rank": int | None,
-        "competitor_count": int,
-        "competitor_type": str,
-        "competitors": [{"name", "pct_vdp", "pct_email", "pct_phone", "pct_vehicles",
-                         "avg_rating", "srp_to_vdp"}, ...],
-        "dealer_implied_vdp_share": float | None,
-      }
-    """
-    try:
-        token = _tableau_token()
-    except Exception as _e:
-        return {"available": False, "source": "tableau", "error": f"token error: {type(_e).__name__}: {str(_e)[:120]}"}
-
-    try:
-        req = urllib.request.Request(
-            f"{TABLEAU_HOST}/api/3.22/sites/{SITE_ID}/views/{COMP_SET_DATA_VIEW}/data?maxAge=5",
-            headers={"X-Tableau-Auth": token},
-        )
-        with urllib.request.urlopen(req, timeout=60) as r:
-            raw = r.read().decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as _e:
-        return {"available": False, "source": "tableau", "error": f"HTTP {_e.code}: {_e.reason}"}
-    except Exception as _e:
-        return {"available": False, "source": "tableau", "error": f"{type(_e).__name__}: {str(_e)[:120]}"}
-
-    rows = list(csv.DictReader(io.StringIO(raw)))
-    if not rows:
-        return {"available": False, "source": "tableau", "error": "empty response"}
-
-    # Identify the RLS-locked dealer from the data
-    first = rows[0]
-    rls_dealer_name = first.get("Customer Name", "").strip()
-    rls_dealer_ccid_raw = first.get("Dealer Name (CCID)", "")
-    # Extract CCID from "Name (CCID)" pattern
-    import re as _re2
-    ccid_match = _re2.search(r'\((\d+)\)\s*$', rls_dealer_ccid_raw)
-    rls_ccid = ccid_match.group(1) if ccid_match else ""
-
-    # Check if this matches the requested store
-    matches = False
-    if ccid and rls_ccid and ccid.strip() == rls_ccid.strip():
-        matches = True
-    elif dealer_name and rls_dealer_name:
-        matches = dealer_name.lower() in rls_dealer_name.lower() or rls_dealer_name.lower() in dealer_name.lower()
-
-    # VDP rank and competitor type from the first row
-    vdp_rank_raw = first.get("VDP Rank", "")
-    try:
-        vdp_rank = int(vdp_rank_raw) if vdp_rank_raw.strip().isdigit() else None
-    except Exception:
-        vdp_rank = None
-    comp_type = first.get("Select Competitor Type", "").strip()
-
-    # Pivot: competitor name → measure → float value
-    by_comp: Dict[str, Dict] = {}
-    for row in rows:
-        comp  = row.get("Competitor Name", "").strip()
-        mname = row.get("Measure Names", "").strip()
-        mval  = row.get("Measure Values", "").strip()
-        if not comp or not mname:
-            continue
-        if comp not in by_comp:
-            by_comp[comp] = {}
-        try:
-            by_comp[comp][mname] = float(mval) if mval else None
-        except ValueError:
-            by_comp[comp][mname] = None
-
-    def _m(comp_data: dict, *keys) -> Optional[float]:
-        for k in keys:
-            v = comp_data.get(k)
-            if v is not None:
-                return v
-        return None
-
-    competitors = []
-    total_vdp_share = 0.0
-    for comp_name, metrics in by_comp.items():
-        vdp_pct = _m(metrics, "% of Total  VDPs")
-        if vdp_pct is not None:
-            total_vdp_share += vdp_pct
-        competitors.append({
-            "name":        comp_name,
-            "pct_vdp":     vdp_pct,
-            "pct_email":   _m(metrics, "% of Total  Email"),
-            "pct_phone":   _m(metrics, "% of Total  Phone"),
-            "pct_leads":   _m(metrics, "% of Total  Leads"),
-            "pct_vehicles": _m(metrics, "% of Total Vehicles"),
-            "pct_srps":    _m(metrics, "% of Total SRPs"),
-            "avg_rating":  _m(metrics, "Avg Rating"),
-            "srp_to_vdp":  _m(metrics, "SRP to VDP - All"),
-        })
-
-    # Sort competitors by VDP share descending
-    competitors.sort(key=lambda c: -(c.get("pct_vdp") or 0))
-
-    dealer_implied_vdp = max(0.0, 1.0 - total_vdp_share) if total_vdp_share > 0 else None
-
-    return {
-        "available":                True,
-        "source":                   "tableau",
-        "dealer_name":              rls_dealer_name,
-        "dealer_ccid":              rls_ccid,
-        "matches_request":          matches,
-        "vdp_rank":                 vdp_rank,
-        "competitor_count":         len(competitors),
-        "competitor_type":          comp_type,
-        "competitors":              competitors,
-        "dealer_implied_vdp_share": dealer_implied_vdp,
-    }
+    """Removed — Tableau competitive set is RLS-locked per-store."""
+    return None
 
 
 SF_CLI = "/Users/jcrawley/.npm-global/bin/sf"
@@ -982,51 +855,62 @@ def _next_steps_panel(ccid: str, store_name: str, flags: Optional[List] = None,
 # ─── GSHEET EXPORT ────────────────────────────────────────────────────────────
 
 def _gsheet_client():
-    """Return an authenticated gspread client using the shared sheets token."""
+    """Return an authenticated gspread client using the shared sheets token.
+
+    The sheets token only has spreadsheets scope (not drive), so we use the
+    Sheets API v4 to create spreadsheets instead of gc.create() which needs Drive.
+    """
     import gspread
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
 
-    TOKEN_PATH  = os.path.expanduser("~/.claude/tokens/sheets_token.json")
-    CLIENT_PATH = os.path.expanduser("~/gcp-oauth.keys.json")
-    SCOPES      = ["https://www.googleapis.com/auth/spreadsheets",
-                   "https://www.googleapis.com/auth/drive"]
+    TOKEN_PATH = os.path.expanduser("~/.claude/tokens/sheets_token.json")
 
     with open(TOKEN_PATH) as f:
         tok = json.load(f)
 
+    # Token file uses "token" key, not "access_token"
     creds = Credentials(
-        token         = tok.get("access_token"),
+        token         = tok.get("token") or tok.get("access_token"),
         refresh_token = tok.get("refresh_token"),
-        token_uri     = "https://oauth2.googleapis.com/token",
-        client_id     = None,
-        client_secret = None,
-        scopes        = SCOPES,
+        token_uri     = tok.get("token_uri", "https://oauth2.googleapis.com/token"),
+        client_id     = tok.get("client_id"),
+        client_secret = tok.get("client_secret"),
+        scopes        = tok.get("scopes") or ["https://www.googleapis.com/auth/spreadsheets"],
     )
-    # Pull client_id / client_secret from the oauth keys file
-    try:
-        with open(CLIENT_PATH) as f:
-            ck = json.load(f)
-        web = ck.get("web") or ck.get("installed") or {}
-        creds._client_id     = web.get("client_id")
-        creds._client_secret = web.get("client_secret")
-    except Exception:
-        pass
 
-    if creds.expired and creds.refresh_token:
+    # Always refresh — the stored expiry is not reliable (token can be revoked
+    # or stale even when expiry hasn't passed). Refresh is cheap and idempotent.
+    try:
         creds.refresh(Request())
-        # Persist refreshed token
-        try:
-            with open(TOKEN_PATH) as f:
-                raw = json.load(f)
-            raw["access_token"] = creds.token
-            with open(TOKEN_PATH, "w") as f:
-                json.dump(raw, f)
-        except Exception:
-            pass
+        tok["token"] = creds.token
+        with open(TOKEN_PATH, "w") as f:
+            json.dump(tok, f)
+    except Exception:
+        pass  # proceed with existing token; API call will 401 and surface the error
 
     from gspread.http_client import BackOffHTTPClient
     return gspread.Client(auth=creds, http_client=BackOffHTTPClient)
+
+
+def _gsheet_create(gc, title: str) -> "gspread.Spreadsheet":
+    """Create a spreadsheet via Sheets API v4 (no Drive scope needed), return gspread object."""
+    import urllib.request as _ur
+    import json as _json
+
+    token = gc.auth.token
+    body = _json.dumps({"properties": {"title": title}}).encode()
+    req = _ur.Request(
+        "https://sheets.googleapis.com/v4/spreadsheets",
+        data=body,
+        headers={"Authorization": f"Bearer {token}",
+                 "Content-Type": "application/json"},
+        method="POST",
+    )
+    with _ur.urlopen(req, timeout=30) as r:
+        resp = _json.loads(r.read())
+    spreadsheet_id = resp["spreadsheetId"]
+    return gc.open_by_key(spreadsheet_id)
 
 
 # RGB tuples → gspread color dicts
@@ -1132,8 +1016,7 @@ def export_digest_to_gsheet(
     """
     gc = _gsheet_client()
     title = f"Investigation Digest — {group_label} — {date.today().strftime('%b %d, %Y')}"
-    sh = gc.create(title)
-    sh.share(None, perm_type="anyone", role="reader")  # view-only link
+    sh = _gsheet_create(gc, title)  # uses Sheets API v4 (no Drive scope required)
 
     flagged = results["high"] + results["medium"]
     brights = results["bright_spots"]
@@ -1432,7 +1315,7 @@ def export_digest_to_gsheet(
     if fmt_reqs:
         sh.batch_update({"requests": fmt_reqs})
 
-    return sh.url
+    return f"https://docs.google.com/spreadsheets/d/{sh.id}/edit"
 
 
 # ─── PAGE SETUP ───────────────────────────────────────────────────────────────
@@ -2265,9 +2148,11 @@ with tab_health:
                             ("Listings Optimizer", _admin.fetch_listings_optimizer,
                              lambda d: f"Listings Optimizer: {len(d.get('within_500_good',[]))+len(d.get('within_500_great',[]))} pricing opps"),
                             ("ROI One-Sheeter",    _admin.fetch_roi_one_sheeter,
-                             lambda d: (f"Lead sources: {d['lead_sources'].get('total',0)} connections"
-                                        + (" (current MTD)" if h_use_prev else ""))
-                                       if d.get("lead_sources") else None),
+                             lambda d: (
+                                 f"Lead sources: {(d.get('lead_sources_prior') or d['lead_sources']).get('total',0)} connections"
+                                 f" ({(d.get('lead_sources_prior') or d['lead_sources']).get('month','')}"
+                                 f"{' — prior month' if h_use_prev and d.get('lead_sources_prior') else ''})"
+                             ) if d.get("lead_sources") else None),
                             ("Sales Influence",    _admin.fetch_sales_influence,
                              lambda d: "DMS: connected" if d and d.get("dms_connected") else "DMS: not connected"),
                         ]:
@@ -2290,38 +2175,14 @@ with tab_health:
                             _h_progress("Pulling Vehicle Demand…")
                             h_vd = _admin.fetch_vehicle_demand(_uuid)
                             h_source_summary.append("Vehicle Demand: " + ("available" if h_vd else "not available"))
-                        # Extended mode: Competitive Set (Tableau first, admin.cars.com fallback)
+                        # Extended mode: Competitive Set via admin.cars.com
                         if h_use_competitive:
-                            _h_progress("Pulling Competitive Set (Tableau)…")
-                            h_competitive = _pull_comp_set_tableau(
-                                h_effective_ccid or "", h_dealer_name
-                            )
+                            _h_progress("Pulling Competitive Set…")
+                            h_competitive = _admin.fetch_competitive_set(_uuid)
                             if h_competitive and h_competitive.get("available"):
-                                if not h_competitive.get("available"):
-                                    # Tableau pull failed — surface the reason, skip admin stub
-                                    err = h_competitive.get("error", "unknown error")
-                                    h_source_summary.append(f"Competitive Set: Tableau unavailable ({err})")
-                                    h_competitive = None
-                                elif h_competitive.get("matches_request"):
-                                    n_c = h_competitive.get("competitor_count", 0)
-                                    rk  = h_competitive.get("vdp_rank")
-                                    h_source_summary.append(
-                                        f"Competitive Set (Tableau): {n_c} competitors"
-                                        + (f", VDP rank #{rk}" if rk else "")
-                                    )
-                                else:
-                                    # RLS mismatch — Tableau view locked to a different dealer.
-                                    # Admin.cars.com stub adds no value, so skip it.
-                                    rls_name = h_competitive.get("dealer_name", "unknown")
-                                    h_source_summary.append(
-                                        f"Competitive Set: not available for {h_dealer_name} "
-                                        f"(Tableau RLS returns {rls_name} — store-specific data unavailable via API)"
-                                    )
-                                    h_competitive = None
+                                h_source_summary.append("Competitive Set: available (anonymous)")
                             else:
-                                # _pull_comp_set_tableau returned None (unexpected)
-                                h_source_summary.append("Competitive Set: Tableau pull returned no data")
-                                h_competitive = None
+                                h_source_summary.append("Competitive Set: not available for this store")
                         if h_use_historical:
                             _h_progress("Pulling Historical Connections…")
                             h_historical = _admin.fetch_historical_connections(_uuid)

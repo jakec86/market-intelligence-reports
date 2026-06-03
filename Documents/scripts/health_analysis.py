@@ -135,7 +135,15 @@ Bullets only. Bold the metric, one-line plain-English risk.
 
 ### 📋 Data Gaps
 
-DMS connectivity only. Skip if connected.
+List ALL significant missing data sources — not just DMS. For each gap, name the data source and what insight it would unlock. Include:
+- DMS not connected → GROI, Turn Rate, influenced-sales attribution unavailable
+- admin.cars.com not available → no Performance Trends, Reputation, Market Comparison, Listings Optimizer
+- No Competitive Set data → cannot assess relative market position
+- No DealerRater data → reputation limited to admin.cars.com rating only
+- No Walk-in / Vehicle Demand data → cannot assess local market demand signals
+- No Historical Connections → cannot identify which vehicle removals drove connection decline
+
+Only list gaps where the missing data would materially change the analysis. Skip a gap if the data is already covered by another source.
 
 ## Dimension Scoring Guidance
 
@@ -351,27 +359,30 @@ def build_data_context(
                     else: parts.append(f"- {mname}: {val:,.0f}")
 
     if roi_data and roi_data.get("lead_sources"):
-        ls = roi_data["lead_sources"]
+        # Use prior-month lead sources when available and use_prev_month is set
+        _prior_ls = roi_data.get("lead_sources_prior")
+        ls = (_prior_ls if use_prev_month and _prior_ls else roi_data["lead_sources"])
+        _ls_month = ls.get("month", "")
+
         _td2 = datetime.date.today()
         _pm2 = (_td2.replace(day=1) - datetime.timedelta(days=1))
-        # ROI One-Sheeter is always current-period — label clearly when reporting prior month
-        _roi_period_note = (
-            f" — ⚠️ CURRENT MTD ({_td2.strftime('%B %Y')}, day {_td2.day}), NOT the selected prior month"
-            if use_prev_month else ls.get('month', '')
-        )
-        parts.append(f"\n## Lead Source Breakdown (ROI One-Sheeter{_roi_period_note})")
-        if use_prev_month:
-            parts.append(
-                f"> Note: ROI One-Sheeter data always reflects the CURRENT period "
-                f"({_td2.strftime('%B %Y')} MTD). "
-                f"For {_pm2.strftime('%B %Y')} totals use the Performance Trends figures above."
+        if use_prev_month and _prior_ls:
+            _roi_period_note = f" — {_ls_month} (prior month)"
+        elif use_prev_month and not _prior_ls:
+            _roi_period_note = (
+                f" — ⚠️ CURRENT MTD ({_td2.strftime('%B %Y')}, day {_td2.day}) — "
+                f"prior month data not available in this view"
             )
+        else:
+            _roi_period_note = f" — {_ls_month}" if _ls_month else ""
+
+        parts.append(f"\n## Lead Source Breakdown (ROI One-Sheeter{_roi_period_note})")
         total = ls.get("total") or 0
         for label, key in [("Phone leads","phone"),("Email leads","email"),("Chat","chat"),("Website transfers","website_transfers"),("Walk-ins","walk_ins")]:
             val = ls.get(key) or 0
             if val:
                 parts.append(f"- {label}: **{val}** ({(val/total*100) if total else 0:.0f}% of connections)")
-        parts.append(f"- **Total connections (current MTD only): {total}**")
+        parts.append(f"- **Total connections: {total}**")
         if roi_data.get("leads_per_vin") is not None:
             parts.append(f"- Leads per VIN: {roi_data['leads_per_vin']:.2f}")
 
@@ -551,7 +562,16 @@ Bullets only. Bold metric, one-line risk + data point.
 ---
 
 ### 📋 Data Gaps
-DMS connectivity only. Skip if connected.
+
+List ALL significant missing data sources — not just DMS. For each gap, name the source and what insight it would unlock:
+- DMS not connected → GROI, Turn Rate, influenced-sales attribution unavailable
+- No Competitive Set → cannot assess relative market position or VDP share vs. peers
+- No DealerRater → reputation limited to admin.cars.com data only
+- No Walk-in / Vehicle Demand → cannot assess local search demand signals
+- No Historical Connections → cannot identify which vehicle removals drove connection declines
+- No admin.cars.com → no Performance Trends, Reputation, Market Comparison, Listings Optimizer
+
+Only list gaps that would materially change the analysis if filled.
 
 ## Dimension Scoring Guidance
 
