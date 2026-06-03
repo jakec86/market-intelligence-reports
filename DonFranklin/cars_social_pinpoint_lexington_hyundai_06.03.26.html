@@ -1750,6 +1750,36 @@ cityLayerGroup.addTo(map);
 renderDealerPin();
 dealerLayerGroup.addTo(map);
 // ── Competitor Dealers (rendered after map init) ───────────────────────────
+const competitorDealers = [
+  {
+    "name": "Gates Hyundai Richmond KY",
+    "lat": 37.7479,
+    "lng": -84.2947,
+    "dist": 18,
+    "on_cars": true
+  },
+  {
+    "name": "Kerry Hyundai Florence NKY",
+    "lat": 38.994,
+    "lng": -84.6263,
+    "dist": 70,
+    "on_cars": true
+  },
+  {
+    "name": "Kerry Hyundai of Alexandria",
+    "lat": 38.9578,
+    "lng": -84.3877,
+    "dist": 67,
+    "on_cars": true
+  },
+  {
+    "name": "Hyundai of Louisville",
+    "lat": 38.2527,
+    "lng": -85.7585,
+    "dist": 74,
+    "on_cars": true
+  }
+];
 (function renderCompetitors() {
   if (typeof competitorDealers === 'undefined' || !competitorDealers.length) return;
   competitorDealers.forEach(function(d) {

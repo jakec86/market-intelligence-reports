@@ -1778,6 +1778,43 @@ cityLayerGroup.addTo(map);
 renderDealerPin();
 dealerLayerGroup.addTo(map);
 // ── Competitor Dealers (rendered after map init) ───────────────────────────
+const competitorDealers = [
+  {
+    "name": "Dan Cummins Buick Georgetown",
+    "lat": 38.2098,
+    "lng": -84.5596,
+    "dist": 17,
+    "on_cars": true
+  },
+  {
+    "name": "Dan Cummins Buick Paris",
+    "lat": 38.2098,
+    "lng": -84.253,
+    "dist": 18,
+    "on_cars": true
+  },
+  {
+    "name": "Neil Huffman GMC Frankfort",
+    "lat": 38.2009,
+    "lng": -84.8733,
+    "dist": 28,
+    "on_cars": true
+  },
+  {
+    "name": "Don Franklin Bardstown Buick",
+    "lat": 37.8128,
+    "lng": -85.4669,
+    "dist": 55,
+    "on_cars": true
+  },
+  {
+    "name": "Courtesy Buick GMC Louisville",
+    "lat": 38.2527,
+    "lng": -85.7585,
+    "dist": 74,
+    "on_cars": true
+  }
+];
 (function renderCompetitors() {
   if (typeof competitorDealers === 'undefined' || !competitorDealers.length) return;
   competitorDealers.forEach(function(d) {
