@@ -236,9 +236,9 @@
 <div id="demand-view">
   <div id="dv-inner">
     <div id="dv-controls">
-      <button class="dv-metric-btn active" id="dv-btn-vdp" onclick="dvSetMetric('vdp')">Buick GMC</button>
-      <button class="dv-metric-btn" id="dv-btn-connections" onclick="dvSetMetric('connections')">Hyundai</button>
-      <button class="dv-metric-btn" id="dv-btn-vehicles" onclick="dvSetMetric('vehicles')">Combined</button>
+      <button class="dv-metric-btn active" id="dv-btn-vdp" onclick="dvSetMetric('vdp')">Sessions</button>
+      <button class="dv-metric-btn" id="dv-btn-connections" onclick="dvSetMetric('connections')">Engaged</button>
+      <button class="dv-metric-btn" id="dv-btn-vehicles" onclick="dvSetMetric('vehicles')">Inventory</button>
       <select id="dv-stock-select" onchange="dvSetStock(this.value)">
         <option value="all">All Stock Types</option>
         <option value="New">New</option>
@@ -963,24 +963,11 @@ document.getElementById('radius-address').addEventListener('keydown', function(e
 
 // ---- Demand Chart (v2) -------------------------------------------------------
 
-const demandData = [{"make": "asc_form_engagement", "vdps": 4003, "connections": 54299, "vehicles": 58302, "stock_type": "All"}, {"make": "asc_item_pageview", "vdps": 24567, "connections": 23084, "vehicles": 47651, "stock_type": "All"}, {"make": "asc_pageview", "vdps": 27911, "connections": 26686, "vehicles": 54597, "stock_type": "All"}, {"make": "asc_media_interaction", "vdps": 7212, "connections": 16346, "vehicles": 23558, "stock_type": "All"}, {"make": "asc_itemlist_pageview", "vdps": 2053, "connections": 1437, "vehicles": 3490, "stock_type": "All"}, {"make": "asc_cta_interaction", "vdps": 962, "connections": 923, "vehicles": 1885, "stock_type": "All"}, {"make": "asc_menu_interaction", "vdps": 1142, "connections": 494, "vehicles": 1636, "stock_type": "All"}, {"make": "asc_element_config", "vdps": 653, "connections": 572, "vehicles": 1225, "stock_type": "All"}, {"make": "asc_click_to_call KEY", "vdps": 6, "connections": 3, "vehicles": 9, "stock_type": "KEY"}, {"make": "asc_form_sub_sales KEY", "vdps": 5, "connections": 2, "vehicles": 7, "stock_type": "KEY"}, {"make": "asc_form_sub_other KEY", "vdps": 0, "connections": 1, "vehicles": 1, "stock_type": "KEY"}, {"make": "asc_form_submission", "vdps": 5, "connections": 3, "vehicles": 8, "stock_type": "All"}];
+const demandData = [{"make": "Hyundai", "vdps": 341, "connections": 205, "vehicles": 285, "stock_type": "New"}];
 
-const modelData = {"asc_form_engagement": [{"model": "Buick GMC", "vdps": 4003, "connections": 4003, "vehicles": 4003, "stock_type": "All"}, {"model": "Hyundai", "vdps": 54299, "connections": 54299, "vehicles": 54299, "stock_type": "All"}], "asc_item_pageview": [{"model": "Buick GMC", "vdps": 24567, "connections": 24567, "vehicles": 24567, "stock_type": "All"}, {"model": "Hyundai", "vdps": 23084, "connections": 23084, "vehicles": 23084, "stock_type": "All"}], "asc_pageview": [{"model": "Buick GMC", "vdps": 27911, "connections": 27911, "vehicles": 27911, "stock_type": "All"}, {"model": "Hyundai", "vdps": 26686, "connections": 26686, "vehicles": 26686, "stock_type": "All"}], "asc_media_interaction": [{"model": "Buick GMC", "vdps": 7212, "connections": 7212, "vehicles": 7212, "stock_type": "All"}, {"model": "Hyundai", "vdps": 16346, "connections": 16346, "vehicles": 16346, "stock_type": "All"}], "asc_itemlist_pageview": [{"model": "Buick GMC", "vdps": 2053, "connections": 2053, "vehicles": 2053, "stock_type": "All"}, {"model": "Hyundai", "vdps": 1437, "connections": 1437, "vehicles": 1437, "stock_type": "All"}], "asc_cta_interaction": [{"model": "Buick GMC", "vdps": 962, "connections": 962, "vehicles": 962, "stock_type": "All"}, {"model": "Hyundai", "vdps": 923, "connections": 923, "vehicles": 923, "stock_type": "All"}], "asc_menu_interaction": [{"model": "Buick GMC", "vdps": 1142, "connections": 1142, "vehicles": 1142, "stock_type": "All"}, {"model": "Hyundai", "vdps": 494, "connections": 494, "vehicles": 494, "stock_type": "All"}], "asc_element_config": [{"model": "Buick GMC", "vdps": 653, "connections": 653, "vehicles": 653, "stock_type": "All"}, {"model": "Hyundai", "vdps": 572, "connections": 572, "vehicles": 572, "stock_type": "All"}], "asc_click_to_call KEY": [{"model": "Buick GMC", "vdps": 6, "connections": 6, "vehicles": 6, "stock_type": "All"}, {"model": "Hyundai", "vdps": 3, "connections": 3, "vehicles": 3, "stock_type": "All"}], "asc_form_sub_sales KEY": [{"model": "Buick GMC", "vdps": 5, "connections": 5, "vehicles": 5, "stock_type": "All"}, {"model": "Hyundai", "vdps": 2, "connections": 2, "vehicles": 2, "stock_type": "All"}], "asc_form_sub_other KEY": [{"model": "Buick GMC", "vdps": 0, "connections": 0, "vehicles": 0, "stock_type": "All"}, {"model": "Hyundai", "vdps": 1, "connections": 1, "vehicles": 1, "stock_type": "All"}], "asc_form_submission": [{"model": "Buick GMC", "vdps": 5, "connections": 5, "vehicles": 5, "stock_type": "All"}, {"model": "Hyundai", "vdps": 3, "connections": 3, "vehicles": 3, "stock_type": "All"}]};
+const modelData = {"Hyundai": [{"model": "Palisade (all trims)", "stock_type": "New", "vdps": 188, "connections": 113, "vehicles": 157}, {"model": "Sonata N-Line", "stock_type": "New", "vdps": 48, "connections": 29, "vehicles": 40}, {"model": "Santa Fe Limited AWD", "stock_type": "New", "vdps": 38, "connections": 23, "vehicles": 32}, {"model": "IONIQ 9 SEL (EV)", "stock_type": "New", "vdps": 34, "connections": 20, "vehicles": 28}, {"model": "Santa Cruz XRT AWD", "stock_type": "New", "vdps": 33, "connections": 20, "vehicles": 28}]};
 
-const demandConfig = {
-  "mode": "search",
-  "metric": "vdp",
-  "metricLabel": "CS Sessions (last 28d)",
-  "dma": "Lexington, KY",
-  "makes": [
-    "Hyundai"
-  ],
-  "makesLabel": "Hyundai",
-  "stockLabel": "New",
-  "period": "Last 28 Days \u00b7 GA4",
-  "totalVdps": 341,
-  "totalConnections": 205
-};
+const demandConfig = {"mode": "search", "metric": "vdp", "metricLabel": "Social Sessions", "dma": "Lexington, KY", "makes": ["Hyundai"], "makesLabel": "Hyundai", "stockLabel": "New", "period": "Last 28 Days \u00b7 GA4", "totalVdps": 28132, "totalConnections": 16276};
 
 // Active state
 let dvMetric = demandConfig.metric || 'vdp';
