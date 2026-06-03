@@ -42,7 +42,7 @@
   .legend-item{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:11px;color:var(--gray);}
   .legend-circle{border-radius:50%;background:rgba(129,54,178,.18);border:2px solid rgba(129,54,178,.65);flex-shrink:0;}
 
-  #stats{position:absolute;bottom:24px;right:16px;z-index:1000;min-width:200px;}
+  #stats{display:none;}
   .stat-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:11px;}
   .stat-city{color:var(--gray);}
   .stat-num{color:var(--violet);font-weight:600;}
@@ -88,7 +88,7 @@
   #radius-status{font-size:10px;color:#999;margin-top:6px;min-height:13px;line-height:1.3;}
 
   /* ── View Toggle ── */
-  #view-toggle{position:absolute;top:74px;right:16px;z-index:1000;}
+  #view-toggle{position:absolute;top:128px;right:16px;z-index:1000;}
   .toggle-row{display:flex;gap:4px;margin-bottom:6px;}
   .view-btn{
     flex:1;padding:5px 10px;background:#f0ecf5;color:var(--violet);
@@ -215,7 +215,7 @@
   <button class="mode-btn" id="mode-btn-search" onclick="setMode('search')">Search Map</button>
 </div>
 
-<div style="position:absolute;top:74px;left:260px;z-index:1000;background:#fff;
+<div id="cs-social-panel" style="position:absolute;top:74px;left:260px;z-index:1000;background:#fff;
   border:1px solid #ddd;border-radius:10px;padding:12px 16px;
   box-shadow:0 2px 10px rgba(55,11,85,.12);font-family:Inter,sans-serif;min-width:280px;">
   <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
@@ -231,9 +231,7 @@
     <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.8px;">Traffic Rank</div>
       <div style="font-size:18px;font-weight:700;color:#370B55;letter-spacing:-.5px;">#3 Source</div></div>
   </div>
-  <div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0ecf5;font-size:10px;color:#999;">
-    ★ Gold = Active/Pinpoint ZIPs · 🔴 Red = Competitor dealers · Demand Chart = model breakdown
-  </div>
+  
 </div>
 <div id="map"></div>
 
@@ -339,17 +337,21 @@
   <div class="legend-item"><div class="legend-circle" style="width:30px;height:30px;"></div><span>2,000 – 5,000</span></div>
   <div class="legend-item"><div class="legend-circle" style="width:18px;height:18px;"></div><span>500 – 2,000</span></div>
   <div class="legend-item"><div class="legend-circle" style="width:10px;height:10px;"></div><span>&lt; 500</span></div>
+  
+  <div class="legend-item" style="margin-top:8px;padding-top:6px;border-top:1px solid #f0ecf5;">
+    <div style="width:14px;height:14px;background:#E53935;border:2px solid #B71C1C;border-radius:50%;flex-shrink:0;"></div>
+    <span>Competitor Dealer</span>
+  </div>
+  <div class="legend-item">
+    <div style="width:14px;height:14px;background:#E8A817;border:2px solid #B8860B;border-radius:50%;flex-shrink:0;"></div>
+    <span>★ Active / Pinpoint ZIP</span>
+  </div>
   <div class="legend-item" id="hitlist-legend" style="display:none;margin-top:8px;padding-top:6px;border-top:1px solid #f0ecf5;">
     <div class="hitlist-pin" style="width:14px;height:14px;"></div><span>Active / Pinpoint Target</span>
   </div>
   <div class="legend-item" id="dealer-legend" style="display:none;">
     <span class="dealer-star" style="font-size:14px;">★</span><span>Dealer Location</span>
   </div>
-</div>
-
-<div id="stats" class="panel">
-  <h3>Top 8 Cities</h3>
-  <div id="stats-body"></div>
 </div>
 
 <script>
@@ -1617,17 +1619,7 @@ const grandTotal = cities.reduce((s,c)=>s+c.total,0);
 document.getElementById('total-num').textContent = (28132).toLocaleString();
 
 // Render Top 8 Cities sidebar dynamically
-(function(){
-  const top8 = [...cities].sort((a,b)=>b.total-a.total).slice(0,8);
-  if (!top8.length) return;
-  const topMax = top8[0].total;
-  const body = document.getElementById('stats-body');
-  body.innerHTML = top8.map(c=>{
-    const pct = Math.round((c.total/topMax)*100);
-    return `<div class="stat-row"><span class="stat-city">${c.name}</span><span class="stat-num">${c.total.toLocaleString()}</span></div>
-<div class="stat-bar-wrap"><div class="stat-bar" style="width:${pct}%"></div></div>`;
-  }).join('');
-})();
+
 
 function fmtZips(zips) {
   if (!zips) return '';
@@ -1757,6 +1749,24 @@ renderCityMarkers();
 cityLayerGroup.addTo(map);
 renderDealerPin();
 dealerLayerGroup.addTo(map);
+// ── Competitor Dealers (rendered after map init) ───────────────────────────
+(function renderCompetitors() {
+  if (typeof competitorDealers === 'undefined' || !competitorDealers.length) return;
+  competitorDealers.forEach(function(d) {
+    var icon = L.divIcon({
+      html: '<div style="width:14px;height:14px;background:#E53935;border:2.5px solid #B71C1C;' +
+            'border-radius:50%;box-shadow:0 1px 5px rgba(183,28,28,.5);"></div>',
+      className:'', iconSize:[14,14], iconAnchor:[7,7]
+    });
+    L.marker([d.lat,d.lng],{icon:icon,zIndexOffset:800})
+      .bindTooltip(
+        '<div class="tt-city">'+d.name+'</div>'+
+        '<div class="tt-count" style="color:#E53935;">Competitor · '+d.dist+' mi</div>'+
+        '<div class="tt-zips">'+(d.on_cars?'✓ On Cars.com':'Not on Cars.com')+'</div>',
+        {className:'cars-tooltip',offset:[10,0]}
+      ).addTo(map);
+  });
+})();
 
 // Tier legend
 const tl=L.control({position:'bottomright'});
@@ -2204,6 +2214,8 @@ function setMode(mode) {
   if (mode === 'demand') {
     demandView.style.display = 'flex';
     mapEl.style.visibility   = 'hidden';
+    var sp=document.getElementById('cs-social-panel'); if(sp) sp.style.display='none';
+    var vt=document.getElementById('view-toggle'); if(vt) vt.style.display='none';
     btnD.classList.add('active');
     btnS.classList.remove('active');
     if (dvSelectedMake) renderDrillDown(dvSelectedMake);
@@ -2211,6 +2223,8 @@ function setMode(mode) {
   } else {
     demandView.style.display = 'none';
     mapEl.style.visibility   = 'visible';
+    var sp=document.getElementById('cs-social-panel'); if(sp) sp.style.display='block';
+    var vt=document.getElementById('view-toggle'); if(vt) vt.style.display='block';
     btnD.classList.remove('active');
     btnS.classList.add('active');
     setTimeout(() => map.invalidateSize(), 50);
