@@ -7,6 +7,10 @@ Usage:
     python3 pb_report.py --dealer nalley --lei lei.csv --dem dem_signal.csv
     python3 pb_report.py --dealer hendrick --lei ~/Documents/Tableau/hendrick_lei.csv
     python3 pb_report.py --dealer nalley --stats-only   # skip import, just sort + draft
+    python3 pb_report.py --dealer nalley --lei lei.csv --dry-run   # zero remote calls
+
+Per-dealer config (sheet IDs, recipients, layout) lives in pb_dealers.py.
+New-store onboarding checklist: pb_onboarding.md.
 
 Steps handled:
   1. Parse LEI CSV (+ Dem Signal CSV for Nalley) and push to Google Sheet
@@ -39,72 +43,8 @@ TOKEN_SHEETS   = os.path.expanduser("~/.claude/tokens/sheets_token.json")
 TOKEN_GMAIL    = os.path.expanduser("~/.claude/tokens/gmail_jcrawley.json")
 CLIENT_SECRETS = os.path.expanduser("~/gcp-oauth.keys.json")
 
-DEALERS = {
-    "hendrick": {
-        "sheet_id": "1guqWV9HFb2MijC7qQ7qinL4oljbu0N1o9TU5zcmy3GM",
-        "import_tab": "Data Import_Inventory Report",
-        "pbt_tab": "Price Badge Tool",
-        "dem_signal_tab": None,
-        "col_reorder": False,
-        "sort_range": "A3:J5000",   # Hendrick: R1=threshold, R2=headers, data R3+, K deleted
-        "sort_col": 10,             # Column J (1-indexed in gspread)
-        "data_start_row": 3,
-        "threshold_cell": "E1",
-        "pct_cell": "J1",
-        "stock_col": "D",
-        "sheet_url": "https://docs.google.com/spreadsheets/d/1guqWV9HFb2MijC7qQ7qinL4oljbu0N1o9TU5zcmy3GM/edit?gid=565895707#gid=565895707",
-        "email_to": "anne.Lewis@hendrickauto.com",
-        "email_subject": "Re: Cars.com: Price Badge Report",
-        "email_from": "jcrawley@carscommerce.inc",
-        "display_name": "Hendrick Automotive Group",
-        "has_dem_signal": False,
-        "callout_style": "sam",
-        "pbt_store_col": 1,    # col B = Store name
-        "pbt_vehicle_col": 2,  # col C = Vehicle (MMYT)
-    },
-    "nalley": {
-        "sheet_id": "13Jn8vJSG7vRYW9xpuxrMi9kXNhiV_TaCrjQ5lNQRPP8",
-        "import_tab": "Data Import_Inventory Report",
-        "pbt_tab": "Price Badge Tool",
-        "dem_signal_tab": "Data Import_Dem Signal - $ Comp",
-        "col_reorder": False,       # LEI CSV now: Dealer,id,Stock,VIN,Make,YMMT — matches sheet, no reorder
-        "sort_range": "A4:L5000",   # Nalley: header row 3, data starts row 4
-        "sort_col": 10,
-        "data_start_row": 4,
-        "threshold_cell": "E1",
-        "pct_cell": "J1",
-        "stock_col": "D",
-        "sheet_url": "https://docs.google.com/spreadsheets/d/13Jn8vJSG7vRYW9xpuxrMi9kXNhiV_TaCrjQ5lNQRPP8/edit?gid=565895707#gid=565895707",
-        "email_to": "gcaudill1@nalleycars.com, jbrown1@nalleycars.com, zibrahimbegovic@asburyauto.com, rsaeed@nalleycars.com",
-        "email_cc": "sdharanendra@asburyauto.com",
-        "email_subject": f"Nalley Lexus Galleria — Price Badge Report {date.today().strftime('%-m.%-d.%y')}",
-        "email_from": "jcrawley@cars.com",
-        "display_name": "Nalley Lexus Galleria",
-        "has_dem_signal": True,
-        "callout_style": "mmyt",
-        "pbt_store_col": None,  # Nalley has no SAM/Store col — single dealer
-        "pbt_vehicle_col": 1,   # col B = MMYT
-    },
-    "dyer": {
-        "sheet_id": "1TWMwKUnntKZpjQDX6rbrScDHHfV5jQisG1EIAwIFwC8",
-        "import_tab": "Data Import_Inventory Report",
-        "pbt_tab": "Price Badge Tool",
-        "dem_signal_tab": "Data Import_Dem Signal - $ Comp",
-        "col_reorder": False,
-        "sort_range": "A4:L5000",
-        "sort_col": 10,
-        "data_start_row": 4,
-        "threshold_cell": "E1",
-        "pct_cell": "J1",
-        "stock_col": "D",
-        "sheet_url": "https://docs.google.com/spreadsheets/d/1TWMwKUnntKZpjQDX6rbrScDHHfV5jQisG1EIAwIFwC8/edit?gid=565895707#gid=565895707",
-        "email_to": "",
-        "email_subject": f"Dyer & Dyer Volvo Cars — Price Badge Report {date.today().strftime('%-m.%-d.%y')}",
-        "email_from": "jcrawley@cars.com",
-        "display_name": "Dyer & Dyer Volvo Cars",
-        "has_dem_signal": True,
-    },
-}
+# Per-dealer config lives in pb_dealers.py — new stores are added there, not here.
+from pb_dealers import DEALERS
 
 
 # ─── AUTH ────────────────────────────────────────────────────────────────────
@@ -245,6 +185,75 @@ def import_to_sheet(gc, cfg, lei_rows, dem_rows=None):
     ws_import.update(_clean_rows(lei_rows), value_input_option="RAW")
     print(f"  ✓ Imported {len(lei_rows)-1} LEI rows to '{cfg['import_tab']}'")
 
+    # Anchor the two positional columns in the PBT with static values.
+    #
+    # The PBT's col B (Store) and col D (Stock#) are direct row references
+    # (e.g. ='Data Import_Inventory Report'!A928) — not key-based.  After a
+    # sort Google Sheets adjusts those relative refs by displacement, so they
+    # land on wrong import rows.  All other PBT columns (C, E-J) VLOOKUP on D
+    # or B, so fixing these two roots fixes the entire formula chain.
+    #
+    # Writing static values here means each cell carries its own data through
+    # any subsequent sort without formula drift.
+    if cfg.get("pbt_tab") and cfg.get("data_start_row"):
+        pbt_ws = sh.worksheet(cfg["pbt_tab"])
+        data_start = cfg["data_start_row"]
+        n = len(lei_rows) - 1  # rows excluding header
+
+        # Derive write columns from config so each dealer lands in the right cells.
+        # pbt_vehicle_col is 0-indexed (1=B, 2=C); stock_col is already a letter.
+        ymmt_col_letter  = chr(ord('A') + cfg.get('pbt_vehicle_col', 2))
+        stock_col_letter = cfg.get('stock_col', 'D')
+        vin_col_letter   = (chr(ord('A') + cfg['pbt_vin_col'])
+                            if cfg.get('pbt_vin_col') is not None else None)
+        lei_vin_idx      = cfg.get('lei_vin_idx', 3)
+
+        # Col Vehicle formula uses approximate VLOOKUP (missing FALSE arg) —
+        # broken on unsorted import data. Write YMMT directly as a static value.
+        hdr_row = lei_rows[0]
+        ymmt_idx = next((i for i,h in enumerate(hdr_row)
+                         if h.strip().lower() in ("ymmt","mmyt") or "ymmt" in h.lower()), None)
+
+        stock_vals  = [[row[2]]              for row in lei_rows[1:] if len(row) > 2]
+        dealer_vals = [[row[0]]              for row in lei_rows[1:] if len(row) > 0]
+        ymmt_vals   = ([[row[ymmt_idx]]      for row in lei_rows[1:] if len(row) > ymmt_idx]
+                       if ymmt_idx is not None else [])
+        vin_vals    = ([[row[lei_vin_idx]]   for row in lei_rows[1:] if len(row) > lei_vin_idx]
+                       if vin_col_letter else [])
+
+        # Clear only the columns we write to — avoids wiping unrelated formula columns.
+        cols_to_clear = sorted(
+            {ymmt_col_letter, stock_col_letter}
+            | ({vin_col_letter} if vin_col_letter else set())
+            | ({'B'} if cfg.get('pbt_store_col') is not None else set())
+        )
+        # Determine the actual extent of stale data before clearing so we wipe
+        # every row a previous (possibly larger) run wrote, not just up to a fixed cap.
+        stock_col_idx = ord(stock_col_letter) - 64  # D → 4
+        existing_stock = pbt_ws.col_values(stock_col_idx)
+        clear_end = max(
+            data_start + n + 50,                    # at least current import + buffer
+            len(existing_stock) + data_start - 1,   # actual sheet extent
+        )
+        pbt_ws.batch_clear([f"{c}{data_start}:{c}{clear_end}" for c in cols_to_clear])
+
+        if stock_vals:
+            pbt_ws.update(values=stock_vals,
+                          range_name=f"{stock_col_letter}{data_start}:{stock_col_letter}{data_start+n-1}",
+                          value_input_option="RAW")
+        if ymmt_vals:
+            pbt_ws.update(values=ymmt_vals,
+                          range_name=f"{ymmt_col_letter}{data_start}:{ymmt_col_letter}{data_start+n-1}",
+                          value_input_option="RAW")
+        if vin_vals and vin_col_letter:
+            pbt_ws.update(values=vin_vals,
+                          range_name=f"{vin_col_letter}{data_start}:{vin_col_letter}{data_start+n-1}",
+                          value_input_option="RAW")
+        if dealer_vals and cfg.get("pbt_store_col") is not None:
+            pbt_ws.update(values=dealer_vals, range_name=f"B{data_start}:B{data_start+n-1}",
+                          value_input_option="RAW")
+        print(f"  ✓ Anchored PBT cols B/C/D with {n} static values (sort-safe)")
+
     # Dem Signal (Nalley only)
     if dem_rows and cfg["dem_signal_tab"]:
         ws_dem = sh.worksheet(cfg["dem_signal_tab"])
@@ -294,45 +303,82 @@ def safe_sort_pbt(sh, cfg):
 
     data_count = last_data_row - data_start + 1
 
-    # Pass 2: sort all data by J ascending (green to top)
     data_range = f"A{data_start}:{data_end_col}{last_data_row}"
-    _sort_with_retry(pbt, (cfg["sort_col"], "asc"), data_range)
-    print(f"  ✓ Pass 2: sorted {data_range} by J ascending")
 
-    # Find boundary: last green row (J > 0 and J ≤ threshold)
-    time.sleep(2)
-    threshold_val = float(re.sub(r"[,$]", "", pbt.acell(cfg["threshold_cell"]).value))
-    j_vals = pbt.get(f"J{data_start}:J{last_data_row}")
-    last_green_row = data_start - 1
-    for i, row in enumerate(j_vals, data_start):
-        raw = row[0].strip() if row else ""
-        if raw:
-            try:
-                val = float(re.sub(r"[,$]", "", raw))
-                if 0 < val <= threshold_val:
-                    last_green_row = i
-                elif val > threshold_val:
-                    break
-                # val == 0: skip (exactly at threshold, not "within" range)
-            except ValueError:
-                break
+    if cfg.get("pbt_store_col") is None:
+        # Single-dealer (Nalley): no SAM groups — sort J ascending so green (within-threshold)
+        # rows appear at the top. No basicFilter to rely on for color-sort.
+        _sort_with_retry(pbt, (cfg["sort_col"], "asc"), data_range)
+        print(f"  ✓ Pass 2: sorted {data_range} by J ascending (green first)")
+    else:
+        # Multi-dealer (Hendrick): sort by SAM A-Z.
+        # The sheet's basicFilter (with its own sortSpecs) owns the final display order:
+        # it puts rows where col J has conditional-format green (AND(J<=threshold, J>0))
+        # at the top within each SAM group. We provide clean SAM-sorted data and let
+        # the filter handle green-first display automatically.
+        # DO NOT set userEnteredFormat.backgroundColor — it overrides the conditional
+        # format on col J and breaks the filter's color-based sort.
+        _sort_with_retry(pbt, (1, "asc"), data_range)
+        print(f"  ✓ Pass 2: sorted {data_range} by SAM A-Z")
 
-    green_count = max(0, last_green_row - data_start + 1)
-    non_green_start = last_green_row + 1
+    # Count green rows for the status line (read J unformatted; no background write).
+    # Status-line only — never let a transient API error here kill the pipeline.
+    green_count = None
+    try:
+        import googleapiclient.discovery as _disc
+        from google.oauth2.credentials import Credentials as _Creds
+        _creds = _Creds.from_authorized_user_file(TOKEN_SHEETS, SCOPES_SHEETS)
+        if _creds.expired and _creds.refresh_token:
+            from google.auth.transport.requests import Request as _Req
+            _creds.refresh(_Req())
+        _svc = _disc.build("sheets", "v4", credentials=_creds, cache_discovery=False)
 
-    # Pass 3: sort green section by SAM A-Z
-    if green_count > 0:
-        _sort_with_retry(pbt, (1, "asc"), f"A{data_start}:{data_end_col}{last_green_row}")
-        print(f"  ✓ Pass 3: green section A{data_start}:{data_end_col}{last_green_row} sorted by SAM A-Z ({green_count} vehicles)")
+        time.sleep(5)
+        threshold_val = float(re.sub(r"[,$]", "", pbt.acell(cfg["threshold_cell"]).value))
+        j_raw = _svc.spreadsheets().values().get(
+            spreadsheetId=pbt.spreadsheet.id,
+            range=f"'{pbt.title}'!J{data_start}:J{last_data_row}",
+            valueRenderOption="UNFORMATTED_VALUE",
+        ).execute().get("values", [])
+        green_count = sum(
+            1 for row in j_raw
+            if row and isinstance(row[0], (int, float)) and 0 < row[0] <= threshold_val
+        )
+    except Exception as e:
+        print(f"  ⚠ Green-count read failed (status line only, sort unaffected): {e}")
 
-    # Pass 4: sort non-green section by SAM A-Z
-    if non_green_start <= last_data_row:
-        _sort_with_retry(pbt, (1, "asc"), f"A{non_green_start}:{data_end_col}{last_data_row}")
-        non_green_count = last_data_row - non_green_start + 1
-        print(f"  ✓ Pass 4: non-green section A{non_green_start}:{data_end_col}{last_data_row} sorted by SAM A-Z ({non_green_count} vehicles)")
-
-    print(f"  ✓ {data_count} total rows: {green_count} green at top, {data_count - green_count} below")
+    if green_count is not None:
+        print(f"  ✓ {data_count} total rows: {green_count} within threshold (green via CF), {data_count - green_count} above")
+    else:
+        print(f"  ✓ {data_count} total rows sorted")
     return pbt
+
+
+def reset_pbt_filter(sh, cfg):
+    """Clear and re-apply the basicFilter to fix hiddenByFilter corruption from sortRange calls.
+
+    The Hendrick PBT has a basicFilter whose sortSpecs conflict with our sortRange API calls,
+    leaving rows erroneously marked hiddenByFilter. Clearing + re-adding the filter resets this.
+    Only runs when a 'pbt_filter' config block is present (Hendrick-specific).
+    """
+    filter_cfg = cfg.get("pbt_filter")
+    if not filter_cfg:
+        return
+    ws = sh.worksheet(cfg["pbt_tab"])
+    sheet_id = ws.id
+    sh.batch_update({"requests": [{"clearBasicFilter": {"sheetId": sheet_id}}]})
+    sh.batch_update({"requests": [{"setBasicFilter": {"filter": {
+        "range": {
+            "sheetId": sheet_id,
+            "startRowIndex": filter_cfg["start_row"],
+            "endRowIndex": filter_cfg["end_row"],
+            "startColumnIndex": filter_cfg["start_col"],
+            "endColumnIndex": filter_cfg["end_col"],
+        },
+        "sortSpecs": filter_cfg["sort_specs"],
+        "filterSpecs": filter_cfg["filter_specs"],
+    }}}]})
+    print(f"  ✓ Reset basicFilter (hiddenByFilter state cleared)")
 
 
 def format_pbt_price_column(sh, cfg):
@@ -388,7 +434,7 @@ def _pick_top_vehicles(within_deduped, n=5):
     return result[:n]
 
 
-def read_stats(pbt, cfg):
+def read_stats(sh, pbt, cfg):
     """Read key stats from the PBT tab for the email."""
     time.sleep(3)  # wait for formula recalc
 
@@ -398,6 +444,31 @@ def read_stats(pbt, cfg):
     all_values = pbt.get_all_values()
     data_start = cfg["data_start_row"] - 1  # 0-indexed
     data_rows = [r for r in all_values[data_start:] if r[3].strip()]  # col D = Stock #
+
+    # Build stock# → {vehicle, dealer} from the raw import tab to avoid reading
+    # PBT formula cells that may be stale immediately after a sort.
+    import_lookup = {}
+    try:
+        import_ws = sh.worksheet(cfg["import_tab"])
+        import_all = import_ws.get_all_values()
+        if import_all:
+            import_hdr = [h.strip() for h in import_all[0]]
+            stk_idx = next((i for i, h in enumerate(import_hdr) if "stock" in h.lower()), 2)
+            ymmt_idx = next((i for i, h in enumerate(import_hdr)
+                             if h.lower() in ("ymmt", "mmyt") or "ymmt" in h.lower()), None)
+            dealer_idx = next((i for i, h in enumerate(import_hdr)
+                               if "dealer name" in h.lower()), 0)
+            for row in import_all[1:]:
+                stk = row[stk_idx].strip() if len(row) > stk_idx else ""
+                if not stk:
+                    continue
+                import_lookup[stk] = {
+                    "vehicle": (row[ymmt_idx].strip() if ymmt_idx is not None and len(row) > ymmt_idx else ""),
+                    "dealer":  (row[dealer_idx].strip() if len(row) > dealer_idx else ""),
+                }
+            print(f"  ✓ Import lookup built: {len(import_lookup)} stock entries")
+    except Exception as e:
+        print(f"  ⚠ Could not build import lookup (will fall back to PBT formulas): {e}")
 
     total = len(data_rows)
 
@@ -412,8 +483,16 @@ def read_stats(pbt, cfg):
         scol         = cfg.get("pbt_store_col")
         vehicle      = r[vcol].strip() if len(r) > vcol else ""
         store        = r[scol].strip() if scol is not None and len(r) > scol else ""
-        vin          = r[2].strip() if len(r) > 2 else ""
         stock        = r[3].strip() if len(r) > 3 else ""
+
+        # Prefer import tab data for vehicle/store — PBT formula columns can be
+        # stale immediately after a sort if the formulas use row-position lookups.
+        if stock and stock in import_lookup:
+            lu = import_lookup[stock]
+            if lu["vehicle"]:
+                vehicle = lu["vehicle"]
+            if lu["dealer"]:
+                store = lu["dealer"]
         price_raw    = r[6].strip() if len(r) > 6 else ""
         current_badge = r[7].strip() if len(r) > 7 else ""
         next_badge   = r[8].strip() if len(r) > 8 else ""
@@ -436,14 +515,14 @@ def read_stats(pbt, cfg):
             if diff_val == 0.0:
                 at_threshold.append({
                     "sam": sam, "store": store, "vehicle": vehicle,
-                    "vin": vin, "stock": stock,
+                    "stock": stock,
                     "diff": diff_raw, "current": current_badge, "next": next_badge,
                     "target_price": target_price,
                 })
             elif 0 < diff_val <= thresh_val:
                 within_threshold.append({
                     "sam": sam, "store": store, "vehicle": vehicle,
-                    "vin": vin, "stock": stock,
+                    "stock": stock,
                     "diff": diff_raw, "current": current_badge, "next": next_badge,
                     "target_price": target_price,
                 })
@@ -469,6 +548,67 @@ def read_stats(pbt, cfg):
             seen_stocks_at.add(stock)
         at_deduped.append(v)
 
+    # Compute top-5 callout directly from the raw import tab.
+    # PBT formula columns (vehicle name, stock#) can be stale immediately after a
+    # multi-pass sort — reading from the import tab avoids that entirely.
+    top_vehicles_import = []
+    try:
+        def _fnum(v):
+            try: return float(re.sub(r"[$,]", "", v))
+            except: return None
+
+        if import_all and len(import_all) > 1:
+            ih = [h.strip() for h in import_all[0]]
+            i_stk    = next((i for i,h in enumerate(ih) if "stock" in h.lower()), 2)
+            i_ymmt   = next((i for i,h in enumerate(ih) if h.lower() in ("ymmt","mmyt") or "ymmt" in h.lower()), None)
+            i_dealer = next((i for i,h in enumerate(ih) if "dealer name" in h.lower()), 0)
+            i_price  = next((i for i,h in enumerate(ih) if "sum of price" in h.lower()), None)
+            i_good   = next((i for i,h in enumerate(ih) if "difference - good" in h.lower()), None)
+            i_great  = next((i for i,h in enumerate(ih) if "difference - great" in h.lower()), None)
+            i_badge  = next((i for i,h in enumerate(ih) if h.lower() == "price badge"), None)
+            thresh_val_import = _fnum(threshold) or 500.0
+
+            seen_import = set()
+            candidates_import = []
+            for row in import_all[1:]:
+                stk = row[i_stk].strip() if len(row) > i_stk else ""
+                if not stk or stk in seen_import:
+                    continue
+                seen_import.add(stk)
+                good_d  = _fnum(row[i_good])  if i_good  is not None and len(row) > i_good  else None
+                great_d = _fnum(row[i_great]) if i_great is not None and len(row) > i_great else None
+                badge   = row[i_badge].strip() if i_badge is not None and len(row) > i_badge else ""
+
+                # LEI sign convention: negative diff = price is above threshold
+                # by |diff| dollars → vehicle needs to drop |diff| to earn badge.
+                # Only count a diff as a candidate if the vehicle doesn't already
+                # hold that badge — this mirrors the PBT's tier-up logic and
+                # ensures every callout vehicle is findable in the PBT green section.
+                is_good_plus  = badge in ("Good", "Great")
+                is_great      = badge == "Great"
+                diffs = [(abs(d), "Great" if idx == 1 else "Good", d)
+                         for idx, d in enumerate([good_d, great_d])
+                         if d is not None and -thresh_val_import <= d < 0
+                         and not (idx == 0 and is_good_plus)  # skip Good if already Good+
+                         and not (idx == 1 and is_great)]     # skip Great if already Great
+                if not diffs:
+                    continue
+                drop, next_b, raw_d = min(diffs, key=lambda x: x[0])
+                price  = _fnum(row[i_price])  if i_price  is not None and len(row) > i_price  else None
+                ymmt   = row[i_ymmt].strip()   if i_ymmt   is not None and len(row) > i_ymmt   else ""
+                dealer = row[i_dealer].strip() if len(row) > i_dealer else ""
+                badge  = row[i_badge].strip()  if i_badge  is not None and len(row) > i_badge  else ""
+                target = f"${price + raw_d:,.0f}" if price is not None else ""
+                candidates_import.append({
+                    "sam": dealer, "store": "", "vehicle": ymmt,
+                    "stock": stk, "diff": f"${drop:,.0f}",
+                    "current": badge, "next": next_b, "target_price": target,
+                })
+            candidates_import.sort(key=lambda x: float(re.sub(r"[$,]", "", x["diff"])))
+            top_vehicles_import = _pick_top_vehicles(candidates_import, n=5)
+    except Exception as e:
+        print(f"  ⚠ Import-based top-vehicles failed, falling back to PBT: {e}")
+
     stats = {
         "pct": pct,
         "threshold": threshold,
@@ -477,7 +617,7 @@ def read_stats(pbt, cfg):
         "at_threshold_vehicles": at_deduped,
         "within_count": len(within_deduped),
         "already_great": already_great,
-        "top_vehicles": _pick_top_vehicles(within_deduped, n=5),
+        "top_vehicles": top_vehicles_import if top_vehicles_import else _pick_top_vehicles(within_deduped, n=5),
     }
     print(f"  ✓ Stats: {stats['within_count']}/{total} within {threshold} ({pct}), "
           f"{len(at_threshold)} at $0, {already_great} already Great")
@@ -522,6 +662,168 @@ def read_dem_signal_stats(sh, cfg):
         return None
 
 
+# ─── DRY RUN (CSV-only, zero remote calls) ───────────────────────────────────
+
+def csv_stats(lei_rows, cfg):
+    """Compute report stats directly from the LEI CSV — no sheet access.
+
+    Mirrors the import-tab callout logic in read_stats(): per unique stock,
+    a vehicle is "within" if it needs a drop of 0 < |diff| <= threshold for a
+    badge tier it doesn't already hold (LEI sign convention: negative diff =
+    price above threshold by |diff|).
+    """
+    def _fnum(v):
+        try: return float(re.sub(r"[$,]", "", v))
+        except (ValueError, TypeError): return None
+
+    threshold = float(cfg.get("threshold", 500))
+    hdr = [h.strip() for h in lei_rows[0]]
+    i_stk    = next((i for i, h in enumerate(hdr) if "stock" in h.lower()), 2)
+    i_ymmt   = next((i for i, h in enumerate(hdr) if "ymmt" in h.lower()), None)
+    i_dealer = next((i for i, h in enumerate(hdr) if "dealer name" in h.lower()), 0)
+    i_vin    = cfg.get("lei_vin_idx", 3)
+    i_price  = next((i for i, h in enumerate(hdr) if "sum of price" in h.lower()), None)
+    i_good   = next((i for i, h in enumerate(hdr) if "difference - good" in h.lower()), None)
+    i_great  = next((i for i, h in enumerate(hdr) if "difference - great" in h.lower()), None)
+    i_badge  = next((i for i, h in enumerate(hdr) if h.lower() == "price badge"), None)
+    if i_good is None or i_great is None:
+        print("  ✗ Dry run requires 'Difference - Good'/'Difference - Great' columns in the LEI CSV")
+        sys.exit(1)
+
+    seen = set()
+    within, at_thresh = [], []
+    already_great = 0
+    for row in lei_rows[1:]:
+        stk = row[i_stk].strip() if len(row) > i_stk else ""
+        if not stk or stk in seen:
+            continue
+        seen.add(stk)
+        badge   = row[i_badge].strip() if i_badge is not None and len(row) > i_badge else ""
+        good_d  = _fnum(row[i_good])  if len(row) > i_good  else None
+        great_d = _fnum(row[i_great]) if len(row) > i_great else None
+        if badge == "Great":
+            already_great += 1
+            continue
+        is_good_plus = badge in ("Good", "Great")
+        diffs = [(abs(d), "Great" if idx == 1 else "Good", d)
+                 for idx, d in enumerate([good_d, great_d])
+                 if d is not None and -threshold <= d <= 0
+                 and not (idx == 0 and is_good_plus)]
+        if not diffs:
+            continue
+        drop, next_b, raw_d = min(diffs, key=lambda x: x[0])
+        price  = _fnum(row[i_price]) if i_price is not None and len(row) > i_price else None
+        rec = {
+            "sam": row[i_dealer].strip() if len(row) > i_dealer else "",
+            "store": "",
+            "vehicle": (row[i_ymmt].strip() if i_ymmt is not None and len(row) > i_ymmt else ""),
+            "vin": (row[i_vin].strip() if len(row) > i_vin else ""),
+            "stock": stk,
+            "diff": f"${drop:,.0f}",
+            "current": badge, "next": next_b,
+            "target_price": (f"${price + raw_d:,.0f}" if price is not None else ""),
+        }
+        (at_thresh if drop == 0 else within).append(rec)
+
+    within.sort(key=lambda x: float(re.sub(r"[$,]", "", x["diff"])))
+    total = len(seen)
+    pct = f"{round(100 * len(within) / total)}%" if total else "0%"
+    return {
+        "pct": pct,
+        "threshold": f"${threshold:,.0f}",
+        "total": total,
+        "at_threshold_count": len(at_thresh),
+        "at_threshold_vehicles": at_thresh,
+        "within_count": len(within),
+        "already_great": already_great,
+        "top_vehicles": _pick_top_vehicles(within, n=5),
+    }
+
+
+def csv_dem_stats(dem_rows):
+    """Compute Demand Signal breakdown directly from the Pricing CSV."""
+    header = dem_rows[0] if dem_rows else []
+    val_idx = next((i for i, h in enumerate(header) if "value" in h.lower()), None)
+    if val_idx is None:
+        return None
+    categories = [r[val_idx].strip() for r in dem_rows[1:]
+                  if len(r) > val_idx and r[val_idx].strip()]
+    total = len(categories)
+    if total == 0:
+        return None
+    counts = Counter(categories)
+    at_mkt = sum(v for k, v in counts.items()
+                 if "at market" in k.lower() and "above" not in k.lower() and "under" not in k.lower())
+    above = sum(v for k, v in counts.items() if "above" in k.lower())
+    under = sum(v for k, v in counts.items() if "under" in k.lower())
+    return {
+        "at_market_pct": round(100 * at_mkt / total),
+        "above_market_pct": round(100 * above / total),
+        "under_market_pct": round(100 * under / total),
+        "total": total,
+    }
+
+
+def run_dry_run(args, cfg, today):
+    """Full pipeline verification with ZERO remote calls — no auth, no sheet
+    reads/writes, no Gmail. Parses + validates the CSVs, computes stats from
+    the CSV alone, and writes the composed email HTML to a local file."""
+    print("  MODE: DRY RUN — no Google auth, no sheet writes, no email\n")
+    if not args.lei:
+        print("  ✗ --lei CSV path required for --dry-run")
+        sys.exit(1)
+
+    print("[1/3] Parsing + validating CSVs...")
+    lei_rows = read_csv_auto(args.lei)
+    _validate_csv_headers(args.lei, lei_rows, _LEI_EXPECTED, "LEI")
+    dem_rows = None
+    if args.dem and cfg["has_dem_signal"]:
+        dem_rows = read_csv_auto(args.dem)
+        _validate_csv_headers(args.dem, dem_rows, _DEM_EXPECTED, "Dem Signal")
+
+    print("[2/3] Computing stats from CSV...")
+    stats = csv_stats(lei_rows, cfg)
+    dem_stats = csv_dem_stats(dem_rows) if dem_rows else None
+    print(f"  ✓ Stats: {stats['within_count']}/{stats['total']} within {stats['threshold']} "
+          f"({stats['pct']}), {stats['at_threshold_count']} at $0, "
+          f"{stats['already_great']} already Great")
+    if dem_stats:
+        print(f"  ✓ Dem Signal: {dem_stats['at_market_pct']}% At / "
+              f"{dem_stats['above_market_pct']}% Above / {dem_stats['under_market_pct']}% Under")
+
+    print("[3/3] Composing email HTML (local file only)...")
+    html = compose_email_html(cfg, stats, dem_stats)
+    out_path = os.path.expanduser(f"~/Documents/Reports/pb_dryrun_{args.dealer}_{today}.html")
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w") as f:
+        f.write(html)
+    print(f"  ✓ Email preview: {out_path}")
+
+    if args.json_stats:
+        result = {
+            "dealer": args.dealer,
+            "display_name": cfg["display_name"],
+            "dry_run": True,
+            "pct": stats["pct"],
+            "within_count": stats["within_count"],
+            "total": stats["total"],
+            "already_great": stats["already_great"],
+            "draft_id": None,
+            "sheet_url": cfg["sheet_url"],
+        }
+        if dem_stats:
+            result["dem_stats"] = dem_stats
+        with open(args.json_stats, "w") as f:
+            json.dump(result, f, indent=2)
+        print(f"  ✓ Stats written to {args.json_stats}")
+
+    print(f"\n{'='*60}")
+    print(f"Dry run complete — nothing was written to Sheets or Gmail.")
+    print(f"Note: dry-run stats come from the CSV alone; live-run %s come from")
+    print(f"the sheet's J1 formula and may differ slightly.")
+    print(f"{'='*60}\n")
+
+
 # ─── EMAIL DRAFT ─────────────────────────────────────────────────────────────
 
 def compose_email_html(cfg, stats, dem_stats=None):
@@ -529,7 +831,7 @@ def compose_email_html(cfg, stats, dem_stats=None):
     top_vehicles_html = ""
     callout_style = cfg.get("callout_style", "sam")
     for v in stats["top_vehicles"]:
-        price_note = f" &rarr; reprice to <b>{v['target_price']}</b>" if v.get("target_price") else f" &mdash; <b>{v['diff']}</b> from {v['next']}"
+        price_note = f" &rarr; reprice to <b>{v['target_price']}</b>" if v.get("target_price") else f" &mdash; <b>{v['diff']}</b>"
         if callout_style == "mmyt":
             vin_stk = ", ".join(filter(None, [v.get("vin"), v.get("stock")]))
             id_label = f" ({vin_stk})" if vin_stk else ""
@@ -546,7 +848,7 @@ def compose_email_html(cfg, stats, dem_stats=None):
     # $0 vehicles: already qualify, badge update pending on Cars.com side
     at_threshold_html = ""
     if stats.get("at_threshold_count", 0) > 0:
-        names = ", ".join(f'<b>{v["mmyt"]}</b>' for v in stats["at_threshold_vehicles"])
+        names = ", ".join(f'<b>{v["vehicle"]}</b>' for v in stats["at_threshold_vehicles"])
         at_threshold_html = (
             f'<p>Additionally, <b>{stats["at_threshold_count"]} vehicle(s) already qualify '
             f'for a badge upgrade at their current price</b> &mdash; no action needed, '
@@ -600,7 +902,10 @@ def create_gmail_draft(gmail, cfg, html_body):
     msg["From"] = cfg.get("email_from", "jcrawley@cars.com")
     if cfg.get("email_to"):
         msg["To"] = cfg["email_to"]
-    if cfg.get("email_cc"):
+    # Suppress CC in pre-send mode (when email goes to Jake for review, not the final recipients)
+    is_presend = bool(cfg.get("email_final_to") and
+                      "jcrawley@cars.com" in cfg.get("email_to", ""))
+    if cfg.get("email_cc") and not is_presend:
         msg["Cc"] = cfg["email_cc"]
     msg.attach(MIMEText(html_body, "html"))
 
@@ -660,7 +965,11 @@ def main():
     parser.add_argument("--lei", help="Path to LEI CSV file")
     parser.add_argument("--dem", help="Path to Demand Signals CSV file (Nalley only)")
     parser.add_argument("--stats-only", action="store_true",
-                        help="Skip import, just sort + read stats + draft email")
+                        help="Skip import, just sort + read stats + draft email "
+                             "(still MUTATES the sheet and creates a draft)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="True dry run: parse + validate CSVs, compute stats, "
+                             "write email HTML locally. Zero remote calls.")
     parser.add_argument("--no-draft", action="store_true",
                         help="Skip Gmail draft creation")
     parser.add_argument("--send", action="store_true",
@@ -680,6 +989,10 @@ def main():
     print(f"\n{'='*60}")
     print(f"Price Badge Report — {cfg['display_name']} — {today}")
     print(f"{'='*60}\n")
+
+    if args.dry_run:
+        run_dry_run(args, cfg, today)
+        return
 
     # Auth
     print("[1/6] Authenticating...")
@@ -729,14 +1042,15 @@ def main():
     else:
         print("[2/6] Skipping import (--stats-only)")
 
-    # Sort
+    # Sort + filter reset
     print("[3/6] Sorting PBT by SAM A-Z, then column J ascending...")
     pbt = safe_sort_pbt(sh, cfg)
     format_pbt_price_column(sh, cfg)
+    reset_pbt_filter(sh, cfg)  # repairs hiddenByFilter corruption from sortRange calls
 
     # Stats
     print("[4/6] Reading stats...")
-    stats = read_stats(pbt, cfg)
+    stats = read_stats(sh, pbt, cfg)
     dem_stats = read_dem_signal_stats(sh, cfg) if cfg["has_dem_signal"] else None
     if dem_stats:
         print(f"  ✓ Dem Signal: {dem_stats['at_market_pct']}% At / {dem_stats['above_market_pct']}% Above / {dem_stats['under_market_pct']}% Under")

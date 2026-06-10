@@ -88,32 +88,87 @@ python3 ~/Documents/scripts/pb_report.py \
 
 Expected output:
 ```
-✓ Imported rows to 'Data Import_Inventory Report'
-✓ Pass 1–4: sort complete
-✓ Stats: X/N within $500 (XX%), X already Great
-✓ Gmail draft created (id: ...)
-✓ Email sent (message id: ...)
+✓ Imported 4,690–4,710 LEI rows to 'Data Import_Inventory Report'
+✓ Pass 1: empty rows pushed to bottom (A3:J4697)
+✓ Pass 2: sorted A3:J4697 by SAM A-Z
+✓ N total rows: X within threshold (green via CF), Y above
+✓ Reset basicFilter (hiddenByFilter state cleared)
+✓ Stats: X/N within $500 (5–13%), 0 at $0, ~367 already Great
+✓ Gmail draft created → sent to jcrawley@cars.com for review
 ```
+
+**QC Benchmarks — if outside these ranges, investigate before forwarding to Anne:**
+
+| Metric | Expected | Red flag |
+|---|---|---|
+| Within $500 (J1 %) | **5–13%** | < 3% → J formula broken (row-position refs); > 15% → data issue |
+| Vehicle count | **237–370** | < 100 or > 500 |
+| At $0 count | **0–10** | > 100 → J formula returning 0 for most rows |
+| Already Great | **350–500** | < 100 → data issue |
+| Total rows | **~4,695** | < 4,000 or > 6,000 → import/stale row issue |
+
+**If stats look wrong (especially % < 3% or at $0 > 100):**
+The PBT J column may have row-position formulas (`ABS(DataImport!O4526)`) instead of VLOOKUP. These break when rows are sorted. Recovery: write VLOOKUP formula to J3, then copyPaste with PASTE_FORMULA to J4:J4997. See memory `project-pb-report-fixes-2026-06-05` for full script.
 
 ---
 
 ## Step 3 — Post-Run QC
 
 1. Open the sheet: [Price Badge Report - Hendricks](https://docs.google.com/spreadsheets/d/1guqWV9HFb2MijC7qQ7qinL4oljbu0N1o9TU5zcmy3GM/edit?gid=565895707#gid=565895707)
-2. Confirm **Price Badge Tool** tab has data in cols E–J
-3. Header in Row 2 (purple bg, white bold) — data starts Row 3
-4. **Do NOT modify any formulas** — VLOOKUPs and col J are correct
+2. Filter shows **~4,698 of 11,000 rows displayed** — if far fewer, basicFilter is corrupted (run `clearBasicFilter` + re-add)
+3. Rows sorted: SAM A-Z, green (within-$500 via CF on col J) rows first within each SAM group
+4. J1 shows **5–13%**
+5. **Never set `userEnteredFormat.backgroundColor` on data rows** — this blocks the conditional format on col J that the filter uses for green-first sorting
+6. Header in Row 2 (purple bg, white bold) — data starts Row 3
 
 ---
 
 ## Step 4 — Confirm Send
 
-Email is sent automatically by `pb_report.py --send`. Recipients are baked into the script config:
+Per the **pre-send review rule**, email goes to **jcrawley@cars.com** (Jake) first, not directly to Anne.
 
-**To:** anne.Lewis@hendrickauto.com
+**Draft to:** jcrawley@cars.com (review + forward)
+**Final recipient after approval:** anne.Lewis@hendrickauto.com
 **From:** jcrawley@carscommerce.inc
 
-Confirm the script output shows `✓ Email sent (message id: ...)`.
+The script outputs `✓ Email sent` — this confirms delivery to Jake. Forward to Anne after reviewing stats and callouts.
+
+---
+
+## Step 5 — Mark Google Task Complete
+
+Search Google Tasks for **"Hendricks - LEI Report"** and confirm it is marked complete for today's date. The 6 AM automated run marks it automatically — verify it shows `status: completed`. If not, mark it complete manually via the Google Tasks MCP.
+
+```
+task_search query: "Hendricks LEI Report"
+→ confirm status = "completed" and due = today
+```
+
+---
+
+## Step 6 — Log Email in Salesforce
+
+After the email is confirmed sent, log it as an activity against the **Hendrick Automotive Group** account in Salesforce so the contact record stays current.
+
+1. Account ID is known: **`0011Q00001zfPm9QAE`** (Hendrick Automotive Group). No lookup needed.
+
+2. Use the Salesforce MCP (`mcp__salesforce__create_record`) to create a Task record:
+```json
+{
+  "sObject": "Task",
+  "targetOrg": "jcrawley@onecars.com",
+  "recordJson": {
+    "Subject": "Hendrick Automotive Group — Price Badge Report {M.D.YY}",
+    "Type": "Email",
+    "Status": "Completed",
+    "Description": "Weekly Price Badge Report sent to anne.Lewis@hendrickauto.com — {N} vehicles within $500 of Good/Great badge across {stores} stores. Top callout: {bullet 1}, {bullet 2}, {bullet 3}.",
+    "WhatId": "0011Q00001zfPm9QAE",
+    "ActivityDate": "{YYYY-MM-DD}"
+  }
+}
+```
+
+Confirm the task appears in the account's Activity History in Salesforce.
 
 ---
 

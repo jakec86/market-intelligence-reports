@@ -103,11 +103,13 @@ Expected output:
 ```
 ✓ Imported 50–60 LEI rows to 'Data Import_Inventory Report'
 ✓ Imported ~166 Dem Signal rows to 'Data Import_Dem Signal - $ Comp'
-✓ Pass 1–4: sort complete
+✓ Pass 1: empty rows pushed to bottom (A4:L5X)
+✓ Pass 2: sorted A4:L5X by J ascending (green first)
 ✓ Stats: X/51 within $1,000 (XX%), 14 already Great
 ✓ Dem Signal: XX% At / XX% Above / XX% Under
 ✓ Hidden tab 'Data Import_Inventory Report'
 ✓ Gmail draft created (id: ...)
+✓ Email sent (message id: ...)
 ```
 
 If the script errors on Gmail auth, check `~/.claude/tokens/gmail_jcrawley.json` — the refresh token is permanent but the access token may need a refresh via the Google OAuth endpoint.
@@ -120,13 +122,26 @@ If the script errors on Gmail auth, check `~/.claude/tokens/gmail_jcrawley.json`
 2. Confirm **Price Badge Tool** tab has data in cols E–J (Days Live, Photos, Price, Current Badge, Next Badge, Diff)
 3. Check **col K** — confirm K formulas are filled down to match the data rows
 4. Sheet title should be `Price Badge Report - Nalley Lexus Galleria - M.D.YY`
-5. **Do NOT modify any formulas** — VLOOKUPs and col J are correct. If data looks wrong, re-run the import.
+5. **Rows sorted by col J ascending** — smallest diff (closest to badge) at top, blank J rows at bottom. No SAM grouping (single dealer).
+6. **Do NOT modify any formulas** — VLOOKUPs and col J are correct. If data looks wrong, re-run the import.
 
 ---
 
-## Step 5 — Confirm Send
+## Step 5 — Mark Google Task Complete
 
-Email is sent automatically by `pb_report.py --send`. Recipients are baked into the script config:
+Search Google Tasks for a Nalley LEI task and mark it complete if found.
+
+```
+task_search query: "Nalley LEI"
+→ if found: mark status = "completed"
+→ if not found: skip (no task configured yet)
+```
+
+---
+
+## Step 6 — Confirm Send
+
+Email goes directly to the Nalley team (format approved as of 2026-06-08):
 
 **To:** Grayson Caudill, Jason E. Brown, Zlatan Ibrahimbegovic, Rashad Saeed
 **Cc:** Shashank Dharanendra
