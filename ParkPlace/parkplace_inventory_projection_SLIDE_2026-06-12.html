@@ -1,0 +1,95 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>Park Place Mercedes-Benz — Inventory Performance Projection</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Poppins',sans-serif;font-size:11px;color:#1a1a2e;background:#fff;padding:28px 32px;max-width:960px;margin:0 auto}
+.hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:18px;padding-bottom:12px;border-bottom:3px solid #6B2D8B}
+.hdr h1{font-size:21px;font-weight:800;color:#6B2D8B;line-height:1.1} .hdr p{font-size:10px;color:#666;margin-top:4px}
+.pill{display:inline-block;background:#00A88E;color:#fff;font-size:8px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:3px 9px;border-radius:20px}
+.hero{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#ede0f5;border:1px solid #ede0f5;border-radius:6px;overflow:hidden;margin-bottom:18px}
+.hc{background:#fff;padding:13px 15px} .hc .num{font-size:27px;font-weight:800;color:#6B2D8B;line-height:1} .hc .num.teal{color:#00A88E}
+.hc .lbl{font-size:9px;font-weight:600;color:#444;margin-top:4px;line-height:1.35}
+.sec{margin-bottom:16px} .sec-title{font-size:9px;font-weight:700;color:#6B2D8B;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #ede0f5}
+.qbar{display:flex;height:22px;border-radius:4px;overflow:hidden;margin-bottom:8px}
+.qkey{font-size:8.5px;color:#666} .qkey span{display:inline-block;margin-right:12px} .qkey i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:middle}
+table{width:100%;border-collapse:collapse;font-size:10px}
+thead tr{background:#6B2D8B;color:#fff} thead th{padding:5px 9px;text-align:left;font-weight:600;font-size:8.5px}
+th.r,td.r{text-align:right} tbody tr:nth-child(even){background:#faf6fd} tbody td{padding:5px 9px;border-bottom:1px solid #f0e8fa;color:#222} td.b{font-weight:600}
+.tot td{background:#f0e8f8!important;font-weight:700}
+.note{padding:10px 13px;border-radius:0 5px 5px 0;font-size:10px;line-height:1.55;background:#edf8f5;border-left:3px solid #00A88E;color:#333} .note strong{color:#00875f}
+.tag{display:inline-block;font-size:7.5px;font-weight:700;padding:2px 7px;border-radius:20px;border:1px solid;white-space:nowrap;margin:0 2px 4px 0}
+.tag.on{background:#e8f7f4;color:#00875f;border-color:#00A88E}
+.legend-btn{cursor:pointer;border:1px solid #ddd;background:#fff;border-radius:20px;padding:3px 10px;font:600 9px Poppins,sans-serif;color:#444;display:inline-flex;align-items:center;gap:5px;margin:0 4px 4px 0}
+.legend-btn i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.legend-btn.on{border-color:var(--c);box-shadow:0 0 0 2px color-mix(in srgb,var(--c) 28%,transparent)}
+.chip{cursor:pointer;border:1.5px solid var(--c);color:var(--c);background:#fff;border-radius:20px;padding:2px 9px;font:700 8.5px Poppins,sans-serif;margin:0 3px 5px 0;transition:background .12s,color .12s}
+.chip span{opacity:.6;font-weight:500}
+.chip:hover{background:color-mix(in srgb,var(--c) 12%,#fff)}
+.chip.sel{background:var(--c);color:#fff}
+.chip-detail{font-size:9px;color:#555;background:#faf6fd;border-radius:5px;padding:8px 11px;margin-top:8px;min-height:14px}
+.chip-detail .sw{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px} .stat-box{background:#faf6fd;border-radius:5px;padding:10px 12px;text-align:center}
+.stat-box .sv{font-size:21px;font-weight:800;color:#00A88E;line-height:1} .stat-box.mid .sv{color:#6B2D8B} .stat-box .sl{font-size:8.5px;color:#666;margin-top:3px}
+.ask{background:linear-gradient(135deg,#6B2D8B 0%,#4a1f63 100%);color:#fff;border-radius:6px;padding:15px 20px;margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:20px}
+.ask strong{font-size:13px;font-weight:700;display:block;margin-bottom:5px;color:#e8d5f5} .ask p{font-size:10.5px;line-height:1.5;color:#ddd}
+.ask .av{font-size:25px;font-weight:800;color:#fff;line-height:1;white-space:nowrap} .ask .al{font-size:8px;color:#c9a0e0;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;text-align:right}
+.fn{font-size:8px;color:#bbb;line-height:1.5;border-top:1px solid #eee;padding-top:8px;margin-top:12px}
+@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}body{padding:18px 22px}}
+</style></head><body>
+
+<div class="hdr">
+  <div><h1>Your Inventory on Cars.com — Modeled Performance</h1>
+  <p>Park Place Mercedes-Benz · Dallas-Ft. Worth · 1,150 vehicles (837 new + 313 used) across 3 stores</p></div>
+  <div style="text-align:right"><span class="pill">Demand Signals Projection</span><p style="margin-top:6px;color:#888">June 2026</p></div>
+</div>
+
+<div class="hero">
+  <div class="hc"><div class="num">1,150</div><div class="lbl">Total vehicles (new + used)<br>837 new · 313 used</div></div>
+  <div class="hc"><div class="num teal">8,409</div><div class="lbl">Projected VDPs / month<br>on Cars.com</div></div>
+  <div class="hc"><div class="num">222</div><div class="lbl">Projected connections / month<br>on Cars.com</div></div>
+  <div class="hc"><div class="num teal">$80K</div><div class="lbl">Projected incremental gross / mo<br>≈ $960K / year</div></div>
+</div>
+
+<div class="sec">
+  <div class="sec-title">Your used lot on the DFW demand map</div>
+  <div class="qbar"><div style="width:57.8%;background:#00A88E" title="Churner: 181"></div><div style="width:0.3%;background:#8E44AD" title="Niche: 1"></div><div style="width:14.7%;background:#C0392B" title="Lot Sitter: 46"></div><div style="width:9.3%;background:#E08E0B" title="Rarity: 29"></div><div style="width:17.9%;background:#9AA0A6" title="Unmatched: 56"></div></div>
+  <div class="qkey">
+    <span><i style="background:#00A88E"></i>Churner 181</span>
+    <span><i style="background:#C0392B"></i>Lot Sitter 46</span>
+    <span><i style="background:#E08E0B"></i>Rarity 29</span>
+    <span><i style="background:#8E44AD"></i>Niche 1</span>
+    <span><i style="background:#9AA0A6"></i>Other/Trade 56</span>
+  </div>
+  <div class="note" style="margin-top:10px"><strong>58% of your used inventory are Churners</strong> — the exact vehicles DFW shoppers are actively viewing <em>and</em> buying at volume. These are the cars that earn engagement on Cars.com from day one.</div>
+  <p style="font-size:9.5px;font-weight:600;color:#444;margin:11px 0 6px">Your top proven movers (Churners you already stock):</p>
+  <div><span class="tag on">Mercedes-Benz Gle &middot; 59</span> <span class="tag on">Mercedes-Benz Glc &middot; 31</span> <span class="tag on">Mercedes-Benz C-Class &middot; 29</span> <span class="tag on">Mercedes-Benz E-Class &middot; 18</span> <span class="tag on">Mercedes-Benz S-Class &middot; 4</span> <span class="tag on">Gmc Sierra 1500 &middot; 4</span> <span class="tag on">Bmw X5 &middot; 3</span> <span class="tag on">Acura Mdx &middot; 2</span> <span class="tag on">Ford Bronco &middot; 2</span> <span class="tag on">Lexus Rx 350 &middot; 2</span> <span class="tag" style="border-color:#bbb;color:#888">+21 more churners</span></div>
+  <a href="parkplace_inventory_projection_2026-06-12.html" style="display:inline-block;margin-top:11px;font-size:10px;font-weight:700;color:#6B2D8B;text-decoration:none;border-bottom:2px solid #00A88E;padding-bottom:2px">Explore all 87 nameplates (313 vehicles), color-coded &amp; filterable, on the interactive demand map &rarr;</a>
+</div>
+
+<div class="sec">
+  <div class="sec-title">Projected monthly performance on Cars.com</div>
+  <table><thead><tr><th>Store</th><th class="r">New</th><th class="r">Used</th><th class="r">Total</th><th class="r">VDPs / mo</th><th class="r">Connections / mo</th></tr></thead>
+  <tbody><tr><td class="b">Dallas</td><td class="r">477</td><td class="r">155</td><td class="r">632</td><td class="r">4,621</td><td class="r">122</td></tr><tr><td class="b">Fort Worth</td><td class="r">206</td><td class="r">104</td><td class="r">310</td><td class="r">2,267</td><td class="r">60</td></tr><tr><td class="b">Arlington</td><td class="r">154</td><td class="r">54</td><td class="r">208</td><td class="r">1,521</td><td class="r">40</td></tr>
+  <tr class="tot"><td>Total</td><td class="r">837</td><td class="r">313</td><td class="r">1,150</td><td class="r">8,409</td><td class="r">222</td></tr>
+  </tbody></table>
+</div>
+
+<div class="sec">
+  <div class="sec-title">What that's worth — incremental gross / month (net-new; stores are dark today)</div>
+  <div class="stat-row">
+    <div class="stat-box"><div class="sv">$53K</div><div class="sl">Conservative · 6% close · $4K GPU</div></div>
+    <div class="stat-box mid"><div class="sv">$80K</div><div class="sl">Midpoint · 8% close · $4.5K GPU</div></div>
+    <div class="stat-box"><div class="sv">$111K</div><div class="sl">Upper · 10% close · $5K GPU</div></div>
+  </div>
+</div>
+
+<div class="ask">
+  <div><strong>Put your inventory back in front of in-market DFW shoppers.</strong>
+  <p>Your used lot is 58% proven Churners, and your full 1,150-vehicle inventory would generate an estimated 222 new connections every month that you're leaving on the table today.</p></div>
+  <div><div class="av">222</div><div class="al">Net-new connections / mo</div></div>
+</div>
+
+<div class="fn">Modeled from 1,150 vehicles (837 new + 313 used) scraped live from the Park Place store sites, June 2026. Used-lot demand quadrant from admin.cars.com Demand Signals (DFW, Used). Per-vehicle rate is an all-stock blend of an active comparable (MB of Plano) and the current DFW Mercedes-Benz market, applied to the full inventory. Projection, not a guarantee — actual results depend on merchandising, pricing, and response speed. Connections = all engagement types (web, email, phone, chat, walk-in).</div>
+
+</body></html>
