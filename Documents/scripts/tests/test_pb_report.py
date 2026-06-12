@@ -135,11 +135,15 @@ def test_compose_email_html_returns_html_document():
     assert "</html>" in html, "Email body missing closing </html>"
 
 
-def test_compose_email_html_includes_sheet_link():
-    """compose_email_html() must embed a hyperlink to the Google Sheet."""
-    html = compose_email_html(DEALERS["nalley"], _SAMPLE_STATS)
-    assert DEALERS["nalley"]["sheet_url"] in html, \
-        "Sheet URL not found in email body — link would be missing for recipient"
+def test_compose_email_html_includes_report_link():
+    """compose_email_html() must embed a working hyperlink to the report —
+    the tracked email_link_url when configured, else the raw sheet_url
+    (mirrors the template's cfg.get('email_link_url', cfg['sheet_url']))."""
+    cfg = DEALERS["nalley"]
+    html = compose_email_html(cfg, _SAMPLE_STATS)
+    expected_link = cfg.get("email_link_url", cfg["sheet_url"])
+    assert expected_link in html, \
+        "Report link not found in email body — link would be missing for recipient"
 
 
 def test_compose_email_html_includes_vehicle_count():
