@@ -1170,6 +1170,9 @@ function dvPopulateStockSelect() {
   });
 }
 
+// Auto-drop the dealer's 30-mile radius on load (draggable + clearable via Radius Tool)
+placeRadius(dealerPin.lat, dealerPin.lng, dealerPin.name);
+
 // Initialize on load
 (function dvInit() {
   dvPopulateStockSelect();
