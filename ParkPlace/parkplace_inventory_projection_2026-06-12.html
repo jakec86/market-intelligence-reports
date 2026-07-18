@@ -1,0 +1,217 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Park Place Mercedes-Benz — Your Inventory on Cars.com</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap');
+*{box-sizing:border-box} body{font-family:'Poppins',sans-serif;margin:0;color:#2A2A33;background:#f4f4f7;line-height:1.5}
+.wrap{max-width:1080px;margin:0 auto;background:#fff;box-shadow:0 1px 14px rgba(0,0,0,.08)}
+header{background:#6B2D8B;color:#fff;padding:30px 40px}
+header h1{margin:0 0 4px;font-size:25px;font-weight:600} header p{margin:0;opacity:.85;font-size:14px}
+.section{padding:26px 40px;border-bottom:1px solid #eee}
+h2{color:#6B2D8B;font-size:18px;margin:0 0 14px}
+.hero{display:flex;gap:14px;flex-wrap:wrap}
+.kpi{flex:1;min-width:160px;background:#fff;border:1px solid #e7e7ee;border-top:4px solid #00A88E;border-radius:8px;padding:16px}
+.kpi .v{font-size:27px;font-weight:700;color:#6B2D8B} .kpi .l{font-size:12px;color:#666;margin-top:3px}
+table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+th{background:#6B2D8B;color:#fff;text-align:left;padding:8px 12px;font-weight:600;font-size:12.5px}
+th.num,td.num{text-align:center;font-variant-numeric:tabular-nums}
+td{padding:8px 12px;border-bottom:1px solid #eee;overflow:hidden;text-overflow:ellipsis}
+/* even numeric columns: label col fixed, the rest split evenly */
+.tbl-even th:first-child,.tbl-even td:first-child{width:28%}
+.tbl-q th:nth-child(1){width:18%} .tbl-q th:nth-child(2),.tbl-q th:nth-child(3){width:13%}
+.tbl-bench th:nth-child(1){width:30%} .tbl-bench th:nth-child(2){width:11%} .tbl-bench th:nth-child(3),.tbl-bench th:nth-child(4){width:14%}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:middle}
+.small{font-size:11px;color:#777} .note{background:#f0faf7;border-left:4px solid #00A88E;padding:12px 16px;font-size:13px;border-radius:4px}
+.rev{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
+.rev .box{flex:1;min-width:150px;text-align:center;border:1px solid #e7e7ee;border-radius:8px;padding:14px}
+.rev .box .v{font-size:22px;font-weight:700} .rev .mid{border-color:#00A88E;background:#f0faf7}
+ul{margin:8px 0 0 0;padding-left:20px;font-size:13px} li{margin:3px 0}
+.disc{font-size:11px;color:#888;line-height:1.6}
+.chartbox{position:relative;height:440px}
+.chips-legend{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 12px}
+.legend-btn{cursor:pointer;border:1px solid #ddd;background:#fff;border-radius:20px;padding:4px 11px;font:600 11px Poppins,Arial;color:#444;display:flex;align-items:center;gap:6px}
+.legend-btn i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.legend-btn.on{border-color:var(--c);box-shadow:0 0 0 2px color-mix(in srgb,var(--c) 28%,transparent)}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px}
+.chip{cursor:pointer;border:1.5px solid var(--c);color:var(--c);background:#fff;border-radius:20px;padding:4px 11px;font:600 11.5px Poppins,Arial;transition:background .12s,color .12s}
+.chip span{opacity:.65;font-weight:500}
+.chip:hover{background:color-mix(in srgb,var(--c) 12%,#fff)}
+.chip.sel{background:var(--c);color:#fff} .chip.sel span{opacity:.85}
+.chip-detail{font-size:12px;color:#555;background:#faf7fc;border-radius:6px;padding:13px 15px;min-height:18px}
+.chip-detail .sw{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:7px;vertical-align:middle}
+.chip-detail .tlabel{font-weight:700;color:#6B2D8B;font-size:12.5px;margin-bottom:9px}
+.chip-detail .trow{display:flex;flex-wrap:wrap;gap:26px}
+.chip-detail .trow>div{font-size:11px;color:#777}
+.chip-detail .trow>div span{display:block;font-size:20px;font-weight:800;color:#00A88E;line-height:1.15}
+.chip-detail .thint{margin-top:9px;font-size:11px;color:#999}
+.chip-detail #clearSel{display:inline-block;margin-top:10px;font-size:11px;font-weight:600;color:#b52929;cursor:pointer;text-decoration:underline}
+</style></head><body><div class="wrap">
+
+<header>
+  <h1>Park Place Mercedes-Benz — How Your Inventory Would Perform on Cars.com</h1>
+  <p>Dallas-Ft. Worth &nbsp;•&nbsp; Modeled from live inventory (1,150 vehicles — 837 new + 313 used, 3 stores) &nbsp;•&nbsp; June 12, 2026</p>
+</header>
+
+<div class="section">
+  <div class="hero">
+    <div class="kpi"><div class="v">1,150</div><div class="l">Total vehicles (new + used)<br>837 new · 313 used</div></div>
+    <div class="kpi"><div class="v">8,409</div><div class="l">Projected VDPs / month<br>on Cars.com</div></div>
+    <div class="kpi"><div class="v">222</div><div class="l">Projected connections / month<br>on Cars.com</div></div>
+    <div class="kpi"><div class="v">51</div><div class="l">Projected leads / month<br>(phone · email · chat)</div></div>
+    <div class="kpi"><div class="v">$26K</div><div class="l">Projected incremental gross / month<br>(midpoint)</div></div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Your used lot on the Demand Signals "Churners" quadrant</h2>
+  <p style="font-size:13px;margin:0 0 12px">Each bubble is a <b>used</b> nameplate you currently stock, placed by where it sits in the DFW used market — horizontal = market supply, vertical = market demand (VDPs). Bubble size = how many you have. The upper-right quadrant is <b style="color:#00A88E">Churners</b>: the cars buyers are actively shopping AND that move at volume. <b>257 of 313</b> of your used vehicles matched a DFW demand nameplate. (New inventory isn't plotted — the used market is where the demand signal lives.)</p>
+  <div class="chartbox"><canvas id="q"></canvas></div>
+</div>
+
+<div class="section">
+  <h2>Inventory mix by demand quadrant</h2>
+  <table class="tbl-q"><thead><tr><th>Quadrant</th><th class="num">Vehicles</th><th class="num">% of lot</th><th>What it means</th></tr></thead>
+  <tbody><tr><td><span class="dot" style="background:#00A88E"></span>Churner</td><td class="num">181</td><td class="num">58%</td><td>Proven fast-movers — high supply &amp; high demand</td></tr><tr><td><span class="dot" style="background:#8E44AD"></span>Niche</td><td class="num">1</td><td class="num">0%</td><td>Strong demand, thin supply — pricing power</td></tr><tr><td><span class="dot" style="background:#C0392B"></span>Lot Sitter</td><td class="num">46</td><td class="num">15%</td><td>Oversupplied, softer demand</td></tr><tr><td><span class="dot" style="background:#E08E0B"></span>Rarity</td><td class="num">29</td><td class="num">9%</td><td>Thin on both sides</td></tr><tr><td><span class="dot" style="background:#9AA0A6"></span>Unmatched</td><td class="num">56</td><td class="num">18%</td><td>Trade-in make/model not in DFW demand set</td></tr></tbody></table>
+  <p style="font-size:13px;margin:14px 0 4px">Your <b>Churner</b> nameplates — the proven movers you already stock — colored by quadrant. <b>Click chips to build a group</b>: each highlights on the chart above and the KPI total below updates live. Use the quadrant filters or "show all" to explore every nameplate.</p>
+  <div class="chips-legend" id="legend"></div>
+  <div class="chips" id="chips"></div>
+  <a id="chipToggle" style="display:inline-block;margin:2px 0 10px;font-size:12px;font-weight:700;color:#6B2D8B;cursor:pointer;text-decoration:none;border-bottom:2px solid #00A88E;padding-bottom:1px"></a>
+  <div class="chip-detail" id="chipTotals"></div>
+</div>
+
+<div class="section">
+  <h2>Projected monthly performance on Cars.com</h2>
+  <table class="tbl-even"><thead><tr><th>Store</th><th class="num">New</th><th class="num">Used</th><th class="num">Total</th><th class="num">Proj. VDPs/mo</th><th class="num">Proj. connections/mo</th><th class="num">Proj. leads/mo</th></tr></thead>
+  <tbody><tr><td>Dallas</td><td class="num">477</td><td class="num">155</td><td class="num">632</td><td class="num">4,621</td><td class="num">122</td><td class="num">28</td></tr><tr><td>Fort Worth</td><td class="num">206</td><td class="num">104</td><td class="num">310</td><td class="num">2,267</td><td class="num">60</td><td class="num">14</td></tr><tr><td>Arlington</td><td class="num">154</td><td class="num">54</td><td class="num">208</td><td class="num">1,521</td><td class="num">40</td><td class="num">9</td></tr>
+  <tr style="font-weight:700;background:#faf7fc"><td>Total</td><td class="num">837</td><td class="num">313</td><td class="num">1,150</td><td class="num">8,409</td><td class="num">222</td><td class="num">51</td></tr>
+  </tbody></table>
+  <p class="small" style="margin-top:8px">Projection covers your <b>full 1,150-vehicle inventory</b> (new + used) at the blended all-stock per-vehicle rate (7.3 VDPs · 0.193 connections / vehicle / month). The demand quadrant above details where your 313 used vehicles sit. <b>Leads</b> = phone + email + chat (the direct-contact subset of connections), here 23% of projected connections.</p>
+</div>
+
+<div class="section">
+  <h2>Revenue framing</h2>
+  <p style="font-size:13px;margin:0 0 6px">These stores are currently <b>dark on Cars.com</b>, so all of it is net-new: <b>51 direct leads/month</b> plus the broader 171 click/transfer engagements. Closing the leads at a luxury rate and converting a small slice of the clicks:</p>
+  <div class="rev">
+    <div class="box"><div class="v">$16K</div><div class="small">Conservative<br>(6% lead close · 0.5% click · $4K GPU)</div></div>
+    <div class="box mid"><div class="v" style="color:#6B2D8B">$26K</div><div class="small">Midpoint<br>(8% lead close · 1% click · $4.5K GPU)</div></div>
+    <div class="box"><div class="v">$38K</div><div class="small">Upper<br>(10% lead close · 1.5% click · $5K GPU)</div></div>
+  </div>
+  <p class="small" style="margin-top:10px">Monthly incremental gross = (leads × lead-close rate + click/transfer engagements × click-conversion) × avg gross-per-unit. Midpoint ≈ <b>$313K/year</b> incremental.</p>
+</div>
+
+<div class="section">
+  <h2>They've already proven it on Cars.com — Park Place's own results</h2>
+  <p style="font-size:13px;margin:0 0 12px">May 2025 — their last active month on Cars.com (FPL contract), the <b>same inventory</b> generated this on Cars.com:</p>
+  <div class="hero">
+    <div class="kpi"><div class="v">230</div><div class="l">Used vehicles listed<br>(consolidated, 3 stores)</div></div>
+    <div class="kpi"><div class="v">5,198</div><div class="l">VDPs / month</div></div>
+    <div class="kpi"><div class="v">18</div><div class="l">Direct leads / month<br>(phone · email · chat)</div></div>
+    <div class="kpi"><div class="v">50</div><div class="l">Total connections / month</div></div>
+  </div>
+  <table class="tbl-even" style="margin-top:14px"><thead><tr><th>Store</th><th class="num">Inventory</th><th class="num">VDPs/mo</th><th class="num">Connections/mo</th><th class="num">Leads/mo</th><th class="num">Price-badge rate</th></tr></thead>
+  <tbody><tr><td>Dallas</td><td class="num">129</td><td class="num">2,078</td><td class="num">24</td><td class="num">9</td><td class="num">36%</td></tr><tr><td>Fort Worth</td><td class="num">57</td><td class="num">1,897</td><td class="num">18</td><td class="num">7</td><td class="num">16%</td></tr><tr><td>Arlington</td><td class="num">44</td><td class="num">1,223</td><td class="num">8</td><td class="num">2</td><td class="num">20%</td></tr>
+  <tr style="font-weight:700;background:#faf7fc"><td>Total</td><td class="num">230</td><td class="num">5,198</td><td class="num">50</td><td class="num">18</td><td class="num">&mdash;</td></tr></tbody></table>
+  <p class="note" style="margin-top:14px"><b>Proof the demand is real</b> — same stores, same listings. Even under-merchandised (price-badge rates as low as 16%), the used lot pulled <b>18 direct leads/month</b> and 5,198 VDPs (the balance of connections were map views, website and walk-in activity). Today's projection is benchmarked against an active comparable and current DFW market demand — not this thin tail.</p>
+</div>
+
+</div>
+<script>
+const SC = [{"x": 55.0, "y": 4193.0, "r": 14.399999999999999, "label": "Mercedes-Benz Cla", "count": 6, "quad": "Rarity", "color": "#E08E0B"}, {"x": 23.0, "y": 1758.0, "r": 8.8, "label": "Mercedes-Benz Cle", "count": 2, "quad": "Rarity", "color": "#E08E0B"}, {"x": 157.0, "y": 35994.0, "r": 28, "label": "Mercedes-Benz E-Class", "count": 18, "quad": "Churner", "color": "#00A88E"}, {"x": 101.0, "y": 4091.0, "r": 28, "label": "Mercedes-Benz Glb", "count": 24, "quad": "Lot Sitter", "color": "#C0392B"}, {"x": 275.0, "y": 13308.0, "r": 28, "label": "Mercedes-Benz Glc", "count": 31, "quad": "Churner", "color": "#00A88E"}, {"x": 244.0, "y": 14730.0, "r": 28, "label": "Mercedes-Benz Gle", "count": 59, "quad": "Churner", "color": "#00A88E"}, {"x": 130.0, "y": 61218.0, "r": 11.6, "label": "Mercedes-Benz S-Class", "count": 4, "quad": "Churner", "color": "#00A88E"}, {"x": 125.0, "y": 4408.0, "r": 14.399999999999999, "label": "Mercedes-Benz Sprinter", "count": 6, "quad": "Lot Sitter", "color": "#C0392B"}, {"x": 221.0, "y": 15946.0, "r": 28, "label": "Mercedes-Benz C-Class", "count": 29, "quad": "Churner", "color": "#00A88E"}, {"x": 92.0, "y": 4990.0, "r": 27.0, "label": "Mercedes-Benz Gla", "count": 15, "quad": "Lot Sitter", "color": "#C0392B"}, {"x": 77.0, "y": 4153.0, "r": 22.799999999999997, "label": "Mercedes-Benz Gls", "count": 12, "quad": "Rarity", "color": "#E08E0B"}, {"x": 3.0, "y": 470.0, "r": 7.4, "label": "Mercedes-Benz Sl", "count": 1, "quad": "Rarity", "color": "#E08E0B"}, {"x": 285.0, "y": 12152.0, "r": 8.8, "label": "Acura Mdx", "count": 2, "quad": "Churner", "color": "#00A88E"}, {"x": 333.0, "y": 23209.0, "r": 10.2, "label": "Bmw X5", "count": 3, "quad": "Churner", "color": "#00A88E"}, {"x": 355.0, "y": 47915.0, "r": 7.4, "label": "Chevrolet Camaro", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 235.0, "y": 48602.0, "r": 8.8, "label": "Ford Bronco", "count": 2, "quad": "Churner", "color": "#00A88E"}, {"x": 588.0, "y": 10517.0, "r": 7.4, "label": "Ford Escape", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 1443.0, "y": 52417.0, "r": 11.6, "label": "Gmc Sierra 1500", "count": 4, "quad": "Churner", "color": "#00A88E"}, {"x": 100.0, "y": 13114.0, "r": 7.4, "label": "Land Rover Defender", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 283.0, "y": 26092.0, "r": 8.8, "label": "Lexus Rx 350", "count": 2, "quad": "Churner", "color": "#00A88E"}, {"x": 17.0, "y": 5957.0, "r": 11.6, "label": "Mercedes-Benz Eqs", "count": 4, "quad": "Rarity", "color": "#E08E0B"}, {"x": 59.0, "y": 25456.0, "r": 7.4, "label": "Acura Tlx", "count": 1, "quad": "Niche", "color": "#8E44AD"}, {"x": 55.0, "y": 3718.0, "r": 7.4, "label": "Audi Q8", "count": 1, "quad": "Rarity", "color": "#E08E0B"}, {"x": 22.0, "y": 4924.0, "r": 7.4, "label": "Bmw M5", "count": 1, "quad": "Rarity", "color": "#E08E0B"}, {"x": 384.0, "y": 13462.0, "r": 8.8, "label": "Bmw X3", "count": 2, "quad": "Churner", "color": "#00A88E"}, {"x": 166.0, "y": 13837.0, "r": 7.4, "label": "Bmw X7", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 45.0, "y": 2508.0, "r": 8.8, "label": "Cadillac Ct5", "count": 2, "quad": "Rarity", "color": "#E08E0B"}, {"x": 445.0, "y": 24913.0, "r": 7.4, "label": "Cadillac Escalade", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 2117.0, "y": 86750.0, "r": 8.8, "label": "Chevrolet Silverado 1500", "count": 2, "quad": "Churner", "color": "#00A88E"}, {"x": 940.0, "y": 31459.0, "r": 8.8, "label": "Chevrolet Tahoe", "count": 2, "quad": "Churner", "color": "#00A88E"}, {"x": 457.0, "y": 34802.0, "r": 7.4, "label": "Dodge Challenger", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 808.0, "y": 19825.0, "r": 8.8, "label": "Ford Explorer", "count": 2, "quad": "Churner", "color": "#00A88E"}, {"x": 328.0, "y": 18171.0, "r": 7.4, "label": "Ford F-350", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 306.0, "y": 8250.0, "r": 7.4, "label": "Gmc Acadia", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 100.0, "y": 8828.0, "r": 7.4, "label": "Infiniti Qx80", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 726.0, "y": 21663.0, "r": 7.4, "label": "Jeep Grand Cherokee", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 575.0, "y": 27734.0, "r": 7.4, "label": "Jeep Wrangler", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 270.0, "y": 16726.0, "r": 7.4, "label": "Land Rover Range Rover", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 149.0, "y": 17850.0, "r": 8.8, "label": "Land Rover Range Rover Sport", "count": 2, "quad": "Churner", "color": "#00A88E"}, {"x": 510.0, "y": 18413.0, "r": 8.8, "label": "Mazda Cx-5", "count": 2, "quad": "Churner", "color": "#00A88E"}, {"x": 1588.0, "y": 64611.0, "r": 7.4, "label": "Ram 1500", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 1138.0, "y": 48270.0, "r": 7.4, "label": "Toyota Camry", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 393.0, "y": 7942.0, "r": 7.4, "label": "Volkswagen Tiguan", "count": 1, "quad": "Churner", "color": "#00A88E"}, {"x": 109.0, "y": 4400.0, "r": 7.4, "label": "Volvo Xc60", "count": 1, "quad": "Lot Sitter", "color": "#C0392B"}];
+const MEDV = 92, MEDD = 8648;
+const quadPlugin = { id:'quad', beforeDraw(c){
+  const {ctx, chartArea:a, scales:{x,y}}=c; if(!a) return;
+  const px=x.getPixelForValue(MEDV), py=y.getPixelForValue(MEDD);
+  ctx.save();
+  ctx.fillStyle='rgba(0,168,142,.06)'; ctx.fillRect(px,a.top,a.right-px,py-a.top);      // churner UR
+  ctx.fillStyle='rgba(142,68,173,.05)'; ctx.fillRect(a.left,a.top,px-a.left,py-a.top);  // niche UL
+  ctx.fillStyle='rgba(192,57,43,.05)'; ctx.fillRect(px,py,a.right-px,a.bottom-py);      // lot sitter LR
+  ctx.strokeStyle='#bbb'; ctx.setLineDash([5,4]); ctx.beginPath();
+  ctx.moveTo(px,a.top); ctx.lineTo(px,a.bottom); ctx.moveTo(a.left,py); ctx.lineTo(a.right,py); ctx.stroke();
+  ctx.setLineDash([]); ctx.fillStyle='#00A88E'; ctx.font='bold 13px Poppins,Arial';
+  ctx.fillText('CHURNERS',a.right-90,a.top+18);
+  ctx.fillStyle='#8E44AD'; ctx.fillText('NICHE',a.left+8,a.top+18);
+  ctx.fillStyle='#C0392B'; ctx.fillText('LOT SITTERS',px+8,a.bottom-10);
+  ctx.fillStyle='#E08E0B'; ctx.fillText('RARITY',a.left+8,a.bottom-10);
+  ctx.restore();
+}};
+const qchart = new Chart(document.getElementById('q'),{
+  type:'bubble',
+  data:{datasets:[{data:SC, backgroundColor:SC.map(p=>p.color+'cc'), borderColor:SC.map(p=>p.color), borderWidth:1}]},
+  options:{plugins:{legend:{display:false},
+    tooltip:{callbacks:{label:c=>{const p=c.raw;return p.label+'  ('+p.count+' in stock) — '+p.quad+'  | mkt supply '+p.x.toLocaleString()+', mkt VDPs '+p.y.toLocaleString();}}}},
+    scales:{x:{title:{display:true,text:'DFW market supply (used vehicles listed) →'},type:'linear'},
+            y:{title:{display:true,text:'DFW market demand (VDPs) →'}}}},
+  plugins:[quadPlugin]
+});
+
+// ---- interactive color-coded nameplate chips (multi-select group calculator) ----
+const CHIPS = [{"label": "Mercedes-Benz Gle", "count": 59, "quad": "Churner", "x": 244.0, "y": 14730.0, "pvdp": 502.6505997272634, "pconn": 13.27862008211235, "color": "#00A88E"}, {"label": "Mercedes-Benz Glc", "count": 31, "quad": "Churner", "x": 275.0, "y": 13308.0, "pvdp": 264.1045523990706, "pconn": 6.97690207704209, "color": "#00A88E"}, {"label": "Mercedes-Benz C-Class", "count": 29, "quad": "Churner", "x": 221.0, "y": 15946.0, "pvdp": 247.0655490184854, "pconn": 6.526779362394213, "color": "#00A88E"}, {"label": "Mercedes-Benz E-Class", "count": 18, "quad": "Churner", "x": 157.0, "y": 35994.0, "pvdp": 153.3510304252668, "pconn": 4.051104431830888, "color": "#00A88E"}, {"label": "Mercedes-Benz S-Class", "count": 4, "quad": "Churner", "x": 130.0, "y": 61218.0, "pvdp": 34.0780067611704, "pconn": 0.9002454292957528, "color": "#00A88E"}, {"label": "Gmc Sierra 1500", "count": 4, "quad": "Churner", "x": 1443.0, "y": 52417.0, "pvdp": 34.0780067611704, "pconn": 0.9002454292957528, "color": "#00A88E"}, {"label": "Bmw X5", "count": 3, "quad": "Churner", "x": 333.0, "y": 23209.0, "pvdp": 25.5585050708778, "pconn": 0.6751840719718146, "color": "#00A88E"}, {"label": "Acura Mdx", "count": 2, "quad": "Churner", "x": 285.0, "y": 12152.0, "pvdp": 17.0390033805852, "pconn": 0.4501227146478764, "color": "#00A88E"}, {"label": "Ford Bronco", "count": 2, "quad": "Churner", "x": 235.0, "y": 48602.0, "pvdp": 17.0390033805852, "pconn": 0.4501227146478764, "color": "#00A88E"}, {"label": "Lexus Rx 350", "count": 2, "quad": "Churner", "x": 283.0, "y": 26092.0, "pvdp": 17.0390033805852, "pconn": 0.4501227146478764, "color": "#00A88E"}, {"label": "Bmw X3", "count": 2, "quad": "Churner", "x": 384.0, "y": 13462.0, "pvdp": 17.0390033805852, "pconn": 0.4501227146478764, "color": "#00A88E"}, {"label": "Chevrolet Silverado 1500", "count": 2, "quad": "Churner", "x": 2117.0, "y": 86750.0, "pvdp": 17.0390033805852, "pconn": 0.4501227146478764, "color": "#00A88E"}, {"label": "Chevrolet Tahoe", "count": 2, "quad": "Churner", "x": 940.0, "y": 31459.0, "pvdp": 17.0390033805852, "pconn": 0.4501227146478764, "color": "#00A88E"}, {"label": "Ford Explorer", "count": 2, "quad": "Churner", "x": 808.0, "y": 19825.0, "pvdp": 17.0390033805852, "pconn": 0.4501227146478764, "color": "#00A88E"}, {"label": "Land Rover Range Rover Sport", "count": 2, "quad": "Churner", "x": 149.0, "y": 17850.0, "pvdp": 17.0390033805852, "pconn": 0.4501227146478764, "color": "#00A88E"}, {"label": "Mazda Cx-5", "count": 2, "quad": "Churner", "x": 510.0, "y": 18413.0, "pvdp": 17.0390033805852, "pconn": 0.4501227146478764, "color": "#00A88E"}, {"label": "Chevrolet Camaro", "count": 1, "quad": "Churner", "x": 355.0, "y": 47915.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Ford Escape", "count": 1, "quad": "Churner", "x": 588.0, "y": 10517.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Land Rover Defender", "count": 1, "quad": "Churner", "x": 100.0, "y": 13114.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Bmw X7", "count": 1, "quad": "Churner", "x": 166.0, "y": 13837.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Cadillac Escalade", "count": 1, "quad": "Churner", "x": 445.0, "y": 24913.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Dodge Challenger", "count": 1, "quad": "Churner", "x": 457.0, "y": 34802.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Ford F-350", "count": 1, "quad": "Churner", "x": 328.0, "y": 18171.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Gmc Acadia", "count": 1, "quad": "Churner", "x": 306.0, "y": 8250.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Infiniti Qx80", "count": 1, "quad": "Churner", "x": 100.0, "y": 8828.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Jeep Grand Cherokee", "count": 1, "quad": "Churner", "x": 726.0, "y": 21663.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Jeep Wrangler", "count": 1, "quad": "Churner", "x": 575.0, "y": 27734.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Land Rover Range Rover", "count": 1, "quad": "Churner", "x": 270.0, "y": 16726.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Ram 1500", "count": 1, "quad": "Churner", "x": 1588.0, "y": 64611.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Toyota Camry", "count": 1, "quad": "Churner", "x": 1138.0, "y": 48270.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Volkswagen Tiguan", "count": 1, "quad": "Churner", "x": 393.0, "y": 7942.0, "pvdp": 8.5195016902926, "pconn": 0.2250613573239382, "color": "#00A88E"}, {"label": "Acura Tlx", "count": 1, "quad": "Niche", "x": 59.0, "y": 25456.0, "pvdp": 7.2088091225552775, "pconn": 0.1904365331202554, "color": "#8E44AD"}, {"label": "Mercedes-Benz Glb", "count": 24, "quad": "Lot Sitter", "x": 101.0, "y": 4091.0, "pvdp": 110.0981756899351, "pconn": 2.908485233109356, "color": "#C0392B"}, {"label": "Mercedes-Benz Gla", "count": 15, "quad": "Lot Sitter", "x": 92.0, "y": 4990.0, "pvdp": 68.81135980620947, "pconn": 1.8178032706933476, "color": "#C0392B"}, {"label": "Mercedes-Benz Sprinter", "count": 6, "quad": "Lot Sitter", "x": 125.0, "y": 4408.0, "pvdp": 27.524543922483783, "pconn": 0.7271213082773389, "color": "#C0392B"}, {"label": "Volvo Xc60", "count": 1, "quad": "Lot Sitter", "x": 109.0, "y": 4400.0, "pvdp": 4.587423987080631, "pconn": 0.1211868847128898, "color": "#C0392B"}, {"label": "Mercedes-Benz Gls", "count": 12, "quad": "Rarity", "x": 77.0, "y": 4153.0, "pvdp": 66.84532095460347, "pconn": 1.765866034387823, "color": "#E08E0B"}, {"label": "Mercedes-Benz Cla", "count": 6, "quad": "Rarity", "x": 55.0, "y": 4193.0, "pvdp": 33.42266047730174, "pconn": 0.8829330171939115, "color": "#E08E0B"}, {"label": "Mercedes-Benz Eqs", "count": 4, "quad": "Rarity", "x": 17.0, "y": 5957.0, "pvdp": 22.281773651534493, "pconn": 0.5886220114626076, "color": "#E08E0B"}, {"label": "Mercedes-Benz Cle", "count": 2, "quad": "Rarity", "x": 23.0, "y": 1758.0, "pvdp": 11.140886825767247, "pconn": 0.2943110057313038, "color": "#E08E0B"}, {"label": "Cadillac Ct5", "count": 2, "quad": "Rarity", "x": 45.0, "y": 2508.0, "pvdp": 11.140886825767247, "pconn": 0.2943110057313038, "color": "#E08E0B"}, {"label": "Mercedes-Benz Sl", "count": 1, "quad": "Rarity", "x": 3.0, "y": 470.0, "pvdp": 5.570443412883623, "pconn": 0.1471555028656519, "color": "#E08E0B"}, {"label": "Audi Q8", "count": 1, "quad": "Rarity", "x": 55.0, "y": 3718.0, "pvdp": 5.570443412883623, "pconn": 0.1471555028656519, "color": "#E08E0B"}, {"label": "Bmw M5", "count": 1, "quad": "Rarity", "x": 22.0, "y": 4924.0, "pvdp": 5.570443412883623, "pconn": 0.1471555028656519, "color": "#E08E0B"}, {"label": "Mercedes-Benz G-Class", "count": 6, "quad": "Unmatched", "x": null, "y": null, "pvdp": 39.320777032119686, "pconn": 1.0387447261104839, "color": "#9AA0A6"}, {"label": "Mercedes-Benz Sl-Class", "count": 2, "quad": "Unmatched", "x": null, "y": null, "pvdp": 13.10692567737323, "pconn": 0.34624824203682797, "color": "#9AA0A6"}, {"label": "Cadillac Xt4", "count": 2, "quad": "Unmatched", "x": null, "y": null, "pvdp": 13.10692567737323, "pconn": 0.34624824203682797, "color": "#9AA0A6"}, {"label": "Ford Bronco Sport", "count": 2, "quad": "Unmatched", "x": null, "y": null, "pvdp": 13.10692567737323, "pconn": 0.34624824203682797, "color": "#9AA0A6"}, {"label": "Porsche Macan", "count": 2, "quad": "Unmatched", "x": null, "y": null, "pvdp": 13.10692567737323, "pconn": 0.34624824203682797, "color": "#9AA0A6"}, {"label": "Bmw 330I", "count": 2, "quad": "Unmatched", "x": null, "y": null, "pvdp": 13.10692567737323, "pconn": 0.34624824203682797, "color": "#9AA0A6"}, {"label": "Lexus Gx", "count": 2, "quad": "Unmatched", "x": null, "y": null, "pvdp": 13.10692567737323, "pconn": 0.34624824203682797, "color": "#9AA0A6"}, {"label": "Lexus Nx", "count": 2, "quad": "Unmatched", "x": null, "y": null, "pvdp": 13.10692567737323, "pconn": 0.34624824203682797, "color": "#9AA0A6"}, {"label": "Volvo Xc90", "count": 2, "quad": "Unmatched", "x": null, "y": null, "pvdp": 13.10692567737323, "pconn": 0.34624824203682797, "color": "#9AA0A6"}, {"label": "Mercedes-Benz Amg G 63", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Chevrolet Corvette Stingray", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Jeep Wrangler Unlimited 4Xe", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Lincoln Mkc", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Mazda Mx-5 Miata", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Nissan Armada", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Porsche Cayenne", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Mercedes-Benz Amg Gt 55", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Mercedes-Benz Amg Gt 53", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Mercedes-Benz A-Class", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Mercedes-Benz Amg Gt 63", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Mercedes-Benz Cls 450", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Mercedes-Benz Metris", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Acura Rdx", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Audi A4", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Audi Q3", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Audi S5 Sportback", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Bmw 740I", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Bmw 8 Series", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Bmw X6 M", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Buick Encore Gx", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Cadillac Escalade Esv", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Ford Transit-350", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Gmc Sierra 3500Hd", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Gmc Terrain", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Jeep Compass", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Nissan Kicks", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Nissan Murano", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Porsche 718 Cayman", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Porsche 911", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Subaru Forester", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Subaru Forester Hybrid", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Subaru Outback", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}, {"label": "Toyota Prius", "count": 1, "quad": "Unmatched", "x": null, "y": null, "pvdp": 6.553462838686615, "pconn": 0.17312412101841398, "color": "#9AA0A6"}];
+const QC = {"Churner": "#00A88E", "Niche": "#8E44AD", "Rarity": "#E08E0B", "Lot Sitter": "#C0392B", "Unmatched": "#9AA0A6"};
+const REV = {close:0.08, gpu:4500};
+const LEAD = 0.23;
+const TOTAL = {veh:313, vdp:2289, conn:60};
+const QORDER = ['Churner','Niche','Lot Sitter','Rarity','Unmatched'];
+(function(){
+  const legend=document.getElementById('legend'), box=document.getElementById('chips'),
+        totals=document.getElementById('chipTotals'), toggle=document.getElementById('chipToggle');
+  let activeQuad='Churner';
+  const selected=new Set();
+  const counts={}; CHIPS.forEach(c=>counts[c.quad]=(counts[c.quad]||0)+c.count);
+  const qLabel={'Unmatched':'Trade / other'};
+  const quads=QORDER.filter(q=>counts[q]); const lbtns={};
+  const fmt=x=>Math.round(x).toLocaleString();
+  quads.forEach(q=>{
+    const lb=document.createElement('button'); lb.className='legend-btn'; lb.style.setProperty('--c',QC[q]);
+    lb.innerHTML=`<i style="background:${QC[q]}"></i>${qLabel[q]||q} <b>${counts[q]}</b>`;
+    lb.onclick=()=>{ activeQuad = activeQuad===q?null:q; sync(); };
+    legend.appendChild(lb); lbtns[q]=lb;
+  });
+  toggle.onclick=()=>{ activeQuad = activeQuad ? null : 'Churner'; sync(); };
+  function sync(){
+    quads.forEach(q=>lbtns[q].classList.toggle('on', q===activeQuad));
+    toggle.textContent = activeQuad ? `Show all ${CHIPS.length} nameplates →` : `← Show Churners only`;
+    render();
+  }
+  function render(){
+    box.innerHTML='';
+    CHIPS.filter(c=>!activeQuad||c.quad===activeQuad).forEach(c=>{
+      const b=document.createElement('button'); b.className='chip'+(selected.has(c.label)?' sel':''); b.style.setProperty('--c',c.color);
+      b.innerHTML=`${c.label} <span>· ${c.count}</span>`;
+      b.onclick=()=>pick(c); box.appendChild(b);
+    });
+    updateTotals(); highlight();
+  }
+  function pick(c){ selected.has(c.label) ? selected.delete(c.label) : selected.add(c.label); render(); }
+  function updateTotals(){
+    const items=CHIPS.filter(c=>selected.has(c.label));
+    let veh,vdp,conn,lbl,extra='';
+    if(items.length){
+      veh=items.reduce((s,c)=>s+c.count,0); vdp=items.reduce((s,c)=>s+c.pvdp,0); conn=items.reduce((s,c)=>s+c.pconn,0);
+      lbl=`${items.length} nameplate${items.length>1?'s':''} selected`;
+      if(items.length===1){const c=items[0]; extra=c.x?` &nbsp;·&nbsp; DFW market: ${Number(c.x).toLocaleString()} listed, ${Number(c.y).toLocaleString()} VDPs`:` &nbsp;·&nbsp; trade-in, outside the DFW demand set`;}
+    } else { veh=TOTAL.veh; vdp=TOTAL.vdp; conn=TOTAL.conn; lbl='All used inventory'; }
+    const gross=conn*REV.close*REV.gpu;
+    totals.innerHTML=`<div class="tlabel">${lbl}${extra}</div>
+      <div class="trow">
+        <div><span>${fmt(veh)}</span>used vehicles</div>
+        <div><span>${fmt(vdp)}</span>proj. VDPs / mo</div>
+        <div><span>${fmt(conn)}</span>proj. connections / mo</div>
+        <div><span>${fmt(conn*LEAD)}</span>proj. leads / mo</div>
+        <div><span>$${fmt(gross/1000)}K</span>est. gross / mo</div>
+      </div>`
+      + (items.length ? `<a id="clearSel">Clear selection</a>` : `<div class="thint">Click nameplates to build a group — these totals update live.</div>`);
+    if(items.length) document.getElementById('clearSel').onclick=()=>{ selected.clear(); render(); };
+  }
+  function highlight(){
+    const ds=qchart.data.datasets[0]; const any=selected.size>0;
+    ds.data = SC.map(p=>({...p, r: selected.has(p.label)?Math.min(36,p.r+10):p.r}));
+    ds.borderColor = SC.map(p=> selected.has(p.label)?'#111':p.color);
+    ds.borderWidth = SC.map(p=> selected.has(p.label)?3:1);
+    ds.backgroundColor = SC.map(p=> p.color + ((any && !selected.has(p.label))?'44':'cc'));
+    qchart.update();
+  }
+  sync();
+})();
+</script>
+</body></html>

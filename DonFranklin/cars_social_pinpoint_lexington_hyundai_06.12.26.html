@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cars Social · Don Franklin Lexington Hyundai</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  :root {
+    --jagger:#370B55; --violet:#8136B2; --vixen:#AB74CF;
+    --lavender:#D9BAEE; --gray:#4D4D4D; --white:#FFFFFF;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'Inter',sans-serif;background:#f0ecf5;color:var(--gray);height:100vh;overflow:hidden;}
+
+  #topbar{
+    position:absolute;top:0;left:0;right:0;z-index:1100;height:62px;
+    background:var(--jagger);display:flex;align-items:center;
+    justify-content:space-between;padding:0 20px;
+    box-shadow:0 2px 12px rgba(55,11,85,.45);
+  }
+  #logo{display:flex;align-items:center;gap:10px;}
+  #logo svg{height:28px;}
+  #logo-divider{width:1px;height:28px;background:rgba(255,255,255,.25);}
+  #logo-subtitle{color:var(--lavender);font-size:12px;font-weight:500;letter-spacing:.8px;text-transform:uppercase;}
+  #data-date{color:rgba(217,186,238,.65);font-size:10px;font-weight:400;letter-spacing:.5px;margin-left:4px;}
+  #total-badge{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px 16px;text-align:right;}
+  #total-badge .num{font-size:18px;font-weight:700;color:var(--white);letter-spacing:-.5px;}
+  #total-badge .lbl{font-size:10px;color:var(--lavender);text-transform:uppercase;letter-spacing:1px;}
+
+  #map{width:100%;height:100vh;padding-top:62px;}
+  .leaflet-container{background:#ede8f2!important;}
+
+  .panel{background:var(--white);border:1px solid #ddd;border-radius:10px;padding:14px 16px;
+    box-shadow:0 2px 10px rgba(55,11,85,.12);font-family:'Inter',sans-serif;}
+  .panel h3{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
+    color:var(--violet);margin-bottom:10px;border-bottom:2px solid var(--lavender);padding-bottom:6px;}
+
+  #legend{position:absolute;bottom:24px;right:16px;z-index:1000;}
+  .legend-item{display:flex;align-items:center;gap:10px;margin-bottom:7px;font-size:11px;color:var(--gray);}
+  .legend-circle{border-radius:50%;background:rgba(129,54,178,.18);border:2px solid rgba(129,54,178,.65);flex-shrink:0;}
+
+  #stats{display:none;}
+  .stat-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;font-size:11px;}
+  .stat-city{color:var(--gray);}
+  .stat-num{color:var(--violet);font-weight:600;}
+  .stat-bar-wrap{width:100%;height:4px;background:#f0ecf5;border-radius:2px;margin-bottom:8px;}
+  .stat-bar{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--jagger),var(--vixen));}
+
+  .cars-tooltip{background:var(--white)!important;border:1.5px solid var(--vixen)!important;
+    border-radius:10px!important;color:var(--gray)!important;font-family:'Inter',sans-serif!important;
+    font-size:12px!important;padding:10px 14px!important;box-shadow:0 6px 18px rgba(55,11,85,.18)!important;}
+  .tt-city{font-size:14px;font-weight:700;color:var(--jagger);margin-bottom:3px;}
+  .tt-count{font-size:13px;font-weight:600;color:var(--violet);}
+  .tt-zips{font-size:10px;color:#888;margin-top:4px;max-width:240px;line-height:1.6;}
+
+  .tier-legend{min-width:170px;}
+  .tier-item{display:flex;align-items:center;gap:9px;margin-bottom:6px;font-size:11px;color:var(--gray);}
+  .tier-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;}
+
+  /* ── Radius Panel ── */
+  #radius-panel{position:absolute;top:130px;left:16px;z-index:1000;width:228px;max-height:calc(100vh - 310px);overflow-y:auto;}
+  #radius-panel h3{margin-bottom:8px;}
+  #radius-input-row{display:flex;gap:6px;margin-bottom:7px;}
+  #radius-address{
+    flex:1;padding:6px 8px;border:1px solid #ddd;border-radius:6px;
+    font-size:11px;font-family:'Inter',sans-serif;color:var(--gray);outline:none;
+  }
+  #radius-address:focus{border-color:var(--vixen);}
+  #radius-go{
+    padding:6px 10px;background:var(--violet);color:#fff;border:none;
+    border-radius:6px;font-size:11px;font-family:'Inter',sans-serif;cursor:pointer;
+    white-space:nowrap;
+  }
+  #radius-go:hover{background:var(--jagger);}
+  #radius-btn-row{display:flex;gap:6px;}
+  .radius-btn{
+    flex:1;padding:5px 0;background:#f0ecf5;color:var(--violet);
+    border:1px solid var(--lavender);border-radius:6px;font-size:10px;
+    font-family:'Inter',sans-serif;cursor:pointer;text-align:center;
+  }
+  .radius-btn:hover{background:var(--lavender);}
+  .radius-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+  #radius-clear{color:var(--gray);border-color:#ddd;}
+  #radius-clear:hover{background:#f5f0f8;}
+  #radius-status{font-size:10px;color:#999;margin-top:6px;min-height:13px;line-height:1.3;}
+
+  /* ── View Toggle ── */
+  #view-toggle{position:absolute;top:128px;right:16px;z-index:1000;}
+  .toggle-row{display:flex;gap:4px;margin-bottom:6px;}
+  .view-btn{
+    flex:1;padding:5px 10px;background:#f0ecf5;color:var(--violet);
+    border:1px solid var(--lavender);border-radius:6px;font-size:10px;
+    font-family:'Inter',sans-serif;cursor:pointer;text-align:center;
+  }
+  .view-btn:hover{background:var(--lavender);}
+  .view-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+
+  /* ── Hitlist marker ── */
+  .hitlist-pin{
+    background:#E8A817;border:2px solid #B8860B;border-radius:50%;
+    box-shadow:0 1px 5px rgba(184,134,11,.5);
+  }
+  .dealer-star{font-size:20px;text-shadow:0 1px 5px rgba(55,11,85,.5);pointer-events:none;}
+
+  /* ── Radius ZIP results ── */
+  .rz-row{display:flex;align-items:center;padding:3px 0;border-bottom:1px solid #f8f5fb;}
+  .rz-row:last-child{border-bottom:none;}
+  .rz-row.rz-hitlist{background:#f0f8e8;border-radius:3px;padding:3px 4px;margin:1px 0;}
+  .rz-zip{width:48px;font-weight:600;color:#370B55;}
+  .rz-city{flex:1;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .rz-vol{width:50px;text-align:right;font-weight:600;color:#8136B2;}
+  .rz-hl{width:14px;text-align:center;margin-left:4px;}
+
+  /* ── Demand View (v2) ── */
+  #demand-view{
+    position:absolute;top:62px;left:0;right:0;bottom:0;
+    background:#f0ecf5;overflow-y:auto;display:none;z-index:900;
+  }
+  #dv-inner{max-width:1280px;margin:0 auto;padding:20px 24px;}
+  #dv-controls{
+    display:flex;align-items:center;gap:12px;margin-bottom:20px;
+    flex-wrap:wrap;
+  }
+  .dv-metric-btn{
+    padding:7px 18px;border-radius:20px;border:1.5px solid var(--lavender);
+    background:#fff;color:var(--violet);font-family:'Inter',sans-serif;
+    font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;
+  }
+  .dv-metric-btn:hover{background:var(--lavender);}
+  .dv-metric-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+  #dv-stock-select{
+    padding:7px 12px;border-radius:20px;border:1.5px solid var(--lavender);
+    background:#fff;color:var(--gray);font-family:'Inter',sans-serif;
+    font-size:12px;cursor:pointer;outline:none;
+  }
+  #dv-context-label{
+    margin-left:auto;font-size:11px;color:#999;font-style:italic;
+  }
+  #dv-body{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media(max-width:900px){#dv-body{grid-template-columns:1fr;}}
+  .dv-card{background:#fff;border-radius:12px;padding:20px 24px;
+    box-shadow:0 2px 12px rgba(55,11,85,.09);border:1px solid #e8e0f0;}
+  .dv-card h3{
+    font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;
+    color:var(--violet);margin-bottom:16px;border-bottom:2px solid var(--lavender);padding-bottom:8px;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  .dv-bar-row{
+    display:flex;align-items:center;gap:10px;margin-bottom:10px;
+    cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .1s;
+  }
+  .dv-bar-row:hover{background:#f8f4fc;}
+  .dv-bar-row.selected{background:#ede0f8;}
+  .dv-make-label{
+    width:110px;font-size:12px;font-weight:600;color:var(--jagger);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;
+  }
+  .dv-bar-wrap{flex:1;height:14px;background:#f0ecf5;border-radius:7px;overflow:hidden;}
+  .dv-bar{height:100%;border-radius:7px;
+    background:linear-gradient(90deg,var(--jagger),var(--vixen));
+    transition:width .3s ease;}
+  .dv-val{width:64px;text-align:right;font-size:11px;font-weight:600;color:var(--violet);flex-shrink:0;}
+  .dv-pct{width:36px;text-align:right;font-size:10px;color:#aaa;flex-shrink:0;}
+  #dv-drill-hint{
+    color:#bbb;font-size:12px;font-style:italic;margin-top:20px;text-align:center;
+  }
+  #dv-footer{
+    margin-top:16px;padding:14px 20px;background:#fff;border-radius:12px;
+    border:1px solid #e8e0f0;display:flex;gap:32px;flex-wrap:wrap;
+    font-size:12px;color:var(--gray);
+    box-shadow:0 2px 8px rgba(55,11,85,.06);
+  }
+  .dv-stat{display:flex;flex-direction:column;gap:3px;}
+  .dv-stat-label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#aaa;font-weight:600;}
+  .dv-stat-value{font-size:20px;font-weight:700;color:var(--jagger);letter-spacing:-.5px;}
+  #dv-map-toggle{
+    padding:7px 16px;border-radius:20px;border:1.5px solid var(--lavender);
+    background:#fff;color:var(--gray);font-family:'Inter',sans-serif;
+    font-size:11px;cursor:pointer;
+  }
+  #dv-map-toggle:hover{background:var(--lavender);}
+  #mode-toggle{position:absolute;top:74px;right:16px;z-index:1100;}
+  .mode-btn{
+    padding:6px 14px;border:1.5px solid var(--lavender);font-family:'Inter',sans-serif;
+    font-size:10px;font-weight:600;cursor:pointer;background:#fff;color:var(--violet);
+  }
+  .mode-btn:first-child{border-radius:8px 0 0 8px;}
+  .mode-btn:last-child{border-radius:0 8px 8px 0;border-left:none;}
+  .mode-btn.active{background:var(--violet);color:#fff;border-color:var(--violet);}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div id="logo">
+    <img src="data:image/png;base64,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" height="26" alt="Cars.com" style="filter:brightness(0) invert(1);opacity:.92;vertical-align:middle;">
+    <div id="logo-divider"></div>
+    <span id="logo-subtitle">Cars Social · Lexington Hyundai · Pinpoint + Conquest Map</span><span id="data-date">· Data as of Jun 12, 2026</span>
+  </div>
+  <div id="total-badge">
+    <div class="num" id="total-num">—</div>
+    <div class="lbl" id="total-lbl">Cars Social Sessions</div>
+  </div>
+</div>
+
+<!-- Mode toggle: Demand Chart / Search Map -->
+<div id="mode-toggle" style="display:none;">
+  <button class="mode-btn" id="mode-btn-demand" onclick="setMode('demand')">Demand Chart</button>
+  <button class="mode-btn" id="mode-btn-search" onclick="setMode('search')">Search Map</button>
+</div>
+
+<div id="cs-social-panel" style="position:absolute;top:130px;left:252px;z-index:1000;background:#fff;
+  border:1px solid #ddd;border-radius:10px;padding:12px 16px;
+  box-shadow:0 2px 10px rgba(55,11,85,.12);font-family:Inter,sans-serif;min-width:280px;">
+  <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;
+    color:#8136B2;margin-bottom:10px;border-bottom:2px solid #D9BAEE;padding-bottom:6px;">
+    Cars Social Performance · Jan–May 2026</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+    <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.8px;">Total Sessions</div>
+      <div style="font-size:18px;font-weight:700;color:#370B55;letter-spacing:-.5px;">6,002</div></div>
+    <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.8px;">New Users (95%)</div>
+      <div style="font-size:18px;font-weight:700;color:#370B55;letter-spacing:-.5px;">3,869</div></div>
+    <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.8px;">ASC Events</div>
+      <div style="font-size:18px;font-weight:700;color:#370B55;letter-spacing:-.5px;">18,167</div></div>
+    <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;letter-spacing:.8px;">Engagement Rate</div>
+      <div style="font-size:18px;font-weight:700;color:#370B55;letter-spacing:-.5px;">61.0%</div></div>
+  </div>
+  
+</div>
+<div id="map"></div>
+
+<!-- Demand View (v2) -->
+<div id="demand-view">
+  <div id="dv-inner">
+    <div id="dv-controls">
+      <button class="dv-metric-btn active" id="dv-btn-vdp" onclick="dvSetMetric('vdp')">Sessions</button>
+      <button class="dv-metric-btn" id="dv-btn-connections" onclick="dvSetMetric('connections')">Engaged</button>
+      <button class="dv-metric-btn" id="dv-btn-vehicles" onclick="dvSetMetric('vehicles')">Inventory</button>
+      <select id="dv-stock-select" onchange="dvSetStock(this.value)">
+        <option value="all">All Stock Types</option>
+        <option value="New">New</option>
+        <option value="Used">Used</option>
+        <option value="CPO">CPO</option>
+      </select>
+      <span id="dv-context-label"></span>
+    </div>
+    <div id="dv-body">
+      <div class="dv-card">
+        <h3>Top Makes — Cars Social Traffic (28d) <span id="dv-make-count" style="font-size:10px;color:#aaa;font-weight:400;text-transform:none;letter-spacing:0;"></span></h3>
+        <div id="dv-chart"></div>
+      </div>
+      <div class="dv-card">
+        <h3 id="dv-drill-title">Model Breakdown <span id="dv-drill-make" style="color:var(--jagger);font-weight:700;text-transform:none;letter-spacing:0;"></span></h3>
+        <div id="dv-drill-chart"><div id="dv-drill-hint">← Click a make to see model breakdown</div></div>
+      </div>
+    </div>
+    <div id="dv-footer">
+      <div class="dv-stat">
+        <div class="dv-stat-label">Total CS Sessions (28d)</div>
+        <div class="dv-stat-value" id="dv-total-vdps">—</div>
+      </div>
+      <div class="dv-stat">
+        <div class="dv-stat-label">Engaged Sessions (28d)</div>
+        <div class="dv-stat-value" id="dv-total-conns">—</div>
+      </div>
+      <div class="dv-stat">
+        <div class="dv-stat-label">DMA</div>
+        <div class="dv-stat-value" id="dv-dma-name" style="font-size:14px;">—</div>
+      </div>
+      <div class="dv-stat" id="dv-makes-stat" style="display:none;">
+        <div class="dv-stat-label">Filter</div>
+        <div class="dv-stat-value" id="dv-makes-label" style="font-size:13px;">—</div>
+      </div>
+      <div style="margin-left:auto;align-self:center;">
+        <button id="dv-map-toggle" onclick="setMode('search')">View Search Map ↗</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Radius Tool Panel -->
+<div id="radius-panel" class="panel">
+  <h3>Radius Tool</h3>
+  <div id="radius-input-row">
+    <input id="radius-address" type="text" placeholder="Address, city, or ZIP…" autocomplete="off" value="3440 Richmond Road, Lexington KY">
+    <button id="radius-go" onclick="geocodeAndPlace()">Place</button>
+  </div>
+  <div id="radius-btn-row">
+    <button id="click-toggle" class="radius-btn" onclick="toggleClickMode()">Click to Place</button>
+    <button id="radius-clear" class="radius-btn" onclick="clearRadii()">Clear All</button>
+  </div>
+  <div id="radius-status"></div>
+  <div id="radius-results" style="display:none;margin-top:8px;border-top:1px solid #f0ecf5;padding-top:8px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span id="radius-title" style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#8136B2;">ZIPs in Radius</span>
+      <span id="radius-zip-count" style="font-size:10px;color:#999;"></span>
+    </div>
+    <div id="hitlist-filter-row" style="display:none;margin-bottom:6px;">
+      <button id="hitlist-filter-btn" onclick="toggleHitlistFilter()" class="radius-btn" style="width:100%;font-size:9px;padding:4px 0;">Show Hitlist Only</button>
+    </div>
+    <div style="display:flex;gap:4px;margin-bottom:6px;">
+      <button onclick="copyRadiusTable()" class="radius-btn" style="flex:1;font-size:9px;padding:4px 0;">Copy to Clipboard</button>
+      <button onclick="downloadRadiusCsv()" class="radius-btn" style="flex:1;font-size:9px;padding:4px 0;">Download CSV</button>
+    </div>
+    <div id="radius-zip-list" style="max-height:180px;overflow-y:auto;font-size:10px;">
+      <div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
+        <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Demand</span><span class="rz-hl"></span>
+      </div>
+    </div>
+    <div id="radius-totals" style="display:flex;gap:8px;margin-top:6px;padding-top:6px;border-top:1px solid #f0ecf5;">
+      <div style="flex:1;font-size:10px;"><span style="color:#999;">Total:</span> <strong id="radius-total-sessions" style="color:#370B55;">0</strong></div>
+      <div style="flex:1;font-size:10px;"><span style="color:#999;">Hitlist:</span> <strong id="radius-hitlist-count" style="color:#38761D;">0</strong></div>
+    </div>
+  </div>
+  <div id="radius-note" style="font-size:9.5px;color:#aaa;margin-top:8px;line-height:1.5;border-top:1px solid #f0ecf5;padding-top:8px;">
+    ZIP view shows demand trend score (Q1 2026 YoY). ★ = Active / Pinpoint target.
+  </div>
+</div>
+
+<div id="view-toggle" class="panel">
+  <h3>Map View</h3>
+  <div class="toggle-row">
+    <button id="btn-city" class="view-btn" onclick="setView('city')">Cities</button>
+    <button id="btn-zip" class="view-btn active" onclick="setView('zip')">ZIP Codes</button>
+  </div>
+</div>
+
+<div id="legend" class="panel">
+  <h3>Cars Social Reach</h3>
+  <div class="legend-item"><div class="legend-circle" style="width:44px;height:44px;"></div><span>1,500+</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:30px;height:30px;"></div><span>500 – 1,500</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:18px;height:18px;"></div><span>200 – 500</span></div>
+  <div class="legend-item"><div class="legend-circle" style="width:10px;height:10px;"></div><span>&lt; 200</span></div>
+  <div class="legend-item" style="margin-top:10px;padding-top:8px;border-top:1px solid #f0ecf5;">
+    <span class="dealer-star" style="font-size:16px;line-height:1;">★</span>
+    <span style="font-size:11px;color:var(--jagger);font-weight:600;">Don Franklin Lexington<br><span style='font-size:9px;font-weight:400;opacity:.7;'>Hyundai · CCID 5374506</span></span>
+  </div>
+  <div class="legend-item" style="margin-top:4px;">
+    <div style="width:14px;height:14px;background:#E53935;border:2px solid #B71C1C;border-radius:50%;flex-shrink:0;"></div>
+    <span>Competitor Dealer</span>
+  </div>
+  <div class="legend-item" style="margin-top:4px;">
+    <div style="width:12px;height:12px;background:#E8A817;border:2px solid #B8860B;border-radius:50%;flex-shrink:0;"></div>
+    <span>Active / Pinpoint ZIP ★</span>
+  </div>
+  
+  </div>
+  
+</div>
+
+<script>
+const cities = [
+  {
+    "name": "Lexington",
+    "lat": 37.9892,
+    "lng": -84.4299,
+    "total": 2087,
+    "zips": ""
+  },
+  {
+    "name": "Louisville",
+    "lat": 38.2527,
+    "lng": -85.7585,
+    "total": 595,
+    "zips": ""
+  },
+  {
+    "name": "Richmond",
+    "lat": 37.7479,
+    "lng": -84.2947,
+    "total": 296,
+    "zips": ""
+  },
+  {
+    "name": "Georgetown",
+    "lat": 38.2098,
+    "lng": -84.5596,
+    "total": 250,
+    "zips": ""
+  },
+  {
+    "name": "Frankfort",
+    "lat": 38.2009,
+    "lng": -84.8733,
+    "total": 191,
+    "zips": ""
+  },
+  {
+    "name": "Winchester",
+    "lat": 37.9901,
+    "lng": -84.1794,
+    "total": 160,
+    "zips": ""
+  },
+  {
+    "name": "Mount Sterling",
+    "lat": 38.0565,
+    "lng": -83.9435,
+    "total": 131,
+    "zips": ""
+  },
+  {
+    "name": "Danville",
+    "lat": 37.6459,
+    "lng": -84.7721,
+    "total": 122,
+    "zips": ""
+  },
+  {
+    "name": "Nicholasville",
+    "lat": 37.8807,
+    "lng": -84.573,
+    "total": 109,
+    "zips": ""
+  },
+  {
+    "name": "Berea",
+    "lat": 37.5687,
+    "lng": -84.2963,
+    "total": 97,
+    "zips": ""
+  },
+  {
+    "name": "Lawrenceburg",
+    "lat": 38.0373,
+    "lng": -84.8983,
+    "total": 73,
+    "zips": ""
+  },
+  {
+    "name": "Paris",
+    "lat": 38.2098,
+    "lng": -84.253,
+    "total": 63,
+    "zips": ""
+  },
+  {
+    "name": "Harrodsburg",
+    "lat": 37.7626,
+    "lng": -84.8433,
+    "total": 51,
+    "zips": ""
+  },
+  {
+    "name": "Irvine",
+    "lat": 37.6858,
+    "lng": -83.9862,
+    "total": 46,
+    "zips": ""
+  },
+  {
+    "name": "Stanton",
+    "lat": 37.8223,
+    "lng": -83.7853,
+    "total": 35,
+    "zips": ""
+  },
+  {
+    "name": "Cynthiana",
+    "lat": 38.3964,
+    "lng": -84.2949,
+    "total": 33,
+    "zips": ""
+  },
+  {
+    "name": "Versailles",
+    "lat": 38.0526,
+    "lng": -84.7299,
+    "total": 33,
+    "zips": ""
+  },
+  {
+    "name": "Owingsville",
+    "lat": 38.1532,
+    "lng": -83.7564,
+    "total": 24,
+    "zips": ""
+  },
+  {
+    "name": "Stanford",
+    "lat": 37.5245,
+    "lng": -84.6912,
+    "total": 22,
+    "zips": ""
+  },
+  {
+    "name": "Lancaster",
+    "lat": 37.6584,
+    "lng": -84.5969,
+    "total": 20,
+    "zips": ""
+  }
+];
+const mapConfig = {center:[38.05,-84.50],zoom:9};
+const zipData = [{"zip": "42566", "city": "Yosemite", "state": "KY", "lat": 37.3074, "lng": -84.8124, "total": 400, "trend": 800.0}, {"zip": "41386", "city": "Vincent", "state": "KY", "lat": 37.3986, "lng": -83.7049, "total": 400, "trend": 466.7}, {"zip": "41425", "city": "Ezel", "state": "KY", "lat": 37.8912, "lng": -83.4444, "total": 400, "trend": 416.7}, {"zip": "40550", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 333, "trend": 333.3}, {"zip": "41385", "city": "Vancleve", "state": "KY", "lat": 37.6477, "lng": -83.3806, "total": 300, "trend": 300.0}, {"zip": "40620", "city": "Frankfort", "state": "KY", "lat": 38.2341, "lng": -84.8748, "total": 233, "trend": 233.3}, {"zip": "40745", "city": "London", "state": "KY", "lat": 37.1376, "lng": -84.1156, "total": 166, "trend": 166.7}, {"zip": "41301", "city": "Campton", "state": "KY", "lat": 37.7287, "lng": -83.494, "total": 149, "trend": 149.0}, {"zip": "41049", "city": "Hillsboro", "state": "KY", "lat": 38.2929, "lng": -83.6697, "total": 126, "trend": 126.4}, {"zip": "40522", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 123, "trend": 123.6}, {"zip": "40442", "city": "Kings Mountain", "state": "KY", "lat": 37.3818, "lng": -84.7148, "total": 107, "trend": 107.9}, {"zip": "40489", "city": "Waynesburg", "state": "KY", "lat": 37.3499, "lng": -84.6655, "total": 105, "trend": 105.8}, {"zip": "41081", "city": "Plummers Landing", "state": "KY", "lat": 38.3481, "lng": -83.7186, "total": 100, "trend": 100.0}, {"zip": "40472", "city": "Ravenna", "state": "KY", "lat": 37.6867, "lng": -83.9387, "total": 83, "trend": 83.1}, {"zip": "40423", "city": "Danville", "state": "KY", "lat": 37.6456, "lng": -84.7722, "total": 81, "trend": 81.5}, {"zip": "40313", "city": "Clearfield", "state": "KY", "lat": 38.1287, "lng": -83.4425, "total": 77, "trend": 77.7}, {"zip": "40588", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 73, "trend": 73.3}, {"zip": "40387", "city": "Wellington", "state": "KY", "lat": 37.978, "lng": -83.4675, "total": 57, "trend": 57.9}, {"zip": "41472", "city": "West Liberty", "state": "KY", "lat": 37.9215, "lng": -83.2596, "total": 51, "trend": 51.9}, {"zip": "40755", "city": "Pittsburg", "state": "KY", "lat": 37.1678, "lng": -84.1166, "total": 50, "trend": 50.3}, {"zip": "40437", "city": "Hustonville", "state": "KY", "lat": 37.4595, "lng": -84.8528, "total": 45, "trend": 45.7}, {"zip": "40555", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 44, "trend": 44.1}, {"zip": "41347", "city": "Lone", "state": "KY", "lat": 37.5442, "lng": -83.6008, "total": 34, "trend": 34.8}, {"zip": "40456", "city": "Mount Vernon", "state": "KY", "lat": 37.3983, "lng": -84.3379, "total": 29, "trend": 29.8}, {"zip": "40409", "city": "Brodhead", "state": "KY", "lat": 37.3815, "lng": -84.4336, "total": 27, "trend": 27.3}, {"zip": "42553", "city": "Science Hill", "state": "KY", "lat": 37.1683, "lng": -84.6487, "total": 26, "trend": 26.9}, {"zip": "40374", "city": "Sharpsburg", "state": "KY", "lat": 38.2147, "lng": -83.8932, "total": 26, "trend": 26.2}, {"zip": "41031", "city": "Cynthiana", "state": "KY", "lat": 38.3964, "lng": -84.2949, "total": 26, "trend": 26.1}, {"zip": "40422", "city": "Danville", "state": "KY", "lat": 37.6465, "lng": -84.7747, "total": 25, "trend": 25.0}, {"zip": "40741", "city": "London", "state": "KY", "lat": 37.1549, "lng": -84.0961, "total": 22, "trend": 22.7}, {"zip": "40544", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 22, "trend": 22.2}, {"zip": "40577", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 22, "trend": 22.2}, {"zip": "40598", "city": "Lexington", "state": "KY", "lat": 38.0771, "lng": -84.5296, "total": 22, "trend": 22.2}, {"zip": "40351", "city": "Morehead", "state": "KY", "lat": 38.199, "lng": -83.4436, "total": 20, "trend": 20.7}, {"zip": "40578", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 20, "trend": 20.6}, {"zip": "40384", "city": "Versailles", "state": "KY", "lat": 38.0526, "lng": -84.7299, "total": 20, "trend": 20.5}, {"zip": "40385", "city": "Waco", "state": "KY", "lat": 37.7426, "lng": -84.1441, "total": 19, "trend": 19.1}, {"zip": "40504", "city": "Lexington", "state": "KY", "lat": 38.0406, "lng": -84.5433, "total": 18, "trend": 18.8}, {"zip": "40370", "city": "Sadieville", "state": "KY", "lat": 38.3908, "lng": -84.5384, "total": 16, "trend": 16.1}, {"zip": "41039", "city": "Ewing", "state": "KY", "lat": 38.4157, "lng": -83.8733, "total": 15, "trend": 15.1}, {"zip": "42564", "city": "West Somerset", "state": "KY", "lat": 37.1114, "lng": -84.5929, "total": 15, "trend": 15.1}, {"zip": "40353", "city": "Mount Sterling", "state": "KY", "lat": 38.0548, "lng": -83.9388, "total": 13, "trend": 13.9}, {"zip": "40324", "city": "Georgetown", "state": "KY", "lat": 38.2117, "lng": -84.5562, "total": 12, "trend": 12.9}, {"zip": "40346", "city": "Means", "state": "KY", "lat": 37.9807, "lng": -83.7447, "total": 11, "trend": 11.1}, {"zip": "40405", "city": "Bighill", "state": "KY", "lat": 37.5545, "lng": -84.2083, "total": 10, "trend": 10.5}, {"zip": "40514", "city": "Lexington", "state": "KY", "lat": 37.9833, "lng": -84.5767, "total": 10, "trend": 10.4}, {"zip": "42539", "city": "Liberty", "state": "KY", "lat": 37.3146, "lng": -84.9719, "total": 10, "trend": 9.8}, {"zip": "40505", "city": "Lexington", "state": "KY", "lat": 38.0612, "lng": -84.4583, "total": 10, "trend": 8.3}, {"zip": "40404", "city": "Berea", "state": "KY", "lat": 37.5687, "lng": -84.2963, "total": 10, "trend": 6.8}, {"zip": "40383", "city": "Versailles", "state": "KY", "lat": 38.0413, "lng": -84.7287, "total": 10, "trend": 5.4}, {"zip": "40476", "city": "Richmond", "state": "KY", "lat": 37.7479, "lng": -84.2947, "total": 10, "trend": 5.2}, {"zip": "40356", "city": "Nicholasville", "state": "KY", "lat": 37.8808, "lng": -84.5646, "total": 10, "trend": 4.2}, {"zip": "40603", "city": "Frankfort", "state": "KY", "lat": 38.2341, "lng": -84.8748, "total": 10, "trend": 4.0}, {"zip": "40511", "city": "Lexington", "state": "KY", "lat": 38.0932, "lng": -84.5007, "total": 10, "trend": 3.9}, {"zip": "41041", "city": "Flemingsburg", "state": "KY", "lat": 38.428, "lng": -83.708, "total": 10, "trend": 3.9}, {"zip": "40503", "city": "Lexington", "state": "KY", "lat": 38.001, "lng": -84.5282, "total": 10, "trend": 2.9}, {"zip": "40347", "city": "Midway", "state": "KY", "lat": 38.1487, "lng": -84.6928, "total": 10, "trend": 2.8}, {"zip": "40348", "city": "Millersburg", "state": "KY", "lat": 38.2963, "lng": -84.1513, "total": 10, "trend": 2.4}, {"zip": "40391", "city": "Winchester", "state": "KY", "lat": 37.9872, "lng": -84.1789, "total": 10, "trend": 1.5}, {"zip": "40340", "city": "Nicholasville", "state": "KY", "lat": 37.8662, "lng": -84.5795, "total": 10, "trend": 0.8}, {"zip": "40361", "city": "Paris", "state": "KY", "lat": 38.2083, "lng": -84.245, "total": 10, "trend": 0.7}, {"zip": "40440", "city": "Junction City", "state": "KY", "lat": 37.5822, "lng": -84.8028, "total": 10, "trend": 0.3}, {"zip": "40317", "city": "Elliottville", "state": "KY", "lat": 38.1765, "lng": -83.2682, "total": 10, "trend": 0.0}, {"zip": "40330", "city": "Harrodsburg", "state": "KY", "lat": 37.8033, "lng": -84.8607, "total": 10, "trend": 0.0}, {"zip": "40342", "city": "Lawrenceburg", "state": "KY", "lat": 38.0189, "lng": -84.9299, "total": 10, "trend": 0.0}, {"zip": "40366", "city": "Preston", "state": "KY", "lat": 38.0867, "lng": -83.7571, "total": 10, "trend": 0.0}, {"zip": "40376", "city": "Slade", "state": "KY", "lat": 37.7951, "lng": -83.7041, "total": 10, "trend": 0.0}, {"zip": "40464", "city": "Parksville", "state": "KY", "lat": 37.5778, "lng": -84.9281, "total": 10, "trend": 0.0}, {"zip": "40468", "city": "Perryville", "state": "KY", "lat": 37.6375, "lng": -84.9665, "total": 10, "trend": 0.0}, {"zip": "40488", "city": "Waneta", "state": "KY", "lat": 37.4748, "lng": -84.0427, "total": 10, "trend": 0.0}, {"zip": "40502", "city": "Lexington", "state": "KY", "lat": 38.0174, "lng": -84.4854, "total": 10, "trend": -0.0}, {"zip": "40517", "city": "Lexington", "state": "KY", "lat": 37.9849, "lng": -84.4816, "total": 10, "trend": -0.0}, {"zip": "40574", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 10, "trend": 0.0}, {"zip": "40576", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 10, "trend": 0.0}, {"zip": "40580", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 10, "trend": 0.0}, {"zip": "40581", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 10, "trend": 0.0}, {"zip": "40582", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 10, "trend": 0.0}, {"zip": "40583", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 10, "trend": 0.0}, {"zip": "40601", "city": "Frankfort", "state": "KY", "lat": 38.2281, "lng": -84.8697, "total": 10, "trend": 0.0}, {"zip": "40619", "city": "Frankfort", "state": "KY", "lat": 38.2341, "lng": -84.8748, "total": 10, "trend": 0.0}, {"zip": "40750", "city": "London", "state": "KY", "lat": 37.1289, "lng": -84.0833, "total": 10, "trend": 0.0}, {"zip": "40932", "city": "Fall Rock", "state": "KY", "lat": 37.2198, "lng": -83.7883, "total": 10, "trend": 0.0}, {"zip": "40983", "city": "Sextons Creek", "state": "KY", "lat": 37.333, "lng": -83.7666, "total": 10, "trend": 0.0}, {"zip": "41037", "city": "Elizaville", "state": "KY", "lat": 38.4195, "lng": -83.8255, "total": 10, "trend": 0.0}, {"zip": "41065", "city": "Muses Mills", "state": "KY", "lat": 38.3501, "lng": -83.5271, "total": 10, "trend": 0.0}, {"zip": "41360", "city": "Pine Ridge", "state": "KY", "lat": 37.7749, "lng": -83.6321, "total": 10, "trend": 0.0}, {"zip": "41364", "city": "Ricetown", "state": "KY", "lat": 37.3871, "lng": -83.6752, "total": 10, "trend": 0.0}, {"zip": "41368", "city": "Saint Helens", "state": "KY", "lat": 37.5829, "lng": -83.6471, "total": 10, "trend": 0.0}, {"zip": "41408", "city": "Cannel City", "state": "KY", "lat": 37.7901, "lng": -83.2741, "total": 10, "trend": 0.0}, {"zip": "42528", "city": "Dunnville", "state": "KY", "lat": 37.1906, "lng": -84.9835, "total": 10, "trend": 0.0}, {"zip": "40419", "city": "Crab Orchard", "state": "KY", "lat": 37.4465, "lng": -84.4939, "total": 10, "trend": -0.8}, {"zip": "40509", "city": "Lexington", "state": "KY", "lat": 38.0102, "lng": -84.4274, "total": 10, "trend": -0.9}, {"zip": "40403", "city": "Berea", "state": "KY", "lat": 37.5799, "lng": -84.2749, "total": 10, "trend": -3.0}, {"zip": "40372", "city": "Salvisa", "state": "KY", "lat": 37.9167, "lng": -84.8577, "total": 10, "trend": -4.4}, {"zip": "40744", "city": "London", "state": "KY", "lat": 37.0995, "lng": -84.1131, "total": 10, "trend": -4.5}, {"zip": "40508", "city": "Lexington", "state": "KY", "lat": 38.0513, "lng": -84.499, "total": 10, "trend": -5.1}, {"zip": "40475", "city": "Richmond", "state": "KY", "lat": 37.7546, "lng": -84.2955, "total": 10, "trend": -5.7}, {"zip": "40360", "city": "Owingsville", "state": "KY", "lat": 38.1532, "lng": -83.7564, "total": 10, "trend": -5.8}, {"zip": "42533", "city": "Ferguson", "state": "KY", "lat": 37.0677, "lng": -84.5927, "total": 10, "trend": -5.9}, {"zip": "41332", "city": "Hazel Green", "state": "KY", "lat": 37.7981, "lng": -83.421, "total": 10, "trend": -6.2}, {"zip": "40358", "city": "Olympia", "state": "KY", "lat": 38.0849, "lng": -83.7008, "total": 10, "trend": -6.8}, {"zip": "40622", "city": "Frankfort", "state": "KY", "lat": 38.2009, "lng": -84.8733, "total": 10, "trend": -8.3}, {"zip": "40513", "city": "Lexington", "state": "KY", "lat": 38.0139, "lng": -84.5815, "total": 10, "trend": -8.5}, {"zip": "40484", "city": "Stanford", "state": "KY", "lat": 37.5245, "lng": -84.6912, "total": 10, "trend": -9.0}, {"zip": "40444", "city": "Lancaster", "state": "KY", "lat": 37.6584, "lng": -84.5969, "total": 10, "trend": -9.6}, {"zip": "40336", "city": "Irvine", "state": "KY", "lat": 37.6858, "lng": -83.9862, "total": 10, "trend": -9.9}, {"zip": "40379", "city": "Stamping Ground", "state": "KY", "lat": 38.2888, "lng": -84.6818, "total": 10, "trend": -9.9}, {"zip": "40516", "city": "Lexington", "state": "KY", "lat": 38.0544, "lng": -84.3548, "total": 10, "trend": -10.3}, {"zip": "40506", "city": "Lexington", "state": "KY", "lat": 38.0287, "lng": -84.5075, "total": 12, "trend": -12.0}, {"zip": "40445", "city": "Livingston", "state": "KY", "lat": 37.3074, "lng": -84.2318, "total": 12, "trend": -12.4}, {"zip": "40371", "city": "Salt Lick", "state": "KY", "lat": 38.104, "lng": -83.6316, "total": 14, "trend": -14.1}, {"zip": "41311", "city": "Beattyville", "state": "KY", "lat": 37.5999, "lng": -83.714, "total": 14, "trend": -14.4}, {"zip": "40523", "city": "Lexington", "state": "KY", "lat": 38.0283, "lng": -84.4715, "total": 15, "trend": -15.5}, {"zip": "40621", "city": "Frankfort", "state": "KY", "lat": 38.2009, "lng": -84.8733, "total": 16, "trend": -16.7}, {"zip": "40515", "city": "Lexington", "state": "KY", "lat": 37.9651, "lng": -84.4708, "total": 16, "trend": -16.9}, {"zip": "42501", "city": "Somerset", "state": "KY", "lat": 37.1029, "lng": -84.5443, "total": 17, "trend": -17.2}, {"zip": "40447", "city": "Mc Kee", "state": "KY", "lat": 37.4338, "lng": -84.0251, "total": 17, "trend": -17.4}, {"zip": "40390", "city": "Wilmore", "state": "KY", "lat": 37.8602, "lng": -84.6714, "total": 19, "trend": -19.0}, {"zip": "42503", "city": "Somerset", "state": "KY", "lat": 37.1566, "lng": -84.5248, "total": 19, "trend": -19.8}, {"zip": "40380", "city": "Stanton", "state": "KY", "lat": 37.8223, "lng": -83.7853, "total": 22, "trend": -22.1}, {"zip": "40507", "city": "Lexington", "state": "KY", "lat": 38.0464, "lng": -84.4953, "total": 22, "trend": -22.2}, {"zip": "41365", "city": "Rogers", "state": "KY", "lat": 37.7093, "lng": -83.6314, "total": 22, "trend": -22.2}, {"zip": "42565", "city": "Windsor", "state": "KY", "lat": 37.1568, "lng": -84.8799, "total": 23, "trend": -23.1}, {"zip": "40337", "city": "Jeffersonville", "state": "KY", "lat": 37.964, "lng": -83.8558, "total": 24, "trend": -24.8}];
+const hitlistZips = ["40324", "40330", "40336", "40337", "40340", "40342", "40347", "40348", "40353", "40356", "40361", "40370", "40372", "40374", "40379", "40383", "40384", "40385", "40390", "40391", "40403", "40404", "40405", "40422", "40423", "40437", "40440", "40442", "40444", "40456", "40472", "40475", "40476", "40502", "40503", "40504", "40505", "40506", "40507", "40508", "40509", "40511", "40513", "40514", "40515", "40516", "40517", "40522", "40523", "40544", "40550", "40555", "40574", "40576", "40577", "40578", "40580", "40581", "40582", "40583", "40588", "40598", "40601", "40603", "40619", "40620", "40621", "40622", "41031", "41049"];
+const dealerPin = {"lat": 37.9904, "lng": -84.4257, "name": "Don Franklin Lexington Hyundai", "address": "3440 Richmond Road, Lexington KY 40509"};
+
+const maxTotal = Math.max(...cities.map(c=>c.total));
+const grandTotal = cities.reduce((s,c)=>s+c.total,0);
+document.getElementById('total-num').textContent = (6002).toLocaleString();
+
+// Render Top 8 Cities sidebar dynamically
+
+
+function fmtZips(zips) {
+  if (!zips) return '';
+  const z = zips.split(', ');
+  return 'ZIP: ' + (z.length <= 4 ? zips : z.slice(0,4).join(', ') + ` \u2026 +${z.length-4} more`);
+}
+
+function getRadius(t){
+  const mn=4,mx=52;
+  return mn+(Math.sqrt(t)/Math.sqrt(maxTotal))*(mx-mn);
+}
+
+function getTierStyle(t){
+  if(t>=1500) return {fill:'rgba(55,11,85,0.72)',   stroke:'#370B55'};
+  if(t>= 500) return {fill:'rgba(100,30,150,0.65)', stroke:'#6A1E96'};
+  if(t>= 200) return {fill:'rgba(129,54,178,0.60)', stroke:'#8136B2'};
+  if(t>= 100) return {fill:'rgba(171,116,207,0.55)',stroke:'#AB74CF'};
+  if(t>=  50) return {fill:'rgba(217,186,238,0.65)',stroke:'#C8A0E4'};
+  return              {fill:'rgba(240,230,250,0.75)',stroke:'#D9BAEE'};
+}
+
+const map = L.map('map',{center:mapConfig.center,zoom:mapConfig.zoom,zoomControl:false,attributionControl:false});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; <a href="https://carto.com/">CARTO</a>'}).addTo(map);
+L.control.zoom({position:'topleft'}).addTo(map);
+
+// City markers are now rendered via renderCityMarkers() into cityLayerGroup
+
+// ── City/ZIP view toggle ────────────────────────────────────────────────────
+let cityLayerGroup = L.layerGroup();
+let zipLayerGroup = L.layerGroup();
+let hitlistLayerGroup = L.layerGroup();
+let dealerLayerGroup = L.layerGroup();
+let currentView = 'zip';
+
+// Move city markers into a layer group (re-render)
+function renderCityMarkers() {
+  cityLayerGroup.clearLayers();
+  cities.forEach(c => {
+    const r  = getRadius(c.total);
+    const st = getTierStyle(c.total);
+    const circle = L.circleMarker([c.lat,c.lng],{
+      radius:r, fillColor:st.fill, fillOpacity:1,
+      color:st.stroke, weight:1.5,
+    });
+    circle.bindTooltip(
+      `<div class="tt-city">${c.name}</div>
+       <div class="tt-count">${c.total.toLocaleString()} sessions</div>
+       <div class="tt-zips">${fmtZips(c.zips)}</div>`,
+      {className:'cars-tooltip',sticky:true,offset:[10,0]}
+    );
+    cityLayerGroup.addLayer(circle);
+    if(c.total>=2000){
+      const lbl=L.divIcon({
+        html:`<div style="color:#370B55;font-family:Inter,sans-serif;font-size:10px;font-weight:600;white-space:nowrap;text-shadow:0 1px 3px rgba(255,255,255,.95);pointer-events:none;margin-top:${r+3}px;text-align:center;transform:translateX(-50%);">${c.name}</div>`,
+        className:'',iconAnchor:[0,0]
+      });
+      cityLayerGroup.addLayer(L.marker([c.lat,c.lng],{icon:lbl,interactive:false}));
+    }
+  });
+}
+
+function renderZipMarkers() {
+  zipLayerGroup.clearLayers();
+  if (typeof zipData === 'undefined' || !zipData.length) return;
+  const maxZip = Math.max(...zipData.map(z=>z.total));
+  zipData.forEach(z => {
+    if (!isFinite(z.lat) || !isFinite(z.lng)) return;  // skip NaN entries
+    const r = 3 + (Math.sqrt(z.total)/Math.sqrt(maxZip)) * 28;
+    const st = getTierStyle(z.total);
+    const isHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.includes(z.zip);
+    const opts = isHitlist
+      ? { radius:r, fillColor:'rgba(232,168,23,0.75)', fillOpacity:1, color:'#B8860B', weight:2.5 }
+      : { radius:r, fillColor:st.fill, fillOpacity:1, color:st.stroke, weight:1.5 };
+    const circle = L.circleMarker([z.lat,z.lng], opts);
+    circle.bindTooltip(
+      `<div class="tt-city">${z.zip}${isHitlist ? ' <span style="color:#B8860B;font-weight:700;">★ HITLIST</span>' : ''}</div>
+       <div class="tt-count">${z.total.toLocaleString()} sessions</div>
+       <div class="tt-zips">${z.city}, ${z.state}</div>`,
+      {className:'cars-tooltip',sticky:true,offset:[10,0]}
+    );
+    zipLayerGroup.addLayer(circle);
+    if(z.total >= 1500) {
+      const lbl=L.divIcon({
+        html:`<div style="color:${isHitlist?'#B8860B':'#370B55'};font-family:Inter,sans-serif;font-size:9px;font-weight:600;white-space:nowrap;text-shadow:0 1px 3px rgba(255,255,255,.95);pointer-events:none;margin-top:${r+2}px;text-align:center;transform:translateX(-50%);">${z.zip}</div>`,
+        className:'',iconAnchor:[0,0]
+      });
+      zipLayerGroup.addLayer(L.marker([z.lat,z.lng],{icon:lbl,interactive:false}));
+    }
+  });
+}
+
+function renderDealerPin() {
+  dealerLayerGroup.clearLayers();
+  if (typeof dealerPin === 'undefined' || !dealerPin.lat) return;
+  const star = L.divIcon({
+    html:'<div class="dealer-star">★</div>',
+    className:'',iconSize:[20,20],iconAnchor:[10,10]
+  });
+  const marker = L.marker([dealerPin.lat, dealerPin.lng], {icon:star, zIndexOffset:1000, interactive:false});
+  marker.bindTooltip(
+    `<div class="tt-city">${dealerPin.name || 'Dealer'}</div><div class="tt-zips">${dealerPin.address || ''}</div>`,
+    {className:'cars-tooltip',offset:[12,0]}
+  );
+  dealerLayerGroup.addLayer(marker);
+  
+}
+
+function setView(view) {
+  currentView = view;
+  document.getElementById('btn-city').classList.toggle('active', view==='city');
+  document.getElementById('btn-zip').classList.toggle('active', view==='zip');
+  if (view === 'city') {
+    map.removeLayer(zipLayerGroup);
+    map.addLayer(cityLayerGroup);
+  } else {
+    map.removeLayer(cityLayerGroup);
+    if (zipLayerGroup.getLayers().length === 0) renderZipMarkers();
+    map.addLayer(zipLayerGroup);
+  }
+  // Show hitlist legend in ZIP view if hitlist data exists
+  const hl = document.getElementById('hitlist-legend');
+  if (hl) hl.style.display = (view==='zip' && typeof hitlistZips !== 'undefined' && hitlistZips.length) ? 'flex' : 'none';
+}
+
+// Initialize
+renderCityMarkers();
+renderZipMarkers();
+zipLayerGroup.addTo(map);
+renderDealerPin();
+dealerLayerGroup.addTo(map);
+
+// Competitor red dots
+L.marker([37.7479,-84.2947],{icon:L.divIcon({html:'<div style="width:14px;height:14px;background:#E53935;border:2.5px solid #B71C1C;border-radius:50%;box-shadow:0 1px 5px rgba(183,28,28,.5);"></div>',className:"",iconSize:[14,14],iconAnchor:[7,7]}),zIndexOffset:2000}).bindTooltip('<div class="tt-city">Gates Hyundai Richmond KY</div><div class="tt-count" style="color:#E53935;">Competitor · 18 mi</div>',{className:"cars-tooltip",offset:[10,0]}).addTo(map);
+L.marker([38.994,-84.6263],{icon:L.divIcon({html:'<div style="width:14px;height:14px;background:#E53935;border:2.5px solid #B71C1C;border-radius:50%;box-shadow:0 1px 5px rgba(183,28,28,.5);"></div>',className:"",iconSize:[14,14],iconAnchor:[7,7]}),zIndexOffset:2000}).bindTooltip('<div class="tt-city">Kerry Hyundai Florence NKY</div><div class="tt-count" style="color:#E53935;">Competitor · 70 mi</div>',{className:"cars-tooltip",offset:[10,0]}).addTo(map);
+L.marker([38.2527,-85.7585],{icon:L.divIcon({html:'<div style="width:14px;height:14px;background:#E53935;border:2.5px solid #B71C1C;border-radius:50%;box-shadow:0 1px 5px rgba(183,28,28,.5);"></div>',className:"",iconSize:[14,14],iconAnchor:[7,7]}),zIndexOffset:2000}).bindTooltip('<div class="tt-city">Hyundai of Louisville</div><div class="tt-count" style="color:#E53935;">Competitor · 74 mi</div>',{className:"cars-tooltip",offset:[10,0]}).addTo(map);
+
+// Recalculate map size so ZIP markers show on load
+setTimeout(function() { map.invalidateSize(); }, 400);
+
+// Tier legend shown in #legend panel
+
+// ── Radius Tool Tool ────────────────────────────────────────────────────────
+const RADIUS_M = 48280; // 30 miles in meters
+const RADIUS_MI = 30;
+let placedRadii = []; // [{ring, badge, pin, lat, lng, label}]
+let clickModeActive = false;
+
+// Haversine distance in miles between two lat/lng points
+function haversineMi(lat1, lng1, lat2, lng2) {
+  const R = 3958.8;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
+    * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Sum sessions and count cities whose centroid falls within RADIUS_MI of (lat, lng)
+function sessionsInRadius(lat, lng) {
+  let sessions = 0, count = 0;
+  cities.forEach(c => {
+    if (haversineMi(lat, lng, c.lat, c.lng) <= RADIUS_MI) { sessions += c.total; count++; }
+  });
+  return { sessions, count };
+}
+
+// ZIP-level radius capture — returns detailed list
+function zipsInRadius(lat, lng) {
+  if (typeof zipData === 'undefined' || !zipData.length) return [];
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  return zipData
+    .filter(z => haversineMi(lat, lng, z.lat, z.lng) <= RADIUS_MI)
+    .map(z => ({
+      zip: z.zip, city: z.city, state: z.state, total: z.total,
+      hitlist: hasHitlist && hitlistZips.includes(z.zip),
+      dist: Math.round(haversineMi(lat, lng, z.lat, z.lng) * 10) / 10,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+// Combined ZIPs across all placed radii (deduplicated), plus any hitlist ZIPs outside radii
+function getAllRadiusZips() {
+  if (!placedRadii.length) return [];
+  const zipMap = new Map();
+  placedRadii.forEach((r, idx) => {
+    const label = r.label || ('Radius ' + (idx + 1));
+    zipsInRadius(r.lat, r.lng).forEach(z => {
+      if (zipMap.has(z.zip)) {
+        const existing = zipMap.get(z.zip);
+        if (!existing.radii.includes(label)) existing.radii.push(label);
+        existing.dist = Math.min(existing.dist, z.dist);
+      } else {
+        zipMap.set(z.zip, Object.assign({}, z, { radii: [label] }));
+      }
+    });
+  });
+
+  // Only show ZIPs actually within a placed radius (hitlist marks them ★)
+  
+
+  return Array.from(zipMap.values()).sort((a, b) => b.total - a.total);
+}
+
+let lastRadiusCapture = [];
+let hitlistFilterActive = false;
+
+function toggleHitlistFilter() {
+  hitlistFilterActive = !hitlistFilterActive;
+  const btn = document.getElementById('hitlist-filter-btn');
+  if (hitlistFilterActive) {
+    btn.classList.add('active');
+    btn.textContent = 'Show All ZIPs';
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = 'Show Hitlist Only';
+  }
+  renderRadiusPanel();
+}
+
+function getDisplayCapture() {
+  return hitlistFilterActive ? lastRadiusCapture.filter(z => z.hitlist) : lastRadiusCapture;
+}
+
+function renderRadiusPanel() {
+  const panel = document.getElementById('radius-results');
+  const list = document.getElementById('radius-zip-list');
+  const display = getDisplayCapture();
+  const hasHitlist = typeof hitlistZips !== 'undefined' && hitlistZips.length > 0;
+  const hitlistCount = lastRadiusCapture.filter(z => z.hitlist).length;
+
+  if (!lastRadiusCapture.length) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+  const totalSearches = display.reduce((s, z) => s + z.total, 0);
+
+  document.getElementById('radius-zip-count').textContent = display.length + ' ZIPs';
+  document.getElementById('radius-total-sessions').textContent = totalSearches.toLocaleString();
+  document.getElementById('radius-hitlist-count').textContent =
+    hitlistFilterActive
+      ? hitlistCount + ' of ' + hitlistCount
+      : hitlistCount + ' of ' + lastRadiusCapture.length;
+
+  // Show hitlist filter toggle when hitlist data exists
+  const filterRow = document.getElementById('hitlist-filter-row');
+  if (filterRow) filterRow.style.display = hasHitlist ? 'block' : 'none';
+
+  // Sort: hitlist ZIPs first when filter is off and hitlist exists
+  const sorted = hasHitlist && !hitlistFilterActive
+    ? [...display].sort((a, b) => (b.hitlist ? 1 : 0) - (a.hitlist ? 1 : 0) || b.total - a.total)
+    : display;
+
+  list.innerHTML =
+    `<div class="rz-row" style="font-weight:600;color:#370B55;border-bottom:2px solid #D9BAEE;padding-bottom:4px;margin-bottom:2px;">
+      <span class="rz-zip">ZIP</span><span class="rz-city">City</span><span class="rz-vol">Demand</span><span class="rz-hl"></span>
+    </div>` +
+    sorted.map(z =>
+      `<div class="rz-row${z.hitlist ? ' rz-hitlist' : ''}">
+        <span class="rz-zip">${z.zip}</span>
+        <span class="rz-city">${z.city}, ${z.state}</span>
+        <span class="rz-vol">${z.total.toLocaleString()}</span>
+        <span class="rz-hl">${z.hitlist ? '★' : ''}</span>
+      </div>`
+    ).join('');
+}
+
+function updateAllRadiusResults() {
+  lastRadiusCapture = getAllRadiusZips();
+
+  // Update panel title for multi-radius
+  const titleEl = document.getElementById('radius-title');
+  if (titleEl) titleEl.textContent = placedRadii.length > 1 ? 'ZIPs in ' + placedRadii.length + ' Radii' : 'ZIPs in Radius';
+
+  renderRadiusPanel();
+}
+
+function copyRadiusTable() {
+  const data = getDisplayCapture();
+  if (!data.length) return;
+  const multi = placedRadii.length > 1;
+  const header = multi ? 'ZIP\tCity\tState\tDemand\tHitlist\tRadius' : 'ZIP\tCity\tState\tDemand\tHitlist';
+  const rows = data.map(z =>
+    multi
+      ? `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}\t${z.radii.join('; ')}`
+      : `${z.zip}\t${z.city}\t${z.state}\t${z.total}\t${z.hitlist ? 'YES' : ''}`
+  );
+  const tsv = [header, ...rows].join('\n');
+  navigator.clipboard.writeText(tsv).then(() => {
+    setStatus('✓ Copied ' + data.length + ' ZIPs — paste into Sheets', 3000);
+  });
+}
+
+function downloadRadiusCsv() {
+  const data = getDisplayCapture();
+  if (!data.length) return;
+  const multi = placedRadii.length > 1;
+  const header = multi ? 'ZIP,City,State,Demand,Hitlist,Radius' : 'ZIP,City,State,Demand,Hitlist';
+  const rows = data.map(z =>
+    multi
+      ? `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''},"${z.radii.join('; ')}"`
+      : `${z.zip},"${z.city}",${z.state},${z.total},${z.hitlist ? 'YES' : ''}`
+  );
+  const csv = [header, ...rows].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'radius_zips_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  setStatus('✓ Downloaded ' + data.length + ' ZIPs', 3000);
+}
+
+function makeBadgeIcon(sessions, count) {
+  return L.divIcon({
+    html: `<div style="
+      background:#fff;color:#370B55;
+      font-family:Inter,sans-serif;font-size:10px;font-weight:700;
+      padding:3px 8px;border-radius:10px;white-space:nowrap;
+      transform:translate(-50%, 14px);pointer-events:none;
+      box-shadow:0 2px 8px rgba(55,11,85,.25);letter-spacing:.2px;
+      border:1.5px solid rgba(55,11,85,.3);
+    ">${sessions.toLocaleString()} sessions · ${count} ${count === 1 ? 'city' : 'cities'}</div>`,
+    className: '',
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+}
+
+function makePinIcon() {
+  return L.divIcon({
+    html: `<div style="
+      width:12px;height:12px;background:#fff;
+      border:2.5px solid #8136B2;border-radius:50%;
+      cursor:grab;box-shadow:0 1px 5px rgba(55,11,85,.4);
+    "></div>`,
+    className: '',
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
+  });
+}
+
+function placeRadius(lat, lng, label) {
+  const ring = L.circle([lat, lng], {
+    radius: RADIUS_M,
+    color: '#8136B2',
+    weight: 2,
+    dashArray: '10 7',
+    fillColor: '#8136B2',
+    fillOpacity: 0.05,
+    interactive: false,
+  }).addTo(map);
+
+  const initial = sessionsInRadius(lat, lng);
+
+  const badge = L.marker([lat, lng], {
+    icon: makeBadgeIcon(initial.sessions, initial.count),
+    interactive: false,
+    zIndexOffset: -200,
+  }).addTo(map);
+
+  const pin = L.marker([lat, lng], {
+    draggable: true,
+    icon: makePinIcon(),
+    zIndexOffset: 2100,
+  }).addTo(map);
+
+  const hintLine = `<div style="font-size:10px;color:#999;margin-top:2px;">30-mile radius · drag to reposition</div>`;
+  pin.bindTooltip(
+    `${label ? `<div class="tt-city">${label}</div>` : ''}${hintLine}`,
+    { className: 'cars-tooltip', sticky: false, offset: [12, 0] }
+  );
+
+  const radiusObj = { ring, badge, pin, lat, lng, label };
+  placedRadii.push(radiusObj);
+
+  // Show combined ZIP breakdown across all radii
+  updateAllRadiusResults();
+
+  pin.on('dragstart', function() {
+    map.getContainer().style.cursor = 'grabbing';
+    pin.closeTooltip();
+  });
+
+  pin.on('drag', function(e) {
+    const { lat: la, lng: ln } = e.latlng;
+    ring.setLatLng([la, ln]);
+    badge.setLatLng([la, ln]);
+    radiusObj.lat = la;
+    radiusObj.lng = ln;
+    const r = sessionsInRadius(la, ln);
+    badge.setIcon(makeBadgeIcon(r.sessions, r.count));
+  });
+
+  pin.on('dragend', function() {
+    map.getContainer().style.cursor = clickModeActive ? 'crosshair' : '';
+    const { lat: la, lng: ln } = pin.getLatLng();
+    radiusObj.lat = la;
+    radiusObj.lng = ln;
+    const r = sessionsInRadius(la, ln);
+    setStatus(`✓ ${r.sessions.toLocaleString()} sessions · ${r.count} cities in radius`, 4000);
+    // Update combined ZIP breakdown after drag
+    updateAllRadiusResults();
+  });
+}
+
+function geocodeAndPlace() {
+  const addr = document.getElementById('radius-address').value.trim();
+  if (!addr) return;
+  setStatus('Searching…');
+
+  fetch(
+    'https://photon.komoot.io/api/?q=' + encodeURIComponent(addr) + '&limit=1&lang=en'
+  )
+    .then(r => r.json())
+    .then(data => {
+      const feat = data && data.features && data.features[0];
+      if (!feat) { setStatus('Address not found — click map to place.'); return; }
+      const [lng, lat] = feat.geometry.coordinates;
+      const label = feat.properties.name || addr.split(',')[0];
+      placeRadius(lat, lng, label);
+      map.panTo([lat, lng]);
+      const result = sessionsInRadius(lat, lng);
+      setStatus('✓ ' + result.sessions.toLocaleString() + ' sessions in radius · drag to adjust', 4000);
+    })
+    .catch(() => setStatus('Geocoding failed — check connection.'));
+}
+
+function toggleClickMode() {
+  clickModeActive = !clickModeActive;
+  const btn = document.getElementById('click-toggle');
+  if (clickModeActive) {
+    btn.classList.add('active');
+    map.getContainer().style.cursor = 'crosshair';
+    setStatus('Click anywhere on the map.');
+  } else {
+    btn.classList.remove('active');
+    map.getContainer().style.cursor = '';
+    setStatus('');
+  }
+}
+
+function clearRadii() {
+  placedRadii.forEach(r => { map.removeLayer(r.ring); map.removeLayer(r.badge); map.removeLayer(r.pin); });
+  placedRadii = [];
+  setStatus('');
+  document.getElementById('radius-results').style.display = 'none';
+}
+
+function setStatus(msg, clearAfterMs) {
+  const el = document.getElementById('radius-status');
+  el.textContent = msg;
+  if (clearAfterMs) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, clearAfterMs);
+}
+
+map.on('click', function(e) {
+  if (!clickModeActive) return;
+  placeRadius(e.latlng.lat, e.latlng.lng, null);
+  const result = sessionsInRadius(e.latlng.lat, e.latlng.lng);
+  setStatus(result.sessions.toLocaleString() + ' sessions in radius · drag to reposition');
+});
+
+document.getElementById('radius-address').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') geocodeAndPlace();
+});
+
+// ---- Demand Chart (v2) -------------------------------------------------------
+
+const demandData = [{"make": "Hyundai", "vdps": 341, "connections": 205, "vehicles": 285, "stock_type": "New"}];
+
+const modelData = {"Hyundai": [{"model": "Palisade (all trims)", "stock_type": "New", "vdps": 188, "connections": 113, "vehicles": 157}, {"model": "Sonata N-Line", "stock_type": "New", "vdps": 48, "connections": 29, "vehicles": 40}, {"model": "Santa Fe Limited AWD", "stock_type": "New", "vdps": 38, "connections": 23, "vehicles": 32}, {"model": "IONIQ 9 SEL (EV)", "stock_type": "New", "vdps": 34, "connections": 20, "vehicles": 28}, {"model": "Santa Cruz XRT AWD", "stock_type": "New", "vdps": 33, "connections": 20, "vehicles": 28}]};
+
+const demandConfig = {"mode": "search", "metric": "vdp", "metricLabel": "Social Sessions", "dma": "Lexington, KY", "makes": ["Hyundai"], "makesLabel": "Hyundai", "stockLabel": "New", "period": "Last 28 Days \u00b7 GA4", "totalVdps": 6002, "totalConnections": 16276};
+
+// Active state
+let dvMetric = demandConfig.metric || 'vdp';
+let dvStock  = 'all';
+let dvSelectedMake = null;
+
+const DV_METRIC_KEYS = {vdp: 'vdps', connections: 'connections', vehicles: 'vehicles'};
+const DV_METRIC_LABELS = {vdp: 'Market VDPs', connections: 'Market Connections', vehicles: 'Market Vehicles'};
+
+function setMode(mode) {
+  const demandView = document.getElementById('demand-view');
+  const mapEl      = document.getElementById('map');
+  const btnD       = document.getElementById('mode-btn-demand');
+  const btnS       = document.getElementById('mode-btn-search');
+  if (mode === 'demand') {
+    demandView.style.display = 'flex';
+    mapEl.style.visibility   = 'hidden';
+    var sp=document.getElementById('cs-social-panel'); if(sp) sp.style.display='none';
+    var vt=document.getElementById('view-toggle'); if(vt) vt.style.display='none';
+    btnD.classList.add('active');
+    btnS.classList.remove('active');
+    if (dvSelectedMake) renderDrillDown(dvSelectedMake);
+    else renderDemandChart();
+  } else {
+    demandView.style.display = 'none';
+    mapEl.style.visibility   = 'visible';
+    var sp=document.getElementById('cs-social-panel'); if(sp) sp.style.display='block';
+    var vt=document.getElementById('view-toggle'); if(vt) vt.style.display='block';
+    btnD.classList.remove('active');
+    btnS.classList.add('active');
+    setTimeout(() => map.invalidateSize(), 50);
+  }
+}
+
+function dvSetMetric(metric) {
+  dvMetric = metric;
+  ['vdp','connections','vehicles'].forEach(m => {
+    document.getElementById('dv-btn-' + m).classList.toggle('active', m === metric);
+  });
+  renderDemandChart();
+  if (dvSelectedMake) renderDrillDown(dvSelectedMake);
+}
+
+function dvSetStock(val) {
+  dvStock = val;
+  renderDemandChart();
+  if (dvSelectedMake) renderDrillDown(dvSelectedMake);
+}
+
+function dvFilterData(rows) {
+  if (dvStock === 'all') return rows;
+  return rows.filter(r => (r.stock_type || '').toLowerCase() === dvStock);
+}
+
+function dvAgg(rows, keyField) {
+  const agg = {};
+  rows.forEach(r => {
+    const k = r[keyField] || 'Unknown';
+    if (!agg[k]) agg[k] = {vdps: 0, connections: 0, vehicles: 0, label: k};
+    agg[k].vdps        += r.vdps        || 0;
+    agg[k].connections += r.connections || 0;
+    agg[k].vehicles    += r.vehicles    || 0;
+  });
+  return Object.values(agg).sort((a, b) => b[DV_METRIC_KEYS[dvMetric]] - a[DV_METRIC_KEYS[dvMetric]]);
+}
+
+function dvBuildBar(row, maxVal, metric, clickable, selectedLabel, totalForPct) {
+  const key   = DV_METRIC_KEYS[metric];
+  const val   = row[key] || 0;
+  const denom  = (totalForPct != null && totalForPct > 0) ? totalForPct : maxVal;
+  const pct   = denom > 0 ? (val / denom * 100).toFixed(1) : 0;
+  const fill  = pct > 0 ? Math.max(pct, 1.5) : 0;
+  const isSelected = clickable && row.label === selectedLabel;
+  const rowEl = document.createElement('div');
+  rowEl.className = 'dv-bar-row' + (isSelected ? ' selected' : '');
+  rowEl.innerHTML = `
+    <div class="dv-bar-label" title="${row.label}">${row.label}</div>
+    <div class="dv-bar-wrap">
+      <div class="dv-bar" style="width:${fill}%"></div>
+    </div>
+    <div class="dv-bar-val">${val.toLocaleString()}</div>
+    <div class="dv-bar-pct">${pct}%</div>`;
+  if (clickable) {
+    rowEl.style.cursor = 'pointer';
+    rowEl.addEventListener('click', () => {
+      dvSelectedMake = row.label;
+      renderDemandChart();
+      renderDrillDown(row.label);
+    });
+  }
+  return rowEl;
+}
+
+function renderDemandChart() {
+  const chartEl = document.getElementById('dv-chart');
+  if (!chartEl) return;
+  chartEl.innerHTML = '';
+
+  const filtered = dvFilterData(demandData);
+  if (!filtered.length) {
+    chartEl.innerHTML = '<div style="color:#999;padding:16px;font-size:13px;">No data loaded.</div>';
+    return;
+  }
+
+  const agg    = dvAgg(filtered, 'make');
+  const maxVal = agg[0] ? agg[0][DV_METRIC_KEYS[dvMetric]] : 1;
+  const total  = agg.reduce((s, r) => s + (r[DV_METRIC_KEYS[dvMetric]] || 0), 0);
+
+  agg.forEach(row => chartEl.appendChild(dvBuildBar(row, maxVal, dvMetric, true, dvSelectedMake)));
+
+  // Update count badge
+  const countEl = document.getElementById('dv-make-count');
+  if (countEl) countEl.textContent = `(${agg.length} makes)`;
+
+  // Update footer stats
+  const totalVdps  = filtered.reduce((s, r) => s + (r.vdps || 0), 0);
+  const totalConns = filtered.reduce((s, r) => s + (r.connections || 0), 0);
+
+  const totalVdpEl  = document.getElementById('dv-total-vdps');
+  const totalConnEl = document.getElementById('dv-total-conns');
+  const dmaNameEl   = document.getElementById('dv-dma-name');
+  const makesStatEl = document.getElementById('dv-makes-stat');
+  const makesLblEl  = document.getElementById('dv-makes-label');
+
+  if (totalVdpEl)  totalVdpEl.textContent  = totalVdps.toLocaleString();
+  if (totalConnEl) totalConnEl.textContent = totalConns.toLocaleString();
+  if (dmaNameEl)   dmaNameEl.textContent   = demandConfig.dma || '—';
+  if (makesStatEl && makesLblEl && demandConfig.makes && demandConfig.makes.length) {
+    makesStatEl.style.display = 'flex';
+    makesLblEl.textContent = demandConfig.makes.join(', ');
+  }
+
+  // Context label
+  const ctxEl = document.getElementById('dv-context-label');
+  if (ctxEl) {
+    const makeLabel = demandConfig.makes && demandConfig.makes.length
+      ? demandConfig.makes.join(', ')
+      : 'All Makes';
+    ctxEl.textContent = `${demandConfig.dma || 'DMA'} · ${makeLabel}`;
+  }
+}
+
+function renderDrillDown(make) {
+  const titleEl = document.getElementById('dv-drill-title');
+  const makeEl  = document.getElementById('dv-drill-make');
+  const chartEl = document.getElementById('dv-drill-chart');
+  if (!chartEl) return;
+
+  if (makeEl) makeEl.textContent = make;
+  chartEl.innerHTML = '';
+
+  // Build model rows from modelData lookup (pre-aggregated by Python) or from demandData
+  let modelRows = [];
+  if (modelData[make] && modelData[make].length) {
+    modelRows = dvFilterData(modelData[make]);
+    // re-aggregate by model across stock type filters
+    modelRows = dvAgg(modelRows, 'model');
+  } else {
+    // Fallback: aggregate from demandData filtered to this make
+    const makeRows = dvFilterData(demandData.filter(r => r.make === make));
+    modelRows = dvAgg(makeRows, 'model');
+  }
+
+  if (!modelRows.length) {
+    chartEl.innerHTML = '<div style="color:#999;padding:16px;font-size:13px;">No model data for ' + make + '.</div>';
+    return;
+  }
+
+  const maxVal = modelRows[0] ? modelRows[0][DV_METRIC_KEYS[dvMetric]] : 1;
+  const metricKey = DV_METRIC_KEYS[dvMetric];
+  const makeTotal = modelRows.reduce(function(s,r){ return s + (r[metricKey]||0); }, 0);
+  modelRows.forEach(row => chartEl.appendChild(dvBuildBar(row, maxVal, dvMetric, false, null, makeTotal)));
+}
+
+// Populate stock type dropdown from data
+function dvPopulateStockSelect() {
+  const sel = document.getElementById('dv-stock-select');
+  if (!sel || !demandData.length) return;
+  const types = [...new Set(demandData.map(r => r.stock_type).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="all">All Stock Types</option>';
+  types.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.toLowerCase();
+    opt.textContent = t;
+    sel.appendChild(opt);
+  });
+}
+
+// Auto-drop the dealer's 30-mile radius on load (draggable + clearable via Radius Tool)
+placeRadius(dealerPin.lat, dealerPin.lng, dealerPin.name);
+
+// Initialize on load
+(function dvInit() {
+  dvPopulateStockSelect();
+  if (demandConfig.mode === 'demand') {
+    setMode('demand');
+  }
+  renderDemandChart();
+  const hintEl = document.getElementById('dv-drill-hint');
+  if (hintEl) hintEl.style.display = 'block';
+})();
+</script>
+</body>
+</html>
