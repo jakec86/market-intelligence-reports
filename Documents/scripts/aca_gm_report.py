@@ -19,8 +19,8 @@ Optional CSV (omit if not available — attribution block will adapt):
                                 filter to target month → Download Crosstab (if per-store export exists)
 """
 
-import argparse, codecs, csv, io, json, os, random, re, sys, base64
-from datetime import datetime
+import argparse, codecs, csv, io, json, os, random, re, sys, base64, subprocess
+from datetime import datetime, date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -435,9 +435,10 @@ def load_review_data(path):
 
     headers = list(rows[0].keys())
 
-    col_ccid    = _find_col(headers, ["Customer ID", "Legacy Id", "CCID", "Dealer Id"])
-    col_reviews = _find_col(headers, ["Cars/DR reviews", "reviews last 30", "Total Number"])
-    col_rating  = _find_col(headers, ["Dealer Overall Rating", "Overall Rating", "Rating"])
+    col_ccid        = _find_col(headers, ["Customer ID", "Legacy Id", "CCID", "Dealer Id"])
+    col_reviews_30d = _find_col(headers, ["Cars/DR reviews", "reviews last 30"])
+    col_total_rev   = _find_col(headers, ["Total Number of Reviews", "Total Number"])
+    col_rating      = _find_col(headers, ["Dealer Overall Rating", "Overall Rating", "Rating"])
 
     result = {}
     for row in rows:
@@ -447,8 +448,9 @@ def load_review_data(path):
             continue
         if ccid not in result or (rating and not result[ccid]["rating"]):
             result[ccid] = {
-                "reviews": row.get(col_reviews, ""),
-                "rating":  rating,
+                "reviews_30d":   row.get(col_reviews_30d, "") if col_reviews_30d else "",
+                "total_reviews": row.get(col_total_rev, "")   if col_total_rev   else "",
+                "rating":        rating,
             }
 
     print(f"  ✓ Review data: {len(result)} stores")
@@ -513,8 +515,8 @@ def get_html_template():
             <img src="https://admin.cars.com/images/logo_cars-856ce78c79cc80b44f2a7106e93cfea9.png" alt="Cars.com" height="40" style="display:block;" />
           </td>
           <td style="vertical-align:middle;">
-            <div style="color:#ffffff;font-family:Georgia,serif;font-size:18px;font-weight:400;line-height:1.2;">[MONTH_LABEL] Performance Highlights</div>
-            <div style="color:rgba(255,255,255,0.5);font-size:11px;margin-top:2px;">[Dealership Name]</div>
+            <div style="color:#ffffff;font-family:Arial,sans-serif;font-size:20px;font-weight:700;line-height:1.2;">[MONTH_LABEL] Performance Highlights</div>
+            <div style="color:rgba(255,255,255,0.6);font-family:Arial,sans-serif;font-size:11px;font-weight:400;margin-top:3px;">[Dealership Name]</div>
           </td>
         </tr>
       </table>
@@ -570,6 +572,9 @@ def get_html_template():
             <div style="color:#ffffff;font-size:13px;line-height:1.7;">
               In [MONTH_LABEL] <span style="color:#C09BEC;font-weight:700;">[SALES_INFL]</span> units with Cars.com Influence - Removed from Inventory with <span style="color:#C09BEC;font-weight:700;">[TOTAL_CONNS]</span> Cars.com Connections. <span style="color:#C09BEC;font-weight:700;">[NEW_VEH_PCT]</span> were New Vehicles.
             </div>
+            <div style="color:rgba(255,255,255,0.4);font-size:9px;line-height:1.4;margin-top:6px;font-style:italic;">
+              Connections reflect cumulative shopper interactions on sold units over their full listing period, not monthly activity alone.
+            </div>
           </td>
         </tr>
       </table>
@@ -580,7 +585,7 @@ def get_html_template():
           <td width="33%" style="padding-right:5px;">
             <table width="100%" cellpadding="0" cellspacing="0" border="0">
               <tr><td style="background:#f7f5ff;border:1px solid #ede9ff;border-radius:8px;padding:12px 10px;text-align:center;">
-                <div style="font-size:9px;font-weight:600;color:#888;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">Reviews</div>
+                <div style="font-size:9px;font-weight:600;color:#888;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:6px;">Total Reviews</div>
                 <div style="font-size:22px;font-weight:700;color:#1a1a2e;">[REVIEWS]</div>
               </td></tr>
             </table>
@@ -608,47 +613,47 @@ def get_html_template():
     </td>
   </tr>
 
-  <!-- SECTION 2: DEALER APP -->
+  <!-- SECTION 2: MARKET MOVERS -->
   <tr>
-    <td style="background:#5B1F7A;padding:22px 28px;border-bottom:1px solid #f0ede8;">
-      <div style="color:#ffffff;font-family:Georgia,serif;font-size:17px;margin-bottom:14px;">Download the Cars.com Dealer App!</div>
+    <td style="padding:22px 28px;border-top:1px solid #f0ede8;">
+      <div style="font-size:10px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Market Movers</div>
+      <div style="font-size:17px;font-weight:800;color:#1a1a2e;line-height:1.2;margin-bottom:10px;">Industry Insights to Watch</div>
+      <p style="font-size:11px;color:#444;line-height:1.6;margin:0 0 14px;">The market is shifting rapidly, pushing shoppers toward hybrids, used inventory, and CPO vehicles. Here are the latest trends we are tracking to help you align your inventory and marketing strategies:</p>
       <table width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <td width="110" style="vertical-align:top;padding-right:14px;">
-            <a href="https://apps.apple.com/us/app/cars-com-dealer/id6755496039" style="display:inline-block;background:#ffffff;color:#5B1F7A;font-family:Arial,sans-serif;font-size:11px;font-weight:700;text-decoration:none;padding:10px 14px;border-radius:8px;text-align:center;">&#128242; Download<br>the App</a>
-          </td>
-          <td style="vertical-align:top;">
+          <td style="padding-bottom:10px;vertical-align:top;">
             <table width="100%" cellpadding="0" cellspacing="0" border="0">
               <tr>
-                <td width="33%" style="padding:3px;"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:7px 8px;"><div style="font-size:9px;font-weight:700;color:#ffffff;margin-bottom:2px;">&#128176; Pricing Intelligence</div><div style="font-size:8px;color:rgba(255,255,255,0.8);line-height:1.4;">Deal badge status and price guidance for every VIN.</div></td></tr></table></td>
-                <td width="33%" style="padding:3px;"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:7px 8px;"><div style="font-size:9px;font-weight:700;color:#ffffff;margin-bottom:2px;">&#128269; VIN Scan &amp; Listing Health</div><div style="font-size:8px;color:rgba(255,255,255,0.8);line-height:1.4;">Instant analysis to improve merchandising.</div></td></tr></table></td>
-                <td width="33%" style="padding:3px;"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:rgba(255,255,255,0.32);border:1px solid rgba(255,255,255,0.5);border-radius:6px;padding:7px 8px;"><div style="font-size:9px;font-weight:700;color:#ffffff;margin-bottom:2px;">&#128100; Shopper Details</div><div style="font-size:8px;color:rgba(255,255,255,0.8);line-height:1.4;">Full lead profiles with interests and budget.</div></td></tr></table></td>
-              </tr>
-              <tr>
-                <td width="33%" style="padding:3px;"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:rgba(255,255,255,0.32);border:1px solid rgba(255,255,255,0.5);border-radius:6px;padding:7px 8px;"><div style="font-size:9px;font-weight:700;color:#ffffff;margin-bottom:2px;">&#128276; Shopper Alerts</div><div style="font-size:8px;color:rgba(255,255,255,0.8);line-height:1.4;">Get notified when shoppers visit competitors.</div></td></tr></table></td>
-                <td width="33%" style="padding:3px;"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:7px 8px;"><div style="font-size:9px;font-weight:700;color:#ffffff;margin-bottom:2px;">&#128230; Inventory Recommendations</div><div style="font-size:8px;color:rgba(255,255,255,0.8);line-height:1.4;">Acquire based on local demand.</div></td></tr></table></td>
-                <td width="33%" style="padding:3px;"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:7px 8px;"><div style="font-size:9px;font-weight:700;color:#ffffff;margin-bottom:2px;">&#128270; Inventory Management</div><div style="font-size:8px;color:rgba(255,255,255,0.8);line-height:1.4;">Filter by make, model, year, VIN, or stock.</div></td></tr></table></td>
-              </tr>
-              <tr>
-                <td width="33%" style="padding:3px;"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:7px 8px;"><div style="font-size:9px;font-weight:700;color:#ffffff;margin-bottom:2px;">&#128228; VDP Sharing</div><div style="font-size:8px;color:rgba(255,255,255,0.8);line-height:1.4;">Send vehicle details via text or email.</div></td></tr></table></td>
-                <td width="33%" style="padding:3px;"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:7px 8px;"><div style="font-size:9px;font-weight:700;color:#ffffff;margin-bottom:2px;">&#127991; DealerClub&#174; Auctions</div><div style="font-size:8px;color:rgba(255,255,255,0.8);line-height:1.4;">Monitor auctions and find wholesale deals.</div></td></tr></table></td>
-                <td width="33%" style="padding:3px;"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:6px;padding:7px 8px;"><div style="font-size:9px;font-weight:700;color:#ffffff;margin-bottom:2px;">&#128587; Account Support</div><div style="font-size:8px;color:rgba(255,255,255,0.8);line-height:1.4;">Contact your AE with a single tap.</div></td></tr></table></td>
+                <td style="background:#f9f6ff;border-left:3px solid #7c3aed;border-radius:0 6px 6px 0;padding:10px 14px;">
+                  <div style="font-size:11px;font-weight:700;color:#1a1a2e;margin-bottom:3px;">&#9981; Fuel Prices</div>
+                  <div style="font-size:11px;color:#444;line-height:1.5;">Gas has hit an average of <strong>$4.61/gallon</strong>, marking the fourth straight monthly increase.</div>
+                </td>
               </tr>
             </table>
           </td>
         </tr>
-      </table>
-    </td>
-  </tr>
-
-  <!-- SECTION 3: AI CALLOUT -->
-  <tr>
-    <td style="padding:22px 28px;">
-      <table width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <td style="border-left:3px solid #7c3aed;background:#faf8ff;border-radius:0 8px 8px 0;padding:16px 18px;">
-            <div style="font-weight:700;font-size:13px;color:#1a1a2e;margin-bottom:6px;">&#129302; AI Knows Cars.com Has What Shoppers Need</div>
-            <div style="font-size:12px;color:#666;line-height:1.6;">Cars.com is the most cited automotive marketplace across AI tools like ChatGPT and Google AI &#8212; with <strong>2x the citations of any competitor.</strong> When shoppers ask AI for car buying advice, Cars.com is where they&#8217;re being sent.</div>
+          <td style="padding-bottom:10px;vertical-align:top;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="background:#f9f6ff;border-left:3px solid #7c3aed;border-radius:0 6px 6px 0;padding:10px 14px;">
+                  <div style="font-size:11px;font-weight:700;color:#1a1a2e;margin-bottom:3px;">&#9889; EV &amp; Hybrid Demand</div>
+                  <div style="font-size:11px;color:#444;line-height:1.5;">Interest in new EVs is up <strong>56% YoY</strong>, while used hybrids are currently the fastest-turning segment in the market, averaging just <strong>37 days on lot</strong>.</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="vertical-align:top;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="background:#f9f6ff;border-left:3px solid #7c3aed;border-radius:0 6px 6px 0;padding:10px 14px;">
+                  <div style="font-size:11px;font-weight:700;color:#1a1a2e;margin-bottom:3px;">&#128176; New Vehicle Pricing</div>
+                  <div style="font-size:11px;color:#444;line-height:1.5;">Average new car prices have reached <strong>$50,718</strong>, heavily driving the consumer pivot toward more budget-friendly alternatives.</div>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
       </table>
@@ -672,7 +677,9 @@ def render_email(contact, kpi, sales, month_label):
     intro = (
         f"<p>Hello {contact['first_name']}!</p>"
         f"<p>Below is a quick, high-level overview of your Cars.com {month_label} "
-        f"activity highlights. Please don't hesitate to reach out with any questions!</p>"
+        f"activity highlights. We&rsquo;ve also included the latest market trends shaping "
+        f"shopper behavior &mdash; scroll down for our June market movers. "
+        f"Please don&rsquo;t hesitate to reach out with any questions!</p>"
     )
 
     body = get_html_template()
@@ -734,6 +741,9 @@ def render_group_email(group_name, stores_data, month_label, first_name=None):
                 f'In {month_label} <span style="color:#C09BEC;font-weight:700;">{fmt(sales.get("units_influenced"))}</span> units with Cars.com Influence — Removed from Inventory with '
                 f'<span style="color:#C09BEC;font-weight:700;">{fmt(sales.get("total_connections"))}</span> Cars.com Connections. '
                 f'<span style="color:#C09BEC;font-weight:700;">{fmt_pct(sales.get("new_pct"))}</span> were New Vehicles.'
+                f'</div>'
+                f'<div style="color:rgba(255,255,255,0.4);font-size:9px;line-height:1.4;margin-top:6px;font-style:italic;">'
+                f'Connections reflect cumulative shopper interactions on sold units over their full listing period, not monthly activity alone.'
                 f'</div></td></tr></table>'
             )
         else:
@@ -827,9 +837,9 @@ def render_group_email(group_name, stores_data, month_label, first_name=None):
                  alt="Cars.com" height="40" style="display:block;" />
           </td>
           <td style="vertical-align:middle;">
-            <div style="color:#ffffff;font-family:Georgia,serif;font-size:18px;font-weight:400;
+            <div style="color:#ffffff;font-family:Arial,sans-serif;font-size:20px;font-weight:700;
                         line-height:1.2;">{month_label} Performance Highlights</div>
-            <div style="color:rgba(255,255,255,0.5);font-size:11px;margin-top:2px;">{group_name}</div>
+            <div style="color:rgba(255,255,255,0.6);font-family:Arial,sans-serif;font-size:11px;font-weight:400;margin-top:3px;">{group_name}</div>
           </td>
         </tr>
       </table>
@@ -851,6 +861,53 @@ def render_group_email(group_name, stores_data, month_label, first_name=None):
   <!-- STORE SECTIONS -->
   {store_rows}
 
+  <!-- MARKET MOVERS -->
+  <tr>
+    <td style="padding:22px 28px;border-top:1px solid #f0ede8;">
+      <div style="font-size:10px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Market Movers</div>
+      <div style="font-size:17px;font-weight:800;color:#1a1a2e;line-height:1.2;margin-bottom:10px;">Industry Insights to Watch</div>
+      <p style="font-size:11px;color:#444;line-height:1.6;margin:0 0 14px;">The market is shifting rapidly, pushing shoppers toward hybrids, used inventory, and CPO vehicles. Here are the latest trends we are tracking to help you align your inventory and marketing strategies:</p>
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="padding-bottom:10px;vertical-align:top;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="background:#f9f6ff;border-left:3px solid #7c3aed;border-radius:0 6px 6px 0;padding:10px 14px;">
+                  <div style="font-size:11px;font-weight:700;color:#1a1a2e;margin-bottom:3px;">&#9981; Fuel Prices</div>
+                  <div style="font-size:11px;color:#444;line-height:1.5;">Gas has hit an average of <strong>$4.61/gallon</strong>, marking the fourth straight monthly increase.</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding-bottom:10px;vertical-align:top;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="background:#f9f6ff;border-left:3px solid #7c3aed;border-radius:0 6px 6px 0;padding:10px 14px;">
+                  <div style="font-size:11px;font-weight:700;color:#1a1a2e;margin-bottom:3px;">&#9889; EV &amp; Hybrid Demand</div>
+                  <div style="font-size:11px;color:#444;line-height:1.5;">Interest in new EVs is up <strong>56% YoY</strong>, while used hybrids are currently the fastest-turning segment in the market, averaging just <strong>37 days on lot</strong>.</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="vertical-align:top;">
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="background:#f9f6ff;border-left:3px solid #7c3aed;border-radius:0 6px 6px 0;padding:10px 14px;">
+                  <div style="font-size:11px;font-weight:700;color:#1a1a2e;margin-bottom:3px;">&#128176; New Vehicle Pricing</div>
+                  <div style="font-size:11px;color:#444;line-height:1.5;">Average new car prices have reached <strong>$50,718</strong>, heavily driving the consumer pivot toward more budget-friendly alternatives.</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
   <!-- FOOTER -->
   <tr>
     <td style="padding:18px 28px 20px;">
@@ -870,14 +927,23 @@ def render_group_email(group_name, stores_data, month_label, first_name=None):
     return subject, html
 
 
-def deliver_email(gmail, to, cc, subject, html_body, draft_mode=False):
-    """Send or draft a single email via Gmail API. Returns message/draft id."""
+def deliver_email(gmail, to, cc, subject, html_body, draft_mode=False, text_body=None):
+    """Send or draft a single email via Gmail API. Returns message/draft id.
+
+    text_body (optional): a plain-text alternative. If given, the message
+    becomes a proper multipart/alternative (text/plain attached first, then
+    text/html — per convention, clients render the last part they support).
+    HTML-only emails with no plain-text part are a real spam-scoring signal
+    for many mail filters; passing text_body avoids that. Default None
+    preserves the exact prior HTML-only behavior for existing callers."""
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = "jcrawley@cars.com"
     msg["To"]      = to if isinstance(to, str) else ", ".join(to)
     if cc:
         msg["Cc"]  = cc if isinstance(cc, str) else ", ".join(cc)
+    if text_body:
+        msg.attach(MIMEText(text_body, "plain"))
     msg.attach(MIMEText(html_body, "html"))
 
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
@@ -894,6 +960,96 @@ def deliver_email(gmail, to, cc, subject, html_body, draft_mode=False):
         return result.get("id")
 
 
+# ─── SALESFORCE LOGGING ───────────────────────────────────────────────────────
+
+def _get_sf_creds():
+    """Return (access_token, instance_url) from SF CLI session, or (None, None)."""
+    try:
+        result = subprocess.run(
+            ["sf", "org", "display", "--json", "--target-org", "cars-commerce"],
+            capture_output=True, text=True, timeout=15
+        )
+        data = json.loads(result.stdout).get("result", {})
+        token = data.get("accessToken")
+        url   = data.get("instanceUrl", "").rstrip("/")
+        return (token, url) if token and url else (None, None)
+    except Exception:
+        return (None, None)
+
+
+def get_sf_account_map(ccids):
+    """
+    Query SF for Account IDs by CCID. Returns ({ccid: sf_id}, {access_token, instance_url}).
+    Returns ({}, {}) if SF is unreachable or query fails.
+    """
+    import urllib.parse, urllib.request
+    token, instance_url = _get_sf_creds()
+    if not token:
+        return {}, {}
+
+    unique_ccids = [c for c in set(ccids) if c]
+    if not unique_ccids:
+        return {}, {}
+
+    in_clause = ", ".join(f"'{c}'" for c in unique_ccids)
+    soql = f"SELECT Id, CCID__c FROM Account WHERE CCID__c IN ({in_clause})"
+    url  = f"{instance_url}/services/data/v59.0/query?q={urllib.parse.quote(soql)}"
+
+    try:
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            records = json.loads(resp.read()).get("records", [])
+        account_map = {r["CCID__c"]: r["Id"] for r in records if r.get("CCID__c")}
+        return account_map, {"access_token": token, "instance_url": instance_url}
+    except Exception:
+        return {}, {}
+
+
+def log_sf_tasks(sf_log, account_map, month_label, access_token, instance_url):
+    """
+    Batch-insert Completed Email Tasks in SF for each sent email.
+    Uses the Composite sObjects endpoint (max 200 records per call).
+    Returns count of successfully logged records.
+    """
+    import urllib.request
+    today = date.today().isoformat()
+    records = []
+    for entry in sf_log:
+        sf_id = account_map.get(str(entry.get("ccid", "")))
+        if not sf_id:
+            continue
+        records.append({
+            "attributes": {"type": "Task"},
+            "Subject":      f"Cars.com {month_label} Performance Email",
+            "Status":       "Completed",
+            "Type":         "Email",
+            "ActivityDate": today,
+            "WhatId":       sf_id,
+            "Description":  f"{entry['store_name']} — {entry['subject']}",
+        })
+
+    if not records:
+        return 0
+
+    url     = f"{instance_url}/services/data/v59.0/composite/sobjects"
+    payload = json.dumps({"allOrNone": False, "records": records}).encode()
+    req     = urllib.request.Request(
+        url, data=payload, method="POST",
+        headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            results = json.loads(resp.read())
+        successes = sum(1 for r in results if r.get("success"))
+        failures  = [r for r in results if not r.get("success")]
+        if failures:
+            print(f"  ⚠  SF: {len(failures)} record(s) failed: {failures[0].get('errors', '')}")
+        return successes
+    except Exception as e:
+        print(f"  ⚠  SF batch insert error: {e}")
+        return 0
+
+
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -902,7 +1058,8 @@ def main():
     parser.add_argument("--send",       action="store_true", help="Send to all stores (default: TEST MODE)")
     parser.add_argument("--draft",      action="store_true", help="Create Gmail drafts instead of sending")
     parser.add_argument("--market-opp",  default=None, help="Path to Market Opportunities CSV (required)")
-    parser.add_argument("--sales-attr",  default=None, help="Path to Sales Attribution CSV (optional)")
+    parser.add_argument("--sales-attr",   default=None, help="Path to Sales Attribution CSV (optional)")
+    parser.add_argument("--review-data",  default=None, help="Path to Review Data Detail CSV (optional; supplies Total Reviews tile)")
     parser.add_argument("--test-count",  type=int, default=1, metavar="N",
                         help="Number of random stores to email in test mode (default: 1)")
     parser.add_argument("--store",       default=None, metavar="NAME",
@@ -925,18 +1082,21 @@ def main():
 
     # ── Locate CSVs ──────────────────────────────────────────────────────────
     tableau_dir = os.path.expanduser("~/Documents/Tableau")
+    aca_dir     = os.path.expanduser("~/Documents/Reports/ACA")
 
-    def find_csv(arg_path, keywords):
+    def find_csv(arg_path, keywords, extra_dirs=None):
         if arg_path:
             return os.path.expanduser(arg_path)
-        if os.path.isdir(tableau_dir):
-            for fname in sorted(os.listdir(tableau_dir), reverse=True):
-                if all(k.lower() in fname.lower() for k in keywords):
-                    return os.path.join(tableau_dir, fname)
+        for d in ([tableau_dir] + (extra_dirs or [])):
+            if os.path.isdir(d):
+                for fname in sorted(os.listdir(d), reverse=True):
+                    if all(k.lower() in fname.lower() for k in keywords):
+                        return os.path.join(d, fname)
         return None
 
-    path_kpi   = find_csv(args.market_opp, ["aca", "market"])
-    path_sales = find_csv(args.sales_attr, ["aca", "sales"])
+    path_kpi     = find_csv(args.market_opp,  ["aca", "market"])
+    path_sales   = find_csv(args.sales_attr,  ["aca", "sales"])
+    path_reviews = find_csv(args.review_data, ["review"],        extra_dirs=[aca_dir])
 
     if not path_kpi:
         print("✗ Missing required CSV: Market Opportunities — name it aca_market_opp_YYYY_MM.csv in ~/Documents/Tableau/")
@@ -944,8 +1104,9 @@ def main():
         sys.exit(1)
 
     print(f"[1/5] CSV sources:")
-    print(f"  KPI (required):    {path_kpi}")
-    print(f"  Sales (optional):  {path_sales or 'not found — attribution block will use connections data'}\n")
+    print(f"  KPI (required):     {path_kpi}")
+    print(f"  Sales (optional):   {path_sales   or 'not found — attribution block will use connections data'}")
+    print(f"  Reviews (optional): {path_reviews or 'not found — Reviews tile will use Market Opp data'}\n")
 
     # ── Auth ─────────────────────────────────────────────────────────────────
     print("[2/5] Authenticating...")
@@ -960,9 +1121,12 @@ def main():
         if c["store_key"] in _DISPLAY_OVERRIDES:
             c["store_name"] = _DISPLAY_OVERRIDES[c["store_key"]]
     kpi_by_name, kpi_by_ccid = load_kpi_data(path_kpi)
-    sales_data               = load_sales_data(path_sales) if path_sales else {}
+    sales_data               = load_sales_data(path_sales)   if path_sales   else {}
+    review_data              = load_review_data(path_reviews) if path_reviews else {}
     if not path_sales:
         print("  ℹ  No sales CSV — attribution block will show Connections + Website Transfers")
+    if not path_reviews:
+        print("  ℹ  No review CSV — Reviews tile will use Market Opp monthly count")
 
     # Inject temp overrides for stores without a GM contact in the sheet yet
     existing_keys = {c["store_key"] for c in contacts}
@@ -986,6 +1150,7 @@ def main():
     # ── Generate and deliver ──────────────────────────────────────────────────
     print("[4/5] Generating emails...")
     sent, skipped = 0, []
+    sf_log = []
 
     send_list = contacts
     if test_mode:
@@ -1035,8 +1200,17 @@ def main():
             skipped.append(f"{contact['store_name']} — 0 SRPs, not active on marketplace")
             continue
 
+        kpi   = dict(kpi)  # shallow copy — avoid mutating shared alias entries
         ccid  = kpi.get("ccid", "")
         sales = sales_data.get(ccid, {})
+
+        # Supplement reviews/rating from Review Data Detail CSV (total reviews preferred over monthly)
+        if review_data and ccid in review_data:
+            rv = review_data[ccid]
+            if rv.get("total_reviews"):
+                kpi["reviews"] = rv["total_reviews"]
+            if rv.get("rating") and not kpi.get("rating"):
+                kpi["rating"] = rv["rating"]
 
         subject, html_body = render_email(contact, kpi, sales, month_label)
 
@@ -1053,6 +1227,8 @@ def main():
             action = "Drafted" if args.draft else "Sent"
             print(f"  ✓ {action}: {contact['store_name']} → {to}")
             sent += 1
+            if not args.draft:
+                sf_log.append({"ccid": ccid, "store_name": contact["store_name"], "subject": subject})
         except Exception as e:
             print(f"  ✗ Failed: {contact['store_name']} — {e}")
             skipped.append(f"{contact['store_name']} — error: {e}")
@@ -1074,8 +1250,16 @@ def main():
             srp_val = 0.0
         if srp_val == 0:
             continue
+        kpi  = dict(kpi)
+        ccid = kpi.get("ccid", "")
+        if review_data and ccid in review_data:
+            rv = review_data[ccid]
+            if rv.get("total_reviews"):
+                kpi["reviews"] = rv["total_reviews"]
+            if rv.get("rating") and not kpi.get("rating"):
+                kpi["rating"] = rv["rating"]
         store_name = _DISPLAY_OVERRIDES.get(sk, kpi.get("store_name", sk.title()))
-        sales = sales_data.get(kpi.get("ccid", ""), {})
+        sales = sales_data.get(ccid, {})
         nye_stores_data.append((store_name, kpi, sales))
 
     if nye_stores_data:
@@ -1098,9 +1282,20 @@ def main():
             print(f"  ✗ Failed NYE group email — {e}")
             skipped.append(f"NYE Automotive Group — error: {e}")
 
+    # ── Salesforce logging ────────────────────────────────────────────────────
+    if sf_log and not args.draft:
+        print("\n[5/5] Logging to Salesforce...")
+        account_map, sf_creds = get_sf_account_map([e["ccid"] for e in sf_log])
+        if account_map:
+            sf_logged = log_sf_tasks(sf_log, account_map, month_label, **sf_creds)
+            print(f"  ✓ {sf_logged} of {len(sf_log)} sends logged to Salesforce")
+        else:
+            print("  ⚠  Salesforce unreachable — skipped (emails were sent successfully)")
+
     # ── Summary ───────────────────────────────────────────────────────────────
+    step = "6" if (sf_log and not args.draft) else "5"
     action_word = "drafted" if args.draft else "sent"
-    print(f"\n[5/5] Done — {sent} emails {action_word}")
+    print(f"\n[{step}/{step}] Done — {sent} emails {action_word}")
     if skipped:
         print(f"  {len(skipped)} skipped:")
         for s in skipped:

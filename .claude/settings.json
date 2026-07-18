@@ -1,0 +1,127 @@
+{
+  "model": "sonnet[1m]",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/jcrawley/.claude/scripts/battery-check.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/jcrawley/.claude/scripts/gmail-mcp-autoheal.sh",
+            "statusMessage": "Auto-healing Gmail MCP...",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import json,time,urllib.request,urllib.parse; keys=json.load(open('/Users/jcrawley/.gmail-mcp/gcp-oauth.keys.json'))['installed']; token=json.load(open('/Users/jcrawley/.gmail-mcp/credentials.json')); data=urllib.parse.urlencode({'client_id':keys['client_id'],'client_secret':keys['client_secret'],'refresh_token':token['refresh_token'],'grant_type':'refresh_token'}).encode(); new=json.loads(urllib.request.urlopen(urllib.request.Request('https://oauth2.googleapis.com/token',data=data,method='POST')).read()); token['access_token']=new['access_token']; token['expiry_date']=int(time.time()*1000)+new.get('expires_in',3599)*1000; json.dump(token,open('/Users/jcrawley/.gmail-mcp/credentials.json','w'),indent=2)\" 2>/dev/null || true",
+            "timeout": 15,
+            "statusMessage": "Refreshing Gmail token..."
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "issues=$(claude mcp list 2>/dev/null | grep -E '^(tableau|gmail|playwright|salesforce|gdrive|google-calendar|google-tasks):' | grep -E '✗|!' || true); [ -n \"$issues\" ] && jq -nc --arg i \"$issues\" '{systemMessage: (\"⚠️  MCP server issues — run /mcp or restart before workflow tasks:\\n\" + $i)}' || true",
+            "timeout": 20,
+            "statusMessage": "Checking MCP server health..."
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/jcrawley/.claude/scripts/check-totp-keychain.sh",
+            "timeout": 5,
+            "statusMessage": "Checking JumpCloud TOTP in Keychain..."
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/jcrawley/.claude/scripts/check-tableau-pat.sh",
+            "timeout": 12,
+            "statusMessage": "Validating Tableau PAT..."
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/jcrawley/.claude/scripts/verify-gmail-mcp.sh",
+            "timeout": 5,
+            "statusMessage": "Verifying Gmail MCP credentials..."
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/jcrawley/.claude/scripts/pre-warm-mcps.sh",
+            "timeout": 10,
+            "statusMessage": "Pre-warming MCP connections...",
+            "async": true
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "atlassian@claude-plugins-official": true,
+    "exa@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "session-report@claude-plugins-official": true,
+    "zapier@claude-plugins-official": true,
+    "firecrawl@claude-plugins-official": true,
+    "brightdata-plugin@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "carsdotcom-general@carsdotcom-ai-enablement": true
+  },
+  "extraKnownMarketplaces": {
+    "carsdotcom-ai-enablement": {
+      "source": {
+        "source": "github",
+        "repo": "carsdotcom/ai-enablement"
+      }
+    }
+  },
+  "effortLevel": "high",
+  "advisorModel": "mythos",
+  "autoUpdatesChannel": "latest",
+  "skipWorkflowUsageWarning": true,
+  "theme": "dark-ansi",
+  "skipAutoPermissionPrompt": true
+}

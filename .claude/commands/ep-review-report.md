@@ -1,150 +1,212 @@
 # EchoPark DealerRater Review Report — Monthly Workflow
 
-Run the full monthly EchoPark DealerRater Review Report. Scheduled: **1st of every month**.
+Run the full monthly EchoPark DealerRater Review Report. Scheduled: **1st of every month via cron** (`3 7 1 * *`).
 
 ---
 
 ## Email Drafting Rule
 
-Each draft must feel fresh but follow a consistent strategy. **Refresh the wording every month** — do not reuse the same email body from the prior month. Mix up the structure, lead with a different insight, and keep it engaging.
+- **Vary:** opening line, phrasing of key insights, any notable callout
+- **Include:** award eligibility progress (stores at/near 25-review threshold, newly eligible this month)
+- **Keep consistent:** professional-casual, concise (4–6 sentences max), close with "Cheers, Jake"
+- **Attachment:** Excel file attached — reference as "the attached report"
 
-- **Vary:** opening line, phrasing of key insights, any notable callout (e.g. a store with standout reviews or a rating change), structure of the body
-- **Include:** award eligibility progress update (how many stores have hit the 25-review threshold, which stores are leading, any stores at risk)
-- **Keep consistent:** professional-casual tone, concise (4–6 sentences max), lead with high-level summary, mention resolution notes if applicable, close with "Cheers, Jake"
-- **Never:** use the same opening line or body structure twice in a row, be vague about the data, copy-paste from the previous month
-- **Attachment:** Excel file attached (no Google Sheet link in body) — reference it as "the attached report"
-
-Example openings (rotate and riff on these):
-- "Team, your monthly DealerRater report is ready..."
+Example openings:
+- "Quick update on the May DealerRater numbers for EchoPark..."
 - "Happy first of the month — here's the latest review data..."
-- "Quick update: the DealerRater numbers are in..."
 - "Dropping in your monthly review report..."
-- "March reporting is in — strong numbers across the board..."
 
 ---
 
-## Stores
+## Recipients
 
-Search each store **by name** on the DealerRater dealer portal dashboard:
+- **To:** julie.mcalister@echopark.com, suhail.niazi@echopark.com, geremy.smith@echopark.com, Shane.Stevens@sonicautomotive.com, travielle.ross@sonicautomotive.com
+- **Cc:** scunane@cars.com
+- **Thread:** reply to existing `subject:DealerRater Reporting` thread; update subject month
 
-1. EchoPark Automotive Nashville
-2. EchoPark Automotive St. Louis
-3. EchoPark Automotive Houston Stafford
-4. EchoPark Automotive Houston
-5. EchoPark Automotive Charlotte
-6. EchoPark Automotive New Braunfels - Outlet
-7. EchoPark Automotive Las Vegas
-8. EchoPark Automotive Centennial
-9. EchoPark Automotive Atlanta
-10. EchoPark Automotive San Antonio
-11. EchoPark Automotive Dallas
-12. EchoPark Automotive Thornton
-13. EchoPark Automotive Colorado Springs
-14. EchoPark Automotive Raleigh
-15. EchoPark Automotive Birmingham
-16. EchoPark Automotive Sacramento - Roseville
-17. EchoPark Automotive Phoenix
+---
+
+## Stores & Dealer IDs
+
+| Store | DR ID |
+|-------|-------|
+| Atlanta | 117976 |
+| Birmingham | 40624 |
+| Centennial | 106056 |
+| Charlotte | 115220 |
+| Colorado Springs | 114436 |
+| Dallas | 16566 |
+| Houston (North) | 115219 |
+| Houston Stafford | 117761 |
+| Las Vegas | 118428 |
+| Nashville | 3760 |
+| New Braunfels | 115221 |
+| Phoenix | 23325 |
+| Raleigh | 118708 |
+| Sacramento | 120085 |
+| San Antonio | 114739 |
+| St. Louis | 118753 |
+| Thornton | 106054 |
 
 ---
 
 ## Steps
 
-### Step 1 — DealerRater: Log in & collect metrics + resolution counts
+### Step 1 — DealerRater: Log in & collect metrics
 
-- Use Playwright to navigate to `https://www.dealerrater.com/dp/106349/dashboard`
-- Log in with Cars.com / METAL SSO credentials (jcrawley@cars.com) if prompted
-- For **each store**, navigate to its Reviews page (`/dp/{id}/reviews/`):
-  1. **Metrics:** Click the DealerRater/Cars.com icon (`#carsBrands img#cars`) to reveal the Cars Commerce popup (`#carsInfoDialog`). **Important:** remove the `#carsInfoDialog` element from DOM before clicking to force a fresh AJAX load — the popup caches stale data across SPA navigations.
-  2. Extract **DealerRater** star rating + review count, and **Cars.com** star rating + review count. Note: counts may have commas (e.g. "1,300").
-  3. **Resolution count:** Check for the "Respond now to X reviews needing resolution" banner. Record the count and the link URL (filtered to `OnlyNegative` + `NoResponseEntered`).
-- Metrics should be current as of the day pulled (the 1st of the month)
+**Login (Chrome DevTools MCP):**
+1. Navigate to `https://www.dealerrater.com/dp/106349/dashboard`
+2. If redirected to `login.carscommerce.inc`:
+   - Fill Email field with `jcrawley@cars.com`
+   - Click **Sign In** — no password required, email alone completes login
 
-#### Known dealer IDs (for direct navigation via `/dp/{id}/reviews/`):
-| Store | ID |
-|-------|----|
-| Nashville | 3760 |
-| St. Louis | 118753 |
-| Houston Stafford | 117761 |
-| Houston (North) | 115219 |
-| Charlotte | 115220 |
-| New Braunfels | 115221 |
-| Las Vegas | 118428 |
-| Centennial | 106056 |
-| Atlanta | 117976 |
-| San Antonio | 114739 |
-| Dallas | 16566 |
-| Thornton | 106054 |
-| Colorado Springs | 114436 |
-| Raleigh | 118708 |
-| Birmingham | 40624 |
-| Sacramento | 120085 |
-| Phoenix | 23325 |
+**Collect for each store** via `https://www.dealerrater.com/dp/{ID}/reviews/`:
+- Wait 3s after navigation, then read `document.body.innerText`
+- Parse from the "Cars Commerce" block in the text:
+  ```
+  Cars Commerce
+
+  Cars.com
+  4.X
+  NNNN
+  DealerRater
+  4.X
+  NNNN
+  ```
+  → `cars_rating`, `cars_count`, `dr_rating`, `dr_count`
+- **Resolution:** check for `"Respond now to X review"` text + grab the `a[href*="OnlyNegative"]` href
+- Use a subagent to parallelise all 17 stores for speed
 
 ### Step 2 — Google Sheet: Update "2026" tab
 
-- Open the Google Sheet: `https://docs.google.com/spreadsheets/d/1S1hNN35ph7evbY9tqVIiOUKr2HCwtft9/edit?gid=81384234#gid=81384234`
-- Navigate to the **2026** tab
-- Each store occupies 12 rows (Jan–Dec). Stores are alphabetical starting at row 3:
-  Atlanta=3, Birmingham=15, Centennial=27, Charlotte=39, Colorado Springs=51, Dallas=63, Houston=75, Houston Stafford=87, Las Vegas=99, Nashville=111, Phoenix=123, Raleigh=135, San Antonio=147, San Antonio (New Braunfels)=159, Thornton=171, Sacramento=183, St. Louis=195
-- For each store, find the current month's row (e.g. March = start_row + 2) and enter:
-  - Column C: DealerRater star rating
-  - Column D: DealerRater review count
-  - Column E: Cars.com star rating
-  - Column F: Cars.com review count
-  - Column G: If the store has reviews needing resolution, add a `=HYPERLINK()` with the DealerRater link and text like "X Review(s) Resolution"
-- **Clear previous month's notes:** After entering current month data, delete any resolution notes from the prior month's rows (column G)
-- Store names in the sheet map to the Account Name column (A). Match by name — note some sheet names may differ slightly (e.g. "Houston" vs "Houston North", "Phoenix" vs "Phoenix (Avondale)", "New Braunfels - Outlet" vs "San Antonio (New Braunfels)")
+**⚠️ File is XLSX on Drive — Sheets API/gspread cannot write to it.** Use download → openpyxl → re-upload.
+
+**Download** (browser already authenticated):
+```
+Navigate to: https://docs.google.com/spreadsheets/d/1S1hNN35ph7evbY9tqVIiOUKr2HCwtft9/export?format=xlsx
+File lands in ~/Downloads/ as EchoPark DealerRater Reporting & Award Eligibility - 2026 (N).xlsx
+```
+
+**Edit with openpyxl**, then **upload via Drive API**:
+```python
+import requests, json
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+
+with open("/Users/jcrawley/.claude/tokens/gsheets_credentials.json") as f:
+    td = json.load(f)
+with open("/Users/jcrawley/.claude/google_credentials.json") as f:
+    s = json.load(f)
+cc = s.get("installed") or s.get("web") or {}
+creds = Credentials(token=td.get("access_token",""), refresh_token=td["refresh_token"],
+    token_uri="https://oauth2.googleapis.com/token",
+    client_id=cc["client_id"], client_secret=cc["client_secret"],
+    scopes=["https://www.googleapis.com/auth/drive","https://www.googleapis.com/auth/spreadsheets"])
+creds.refresh(Request())
+td["access_token"] = creds.token
+with open("/Users/jcrawley/.claude/tokens/gsheets_credentials.json","w") as f:
+    json.dump(td, f)
+
+with open("updated_file.xlsx","rb") as f:
+    content = f.read()
+r = requests.patch(
+    "https://www.googleapis.com/upload/drive/v3/files/1S1hNN35ph7evbY9tqVIiOUKr2HCwtft9?uploadType=media",
+    headers={"Authorization": f"Bearer {creds.token}",
+             "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+    data=content)
+assert r.status_code == 200
+```
+
+**Sheet layout — 2026 tab:**
+- Headers: Row 1 (DEALERRATER / CARS.COM / Note), Row 2 (Month / Reviews / Rating / Reviews / Rating)
+- 17 stores alphabetical, each occupying 12 rows (Jan–Dec), starting at row 3:
+  ```
+  Atlanta=3, Birmingham=15, Centennial=27, Charlotte=39, Colorado Springs=51,
+  Dallas=63, Houston=75, Houston Stafford=87, Las Vegas=99, Nashville=111,
+  Phoenix=123, Raleigh=135, San Antonio=147, New Braunfels=159, Thornton=171,
+  Sacramento=183, St. Louis=195
+  ```
+- Month offset: Jan=+0, Feb=+1, Mar=+2, Apr=+3, May=+4 … Dec=+11
+- Columns per row:
+  - B: Month name — verify/fix if wrong
+  - C: DealerRater reviews count
+  - D: DealerRater star rating
+  - E: Cars.com reviews count
+  - F: Cars.com star rating
+  - G: `=HYPERLINK("url","X Review(s) Resolution")` if resolution; else `None`
+- **After writing current month: clear G for all OTHER months** (only current month keeps resolution link)
+- Columns K–N are hidden — do not touch
+
+**Prior month data recovery:** If a month is missing, search Gmail for `subject:DealerRater Reporting - [Month]`, download the attachment, and read the correct values from it.
 
 ### Step 3 — Google Sheet: Update "Award Eligibility" tab
 
-- Switch to the **Award Eligibility** tab
-- For each store, collect Jan through current month review data from DealerRater:
-  - Filter reviews page with `StartDate=1/1/[year]&EndDate=[last day of current month]/[year]` to get total reviews for the period
-  - Also filter with `Filter=OnlyPositive` to get positive review count
-- Update eligibility columns (rows 2–18, alphabetical by store):
-  - Column B: Total DealerRater reviews received Jan through current month (progress toward 25)
-  - Column C: At least 1 positive review per quarter — Y/N for each completed quarter (Q1=Jan-Mar, Q2=Apr-Jun, etc.)
-  - Column D: Received Reviews Avg Rating > 4.0 — Y/N (use the current DealerRater star rating)
-  - Column E: Eligible? Y if reviews >= 25 AND all completed quarters have positive reviews AND rating > 4.0; N otherwise
+Rows 2–18, alphabetical by store. For each store:
+- **B**: Total DR reviews Jan 1 – last day of current month (use `?StartDate=1/1/YYYY&EndDate=M/31/YYYY` filter on DR reviews page)
+- **C**: At least 1 positive review in the **current quarter** — Y/N
+  - Determine the current quarter from today's date: Q1=Jan–Mar, Q2=Apr–Jun, Q3=Jul–Sep, Q4=Oct–Dec
+  - Query DR reviews page with `?StartDate=M/1/YYYY&EndDate=M/D/YYYY` spanning the first day of the current quarter through today
+  - A review counts as positive if the star rating is 4 or 5
+  - Y = at least 1 positive review found; N = zero positive reviews so far this quarter
+  - **Flag N stores in the sheet:** apply a yellow fill (`FFFF00`) to the C cell for any store with N, so stores that still need a positive review before quarter end are immediately visible
+  - **In the email:** call out N stores by name (e.g. "X stores — [Store A], [Store B] — have not yet received a positive review this quarter and need focus before [last month of quarter].")
+- **D**: Current DR rating > 4.0 — Y/N
+- **E**: Eligible = B ≥ 25 AND C = Y AND D = Y
 
 ### Step 4 — QC
 
-- Confirm all 17 stores have been updated for the current month on the "2026" tab
-- Verify Award Eligibility tab reflects the latest data
-- Flag any anomalies (e.g. significant rating drops, missing data, stores not found on DealerRater)
+- All 17 stores populated in "2026" tab for current month (C–F non-null)
+- All B column month labels correct (no numbers in place of month names)
+- G column: only current month has resolution links; all prior months cleared
+- Award Eligibility tab reflects updated counts
+- Cumulative DR counts increase month-over-month (flag any decreases)
 
-### Step 5 — Draft Email (do NOT send — draft only)
+### Step 5 — Build Gmail Draft (recipients pre-filled, ready to send)
 
-Use Playwright to compose a Gmail draft (search for the existing thread and reply):
+Use Gmail API directly (not Playwright — more reliable). Create a **draft** with actual recipients already in To/Cc so Jake just reviews and hits Send.
 
-1. **Search Gmail** for `subject:DealerRater Reporting` and open the most recent thread
-2. **Reply all** → click the reply type dropdown → **Edit subject** → change the month (e.g. "February" → "March")
-3. **Recipients:**
-   - **To:** McAlister, Julie (julie.mcalister@echopark.com), Niazi, Suhail A. (echopark.com), Smith, Geremy, Stevens, Shane (shane.stevens@sonicautomotive.com), Ross, Travielle (Travielle.Ross@sonicautomotive.com)
-   - **Cc:** Sharon Cunane (scunane@cars.com)
-   - **Remove** any outdated addresses (e.g. travielle.ross@echopark.com)
-4. **Body** (vary wording per the Email Drafting Rule above):
+```python
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import base64
+
+# Find prior thread
+results = gmail.users().messages().list(userId="me",
+    q="subject:DealerRater Reporting", maxResults=1).execute()
+thread = gmail.users().threads().get(userId="me",
+    id=results["messages"][0]["threadId"], format="metadata").execute()
+thread_id = thread["id"]
+last_msg_id = thread["messages"][-1]["id"]
+
+msg = MIMEMultipart("alternative")
+msg["Subject"] = f"Re: DealerRater Reporting - {month_name}"
+msg["From"] = "jcrawley@cars.com"
+msg["To"] = "julie.mcalister@echopark.com, suhail.niazi@echopark.com, geremy.smith@echopark.com, Shane.Stevens@sonicautomotive.com, travielle.ross@sonicautomotive.com"
+msg["Cc"] = "scunane@cars.com"
+msg["In-Reply-To"] = last_msg_id
+msg["References"] = last_msg_id
+# attach HTML body + XLSX, then:
+draft = gmail.users().drafts().create(userId="me",
+    body={"message": {
+        "raw": base64.urlsafe_b64encode(msg.as_bytes()).decode(),
+        "threadId": thread_id
+    }}).execute()
+print(f"✓ Draft ready for review: {draft['id']}")
 ```
-[Varied opening],
 
-[1–2 sentence high-level summary: highlight any standout stores, notable rating changes, or overall trends across the 17 locations.]
-
-[1 sentence about review resolutions if any stores have them — reference the "Note" column in the attached report.]
-
-Cheers,
-Jake
-```
-5. **Attachment:** Download the Google Sheet as Excel (`.xlsx`) via the export URL: `https://docs.google.com/spreadsheets/d/1S1hNN35ph7evbY9tqVIiOUKr2HCwtft9/export?format=xlsx` — save to `~/Downloads/` and attach to the draft. Do NOT include the Google Sheet link in the body.
-6. **Save as draft** for review — never send directly
+Attach the fresh XLSX export (re-download after Drive upload). Draft sits in Jake's inbox with recipients pre-filled — review and send when ready.
 
 ---
 
 ## Defaults
 
-- Dealer portal entry point: `https://www.dealerrater.com/dp/106349/dashboard`
-- Google Sheet: `https://docs.google.com/spreadsheets/d/1S1hNN35ph7evbY9tqVIiOUKr2HCwtft9/edit?gid=81384234#gid=81384234`
-- Excel export: `https://docs.google.com/spreadsheets/d/1S1hNN35ph7evbY9tqVIiOUKr2HCwtft9/export?format=xlsx`
-- Schedule: 1st of every month
-- 17 EchoPark stores (listed above)
+- Google Sheet ID: `1S1hNN35ph7evbY9tqVIiOUKr2HCwtft9`
+- DR portal: `https://www.dealerrater.com/dp/106349/dashboard`
+- Schedule: `3 7 1 * *` (7:03 AM local, 1st of every month) via `~/.claude/schedules/run-report.sh`
+- MCP config for scheduled runs: `~/.claude/schedules/mcp-config.json` (includes google-sheets, gmail, playwright, gdrive)
+- 17 stores (see table above)
 
-> ⚠️ **Always compose HTML email** — use `Content-Type: text/html` and base64url-encode as RFC 2822 `raw` parameter.
+> ⚠️ **Always send via Gmail API with HTML body** — base64url-encode the full RFC 2822 message as `raw`.
+> ⚠️ **DealerRater login is email-only** — fill `jcrawley@cars.com` in the Email field and click Sign In. No password needed. Works in both interactive and headless Playwright sessions.

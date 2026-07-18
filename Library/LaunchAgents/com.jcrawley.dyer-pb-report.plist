@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jcrawley.dyer-pb-report</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/jcrawley/.claude/schedules/run-report.sh</string>
+        <string>/dyer-pb-report</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/jcrawley</string>
+
+    <!-- Thursday (4) at 8:00 AM local time (matches Nalley/Hendrick 8 AM intercept window) -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Weekday</key>
+            <integer>4</integer>
+            <key>Hour</key>
+            <integer>8</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+    </array>
+
+    <key>WakeForNetworkAccess</key>
+    <true/>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jcrawley/.claude/logs/dyer-pb-report.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/jcrawley/.claude/logs/dyer-pb-report-error.log</string>
+</dict>
+</plist>

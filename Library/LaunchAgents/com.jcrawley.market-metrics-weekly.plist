@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jcrawley.market-metrics-weekly</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/jcrawley/Documents/scripts/market_metrics_weekly.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/jcrawley/Documents/scripts</string>
+
+    <!-- Monday (2) at 7:00 AM local time, pulling the just-completed Mon-Sun week.
+         Deliberately clear of other pb-profile-adjacent schedules: Hendrick PB (Mon
+         6 AM, hendrick-profile), Nalley PB (Mon 8 AM, nalley-profile). -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Weekday</key>
+            <integer>2</integer>
+            <key>Hour</key>
+            <integer>7</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+    </array>
+
+    <key>WakeForNetworkAccess</key>
+    <true/>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jcrawley/Library/Logs/market_metrics_weekly.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/jcrawley/Library/Logs/market_metrics_weekly.stderr.log</string>
+</dict>
+</plist>

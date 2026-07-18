@@ -1,5 +1,7 @@
 # Memory Index
 
+- [Sheet Sharing Confirm](feedback_sheet_sharing_confirm.md) — Always ask before sharing a new Sheet/Doc, even if a broader plan step already covered "sharing"
+- [JumpCloud Device Trust](reference_jumpcloud_device_trust.md) — Isolated Playwright profiles blocked by device-trust policy on admin.cars.com SSO; pb-profile confirmed trusted 2026-07-17
 - [No Recaps](feedback_no_recaps.md) — No end-of-turn recap sections
 - [URL Sharing](feedback_url_sharing.md) — Raw URLs in code blocks; suggest `! open "url"` for browser
 - [Creative Formatting](feedback_creative_formatting.md) — Jake welcomes formatting improvements; don't just replicate
@@ -40,26 +42,37 @@
 - [Login Flows](reference_login_flows.md) — admin.cars.com = JumpCloud SSO; Gmail/Sheets = Google; DealerRater = METAL SSO
 - [Salesforce Gmail Extension](reference_salesforce_gmail_extension.md) — Log on Send toggle auto-logs client emails to SF; no manual SF action needed
 - [Performance Playbook](reference_performance_playbook.md) — 6 investigation scenarios, admin.cars.com report reference, escalation paths
-- [Tableau API Access Map](reference_tableau_api_access.md) — PAT "Claude", view IDs, Maj Cust Name filter values, RLS behavior, API gotchas
+- [Tableau API Access Map](reference_tableau_api_access.md) — PAT "Claude" (DEAD 2026-06-18, rotate in ~/.claude.json), view IDs, Maj Cust Name filter values, RLS behavior, API gotchas
+- [admin.cars Tableau Embed Extract](reference_admin_cars_tableau_embed_extract.md) — pull admin.cars.com embedded Tableau report data as JSON via Embedding API getSummaryDataAsync (chrome-devtools); no PAT/RLS/CSV-download; date-range-less reports → pull unfiltered detail worksheet, bucket in code
+- [Weekly Market Metrics (Connections)](project_market_metrics_weekly.md) — 11-store OBA sheet 1oNeDOhANTwpiku6lEF8oNUpnu-kOmrYJb-YmUrXPatw, tab Weekly Connections; market_metrics_weekly.py; Mon 7AM via pb-profile
+- [ACA MAE Proposal](project_aca_mae_proposal.md) — CarGurus Market Area Expansion wave ranking; sheet 1fffKRZV; 3 data layers (Market Opps + MKP View + VPM); 3-mo-avg combined-rank methodology; May 2026 refresh added *May tabs
 - [Price Badge Sheet URLs](reference_price_badge_sheets.md) — Hendrick + Nalley Google Sheet links
 - [Nalley admin UUID](reference_nalley_admin_uuid.md) — `156f9bb7-3c44-549c-b16b-0c3af73fdb1f`
 - [DR Admin Form](reference_dr_admin_form.md) — Playwright native fill + `historicAccountPrompt()` is correct; JS value assignment breaks submit
 - [Gmail MCP HTTP Daemon](reference_port3000_fix.md) — Gmail MCP runs as launchd HTTP daemon (com.jcrawley.gmail-mcp-http, 127.0.0.1:8765) so CC auto-reconnects; root cause was port-3000 collisions; npm-update reverts the package patch (re-run gmail-mcp-http-patch.sh)
 - [Playwright Download Path](reference_playwright_downloads.md) — Downloads land in ~/.playwright-mcp/, NOT ~/Downloads/
+- [Playwright Credential Fill](feedback_playwright_credential_fill.md) — page.request relay for pw+TOTP; NEVER snapshot a populated cred field; Chrome's own saved-password autofill can also leak it — fix: disable password manager per-profile, not rotation
 - [Dealer-Site Inventory Scrape](reference_dealer_site_scrape.md) — DDC/dealer.com sites are Akamai-protected; scrape via chrome-devtools real Chrome → window.DDC.dataLayer.vehicles → ?start=N pagination; lots are mixed-make; chrome-devtools orphan recovery
-- [Scheduling Architecture](reference_scheduling_architecture.md) — Cowork for recurring MCP workflows; Desktop Commander for ad-hoc bash only
-- [Slack MCP Token](reference_slack_mcp.md) — Token updates need session restart; xoxb-only since 2026-04-23
+- [Scheduling Architecture](reference_scheduling_architecture.md) — SUPERSEDED: production uses launchd (run-report.sh for LLM skills, plain wrapper for deterministic scripts), not Cowork
+- [Slack MCP DECOMMISSIONED](project_slack_mcp_decommissioned.md) — Disabled 2026-06-16 per Enterprise security directive; do NOT re-enable or fix the token
+- [Slack MCP Token (historical)](reference_slack_mcp.md) — Token updates need session restart; xoxb-only since 2026-04-23 — see decommission note above
 - [caffeinate](reference_caffeinate.md) — `caffeinate -s &` for overnight/recurring tasks needing local MCP servers
 - [Cars Commerce Data Warehouse](reference_data_warehouse.md) — Redshift via Atlan; key views: customer_vw, agg_vehicle_metric_daily_vw, lead; full workflow→SQL map at ~/Documents/scripts/redshift_query_library.md (2026-06-10, draft pending creds)
 - [Sonic Duplicate Admin CCIDs](reference_sonic_duplicate_ccids.md) — Some AE Insights "new stores" are duplicate admin records; e.g. 6037235 = BMW Mini of Birmingham 182765
 - [Folder Structure](project_folder_structure.md) — Reports → Documents/Reports/; Tableau CSVs → Documents/Tableau/; Desktop stays clean
 - [Park Place Prospect — DFW Winback](project_park_place_prospect.md) — 4 stores (3 MB + 1 LR), all dark; #2 MB + #1 LR in DFW by Polk; pitch deck ~/Documents/Reports/ParkPlace/
 - [Dark-Prospect Report](project_dark_prospect_report.md) — /dark-prospect-report: scrape a dark prospect's used inventory → churner quadrant → projected Cars.com performance; engine dark_prospect_report.py (report + pitch slide)
+- [Dealer Market Report Engine](project_dealer_market_report_engine.md) — jlr_swh_market_report.py generalized → dealer_market_report.py; PROFILES dict per dealer, --profile/--profile-json; verified no regression vs JLR run
+- [Tools & Reports Menu](project_tools_menu.md) — ~/Documents/tools_menu.html local reference page (skills+engines+published sites+local reports); regenerate via build_tools_menu.py
 - [Asbury Research Project](project_asbury_research.md) — Portfolio analysis: CPL/CPC, used volumes, prospects; see [[park-place-prospect]] for PP detail
 - [ACA Monthly Reporting](project_aca_reporting.md) — CCID 6051462, ~72 stores; Google Sheet + email to Danielle McJunkins
 - [Sonic Monthly Brand Report](project_sonic_monthly_report.md) — ~101 stores, 18 brands, rotating luxury/volume; per-brand emails to managers CC Sharon
 - [Sonic Brand Manager Contacts](project_sonic_recipients.md) — Full recipient mapping; managers own multiple brands — combine per manager
+- [PB Headless OAuth 401](project_pb_headless_oauth_401.md) — Scheduled PB runs auth via claude.ai OAuth (not API key); expired token → 401 on all retries; fix=/login; wrapper now auth-pre-flights + 401 short-circuits
+- [PB Sort & J1 Fixes](project_pb_sort_and_j1_fixes.md) — Hendrick sort_specs→green-first+SAM (dropped Stock#-primary); Nalley J1 ">0" excludes $0; LESSON: don't hand re-run import/sort on a finalized live sheet (stale rows + recalc churn) — use Version history to recover
+- [PB Retry vs Concurrent Run](feedback_pb_retry_concurrent_run.md) — Manual PB retry can collide with scheduled Cowork run → duplicate send; check for sibling-dealer sends
 - [PB Report Production Status](project_pb_report_production.md) — Nalley direct-send (Mon+Fri 8AM), Hendrick pre-send gated (Mon 6AM); 2026-06-12: unattended-auth fix — playwright-only pinned mcp-config + persistent pb-profile + lock cleanup (was silently hanging at MCP init) + Keychain JumpCloud creds & Login+MFA sub-procedure in both skills
+- [Herb Chambers PB Touchpoint](project_herb_chambers_pb_report.md) — /herb-chambers-pb-report: monthly GM Price Badge for 6 active stores; sheets cloned + config + tracker live (2026-06-15); pending Tableau views + admin UUIDs
 - [PB Report Fixes (2026-06-05)](project_pb_report_fixes_2026_06_05.md) — 5 bugs fixed: basic filter corruption, col B/C swap, stale row pollution + QC benchmarks
 - [PB Link Tracker](project_pb_link_tracker.md) — Click-tracking via Apps Script web-app redirect (~/Documents/scripts/pb_link_tracker/); onOpen can't see external viewers; clasp deploy; old *_pb_open_notify.gs deprecated
 - [Dyer PB Report](project_dyer_pb_report.md) — Onboarded 2026-06-12; sheet 1TWMwKUn, $1000, Thu 8 AM, pre-send→Roman/Victor; TODO: Tableau custom view + admin UUID + test + load plist
@@ -83,3 +96,7 @@
 - [eCarOne GA Reporting](project_ecarone_ga_reporting.md) — GA4 prop 326694710 (gafield1 OAuth REST only), ad mix benchmarks, VPM data, reporting project
 - [GA4 REST Access](reference_ga4_rest_access.md) — GA MCP tools broken (authorized_user creds); query GA4 Data API via REST; gafield=Longo book, gafield1=eCarOne+Don Franklin (props 467758077/467133052)
 - [Don Franklin Cars Social](project_don_franklin_cars_social.md) — Isolate Cars Social to campaign cars.com_carssocial (NOT DriveAuto paid social); v1 mislabel 53,618→true 11,595; rebuild script reformat_cs_doc_v2.py
+- [Dealer Inspire Testimonial Updates](project_dealerinspire_testimonial_updates.md) — DR My Website Tools 50/4/all → DI page-update Gmail drafts; switcher autocomplete for DR IDs; _make_draft.py engine; basic-listing=no feed; ACA group 1067
+- [Google Sheets MCP Cert Bug](reference_google_sheets_mcp_cert.md) — google-sheets MCP broken (self-signed-cert); reconnect doesn't fix; use Sheets REST API via ~/.claude/tokens/sheets_token.json (_write_notes.py pattern)
+- [Mystery Shop Tool](project_mystery_shop_tool.md) — Lead-response scoring app; personal repo jakec86/mystery-shop, live at jakec86.github.io/mystery-shop; Pied Piper PSI benchmarks; kept off carsdotcom org per 2026-06-17 decision
+- [Internal Ticket Drafts](feedback_internal_ticket_drafts.md) — Internal team messages (BI, eng, product) go as markdown in chat, NOT Gmail drafts; copy/paste into Atlassian

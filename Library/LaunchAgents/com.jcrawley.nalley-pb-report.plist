@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jcrawley.nalley-pb-report</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/jcrawley/.claude/schedules/run-report.sh</string>
+        <string>/nalley-pb-report</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/jcrawley</string>
+
+    <!-- Mon (1) and Fri (5) at 8:00 AM local time (moved from 6:00 so Jake can intercept) -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Weekday</key>
+            <integer>1</integer>
+            <key>Hour</key>
+            <integer>8</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key>
+            <integer>5</integer>
+            <key>Hour</key>
+            <integer>8</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+    </array>
+
+    <key>WakeForNetworkAccess</key>
+    <true/>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jcrawley/.claude/logs/nalley-pb-report.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/jcrawley/.claude/logs/nalley-pb-report-error.log</string>
+</dict>
+</plist>

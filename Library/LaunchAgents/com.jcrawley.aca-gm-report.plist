@@ -8,18 +8,18 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/jcrawley/.claude/schedules/run-report.sh</string>
-        <string>/aca-gm-report</string>
+        <string>-c</string>
+        <string>[ $(date +%d) -le 7 ] &amp;&amp; /Users/jcrawley/.claude/schedules/run-report.sh /aca-gm-report</string>
     </array>
 
     <key>WorkingDirectory</key>
     <string>/Users/jcrawley</string>
 
-    <!-- 13th of each month at 6:03 AM MT (= 8:03 AM ET) -->
+    <!-- First Wednesday of each month — fires every Wednesday, guard exits if day > 7 -->
     <key>StartCalendarInterval</key>
     <dict>
-        <key>Day</key>
-        <integer>13</integer>
+        <key>Weekday</key>
+        <integer>3</integer>
         <key>Hour</key>
         <integer>6</integer>
         <key>Minute</key>

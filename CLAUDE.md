@@ -23,7 +23,7 @@ At session start, verify required MCP servers are loaded (Tableau, Gmail, BigQue
 Before running any workflow that requires authentication (Price Badge Reports, ACA GM report, VPM report, etc.):
 
 1. **Keychain TOTP** — verify the JumpCloud TOTP entry exists: `security find-generic-password -a jcrawley -s jumpcloud-totp -w`
-2. **Tableau PAT** — confirm the PAT in `~/.claude/settings.json` is valid before any Tableau step
+2. **Tableau PAT** — confirm the PAT in `~/.claude.json` (tableau server env) is valid before any Tableau step
 3. **Gmail MCP** — confirm it is connected AND tools are loaded (not just "connected"); if tools are missing, restart the MCP server before proceeding — do NOT kill the process mid-session
 4. **MFA push failures** — if a JumpCloud push fails twice, fall back to TOTP immediately rather than retrying pushes indefinitely
 
@@ -63,6 +63,7 @@ Custom slash commands defined in `~/.claude/commands/`. Plugin skills are namesp
 |---|---|---|---|
 | `/nalley-pb-report` | Nalley Automotive Price Badge Report — Tableau LEI pull + admin.cars.com Demand Signals → Google Sheet → Gmail draft | Weekly | Google Sheet (Nalley PB sheet) + Gmail draft to account team |
 | `/hendricks-pb-report` | Hendrick Automotive Price Badge Report (same flow as Nalley) | Weekly | Google Sheet (Hendrick PB sheet) + Gmail draft to account team |
+| `/herb-chambers-pb-report` | Herb Chambers GM monthly PB touchpoint — 6 active stores, parallel LEI + Demand Signals → per-store reports (used-only; $500 Honda / $1000 luxury) | Monthly (1st Wed, after approval) | 6 per-store Google Sheets + 6 Gmail drafts to GMs (gated to Jake until format approved) |
 | `/sonic-monthly-report` | Sonic Automotive brand-segmented performance report (~101 stores, 18 brands; rotating luxury/volume focus) with per-brand Gmail drafts | Monthly | Per-brand Gmail drafts; data sourced from Tableau By Store view |
 | `/sonic-billing` | Sonic & Hendrick billing reconciliation report | Monthly | Google Sheet + Gmail draft |
 | `/aca-monthly-report` | Atlantic Coast Automotive monthly store report (~72 stores) → Google Sheet → email to Danielle McJunkins | Monthly | Google Sheet + Gmail draft to Danielle McJunkins |
@@ -70,7 +71,6 @@ Custom slash commands defined in `~/.claude/commands/`. Plugin skills are namesp
 | `/echopark-monthly-report` | EchoPark Automotive monthly performance report (17 used-car stores, no rotation) — store scorecard + investigation flags + single group email | Monthly | Google Sheet + Gmail draft to EchoPark contact (TBD) |
 | `/asbury-monthly-report` | Asbury Group full-umbrella report (149 stores: Asbury + LHM + Koons + Herb Chambers) — per-sub-group emails + Umbrella Overview verification gate | Monthly | 4 sub-group Gmail drafts + Umbrella Overview; contacts TBD |
 | `/ep-review-report` | EchoPark DealerRater review report | Monthly | Gmail draft |
-| `/hcc4-vdp-report` | HCC4 VDP (Vehicle Detail Page) performance report | Monthly | Gmail draft |
 | `/herb-chambers-employee-update` | Herb Chambers quarterly DealerRater employee profile audit (~24 stores: adds/removes/title fixes) | Quarterly | Change summary + Gmail draft |
 
 **On-demand analysis:**
@@ -91,6 +91,7 @@ The following tasks are configured as scheduled/automated runs in Cowork. Avoid 
 |---|---|---|
 | Nalley PB Report | Weekly | Mirrors `/nalley-pb-report` workflow |
 | Hendrick PB Report | Weekly | Mirrors `/hendricks-pb-report` workflow |
+| Herb Chambers PB Report | Monthly (1st Wed 8 AM) | launchd `com.jcrawley.herb-chambers-pb-report` — NOT yet loaded; pending format approval + 6 Tableau custom views + 6 admin UUIDs |
 | Sonic Monthly Report | Monthly | |
 | ACA Monthly Report | Monthly | |
 
@@ -124,28 +125,28 @@ pip3 install -r ~/Documents/scripts/cowork/requirements.txt
 
 ## Connected MCP Services
 
-The following MCP servers are configured in `~/.claude/settings.json`:
+The following MCP servers are configured in `~/.claude.json` (project scope; `bigquery` is top-level). **`settings.json` does NOT define MCP servers — Claude Code ignores that key.**
 
 | Server | Purpose | Auth | Expiry / Rotation |
 |--------|---------|------|---|
-| `tableau` | Cars Commerce Tableau (us-west-2b, site: cars) | PAT "Claude" in settings.json env (jcrawley's account; Viewer role; row-level security limits view exports to assigned AE's dealers) | Expires ~April 2027 — rotate in settings.json env |
+| `tableau` | Cars Commerce Tableau (us-west-2b, site: cars) | PAT "Claude" in `.claude.json` env (jcrawley's account; Viewer role; row-level security limits view exports to assigned AE's dealers) | Expires ~April 2027 — rotate in `.claude.json` env |
 | `gmail` | jcrawley@cars.com Gmail | OAuth token at `~/.claude/tokens/gmail_jcrawley.json` | Access token expires hourly (auto-refreshed); refresh token is permanent |
 | `google-calendar` | Google Calendar | OAuth via `~/gcp-oauth.keys.json` | Refresh as needed via Google OAuth flow |
-| `google-tasks` | Google Tasks | Refresh token in settings.json env | |
+| `google-tasks` | Google Tasks | Refresh token in `.claude.json` env | |
 | `google-analytics-gafield` | GA property (gafield) | ADC at `~/.claude/ga_tokens/gafield_adc.json` | |
 | `google-analytics-gafield1` | GA property (gafield1) | ADC at `~/.claude/ga_tokens/gafield1_adc.json` | |
-| `atlassian` | Jira + Confluence (carscommerce.atlassian.net) | API token in settings.json env | Rotate if 401s appear |
+| `atlassian` | Jira + Confluence (carscommerce.atlassian.net) | API token in `.claude.json` env | Rotate if 401s appear |
 | `gdrive` | Google Drive | OAuth via `~/gcp-oauth.keys.json` + `~/.claude/tokens/gdrive_credentials.json` | |
 | `salesforce` | Salesforce (Cars Commerce org) | SF CLI at `~/.npm-global/bin/sf` | Re-auth via `sf org login web` if session expires |
-| `slack` | Slack (Cars Commerce workspace) | xoxb bot token in settings.json env (xoxp dropped 2026-04-23; posts as bot) | Rotate if revoked — xoxb tokens don't expire unless manually revoked |
-| `playwright` | Browser automation | Configured in settings.json via `npx @playwright/mcp@latest` | |
+| ~~`slack`~~ | **DECOMMISSIONED 2026-06-16** per Enterprise security directive — config removed from `.claude.json`, npm package uninstalled. Do NOT re-enable or recreate. | n/a | — |
+| `playwright` | Browser automation | Configured in `.claude.json` via `npx @playwright/mcp@latest` | |
 | `google-sheets` | Read/write Google Sheets | OAuth via `~/gcp-oauth.keys.json` + `~/.claude/tokens/sheets_token.json` | |
-| `google-docs` | Read/write Google Docs | OAuth credentials in settings.json env | |
+| `google-docs` | Read/write Google Docs | OAuth credentials in `.claude.json` env | |
 | `bigquery` | BigQuery queries (claude-integration project) | Service account key at `~/.claude/ga_tokens/bigquery_adc.json` | Service account key — rotate annually or if compromised |
-| `github` | Personal GitHub | PAT in settings.json env | Rotate if expired or revoked |
-| `github-work` | Cars Commerce GitHub | Work PAT in settings.json env | Rotate if expired or revoked |
-| `chrome-devtools` | Chrome DevTools Protocol (desktop app connector) | Native desktop app — no settings.json config needed | |
-| `figma` | Figma designs (desktop app connector) | Native desktop app — no settings.json config needed | |
+| `github` | Personal GitHub | PAT in `.claude.json` env | Rotate if expired or revoked |
+| `github-work` | Cars Commerce GitHub | Work PAT in `.claude.json` env | Rotate if expired or revoked |
+| `chrome-devtools` | Chrome DevTools Protocol (desktop app connector) | Native desktop app — no local config needed | |
+| `figma` | Figma designs (desktop app connector) | Native desktop app — no local config needed | |
 | `cars-mcp` | Cars.com vehicle listings search | Native desktop app connector | |
 
 **Token refresh — Gmail:** Access tokens expire every hour. The refresh token in `gmail_jcrawley.json` is permanent — the MCP server handles refresh automatically. If the token file's `access_token` is stale, refresh manually via the Google OAuth token endpoint.
@@ -202,7 +203,7 @@ Both the Streamlit app and the test script use `claude-sonnet-4-6`.
 
 ## Tableau API Access
 
-**PAT:** "Claude" (in settings.json env + MCP), Viewer role, expires ~April 2027.
+**PAT:** "Claude" (in `.claude.json` env + MCP), Viewer role, expires ~April 2027.
 
 ### Dealer Health Metrics — By Store Table for Export
 View ID `a0b9bdce-2db3-4ea0-a2fc-365fd08c5786`. Filter with `vf_Maj Cust Name`:

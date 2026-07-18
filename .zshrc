@@ -9,6 +9,11 @@ export ANTHROPIC_API_KEY="$(security find-generic-password -s 'anthropic-api-key
 export TABLEAU_PAT_SECRET="$(security find-generic-password -a jcrawley -s 'tableau-pat' -w 2>/dev/null)"
 export TABLEAU_PAT_NAME="Claude"
 
+# GitHub PAT — used by the `github` plugin MCP server (Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN})
+# To rotate: security delete-generic-password -a jcrawley -s github-pat
+#            security add-generic-password -a jcrawley -s github-pat -w 'NEW_PAT'
+export GITHUB_PERSONAL_ACCESS_TOKEN="$(security find-generic-password -a jcrawley -s 'github-pat' -w 2>/dev/null)"
+
 # PATH
 export PATH=~/.npm-global/bin:$PATH
 export PATH="$HOME/.claude/bin:$PATH"

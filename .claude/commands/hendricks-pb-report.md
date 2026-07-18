@@ -13,7 +13,7 @@ Run the full weekly Price Badge Report workflow for Hendrick Automotive Group. S
 - **Email from:** `jcrawley@carscommerce.inc` (not @cars.com)
 - **Callout style:** SAM-led bullets (store abbreviation first, then vehicle)
 
-> **Note:** Tableau MCP PAT returns 401 for this view due to RLS — use Playwright only for all Tableau steps.
+> **Note:** Tableau MCP PAT returns 401 for this view due to RLS — use Playwright only for all Tableau steps. The headless browser runs a **persistent profile**, so when the session is still valid the view loads with no login at all.
 
 ---
 
@@ -36,7 +36,13 @@ Example openings (rotate and riff on these):
 
 ## Pre-flight (REQUIRED — abort on any failure)
 
-1. **TOTP Keychain** — run `bash ~/.claude/scripts/check-totp-keychain.sh`. If warning fires, TOTP is missing — note before proceeding.
+1. **Auth creds in Keychain** — confirm all three are retrievable (values are never printed):
+   ```bash
+   security find-generic-password -a jcrawley -s jumpcloud-username -w >/dev/null && echo "user ok"
+   security find-generic-password -a jcrawley -s jumpcloud-password -w >/dev/null && echo "pass ok"
+   bash ~/.claude/scripts/check-totp-keychain.sh   # TOTP seed present
+   ```
+   If username/password are missing, the Login Sub-procedure can't run unattended — abort and flag. If only TOTP is missing, MFA falls back to push.
 2. **Playwright MCP** — verify `mcp__playwright__browser_navigate` tool is available. If missing, abort and recommend `/mcp` check.
 3. **Gmail MCP not required** — email is sent via Gmail API directly by `pb_report.py`.
 
@@ -49,7 +55,7 @@ Navigate directly to the **Hendrick Custom View** (pre-filtered: All DMAs + Hend
 https://us-west-2b.online.tableau.com/#/site/cars/views/LowEngagedInventoryReport/LEI-Localv2/8a3a0039-6729-4f23-98bb-099bca061385/HendrickPBReport
 ```
 
-If JumpCloud SSO fires, run the **JumpCloud MFA Sub-procedure** before continuing.
+If a login page appears (Tableau Cloud sign-in or JumpCloud), run the **JumpCloud / Tableau Login + MFA Sub-procedure**, then re-navigate to this URL.
 
 Wait for the viz to fully render (~15–30 sec). No filter changes needed — all filters are pre-applied in the saved view.
 
@@ -94,7 +100,7 @@ Expected output:
 ✓ N total rows: X within threshold (green via CF), Y above
 ✓ Reset basicFilter (hiddenByFilter state cleared)
 ✓ Stats: X/N within $500 (5–13%), 0 at $0, ~367 already Great
-✓ Gmail draft created → sent to jcrawley@cars.com for review
+✓ Email sent → anne.Lewis@hendrickauto.com
 ```
 
 **QC Benchmarks — if outside these ranges, investigate before forwarding to Anne:**
@@ -125,23 +131,24 @@ The PBT J column may have row-position formulas (`ABS(DataImport!O4526)`) instea
 
 ## Step 4 — Confirm Send
 
-Per the **pre-send review rule**, email goes to **jcrawley@cars.com** (Jake) first, not directly to Anne.
+Email goes directly to **anne.Lewis@hendrickauto.com** — no pre-send review step.
 
-**Draft to:** jcrawley@cars.com (review + forward)
-**Final recipient after approval:** anne.Lewis@hendrickauto.com
+**To:** anne.Lewis@hendrickauto.com
 **From:** jcrawley@carscommerce.inc
 
-The script outputs `✓ Email sent` — this confirms delivery to Jake. Forward to Anne after reviewing stats and callouts.
+The script outputs `✓ Email sent → anne.Lewis@hendrickauto.com`. Review QC benchmarks above before running if unsure about data quality.
 
 ---
 
 ## Step 5 — Mark Google Task Complete
 
-Search Google Tasks for **"Hendricks - LEI Report"** and confirm it is marked complete for today's date. The 6 AM automated run marks it automatically — verify it shows `status: completed`. If not, mark it complete manually via the Google Tasks MCP.
+Mark the **"Hendricks - LEI Report"** task complete in the **Priority Tasks** list. The 6 AM automated run marks it automatically — verify it shows `status: completed`. If not, mark it complete manually.
 
 ```
-task_search query: "Hendricks LEI Report"
-→ confirm status = "completed" and due = today
+task_search query: "Hendricks - LEI"   (substring of exact title; "Hendricks LEI Report" won't match — the dash is required)
+→ confirm title = "Hendricks - LEI Report", due = today
+→ if status != "completed": mark status = "completed"
+→ if not found: skip
 ```
 
 ---
@@ -172,18 +179,29 @@ Confirm the task appears in the account's Activity History in Salesforce.
 
 ---
 
-## JumpCloud MFA Sub-procedure
+## JumpCloud / Tableau Login + MFA Sub-procedure
 
-Invoke whenever Playwright lands on `sso.jumpcloud.com`.
+The headless browser uses a **persistent profile** (`--user-data-dir`), so when the Tableau/JumpCloud session is still valid the view loads with no login — skip this entire sub-procedure. Run it only when a login page actually appears. All credentials come from Keychain and must **never** be printed, echoed, or logged.
 
-**Primary method: TOTP**
+**Step A — Tableau Cloud username page** (`sso.online.tableau.com`, heading "Sign in to Tableau Cloud", a "Username" field):
+1. Retrieve username: `security find-generic-password -a jcrawley -s jumpcloud-username -w`
+2. Type it into the Username field → click **Sign In**. Redirects to the JumpCloud IdP.
 
-1. Switch to TOTP immediately — click "Try another way" / "Use authenticator code". If Verification Code input is already visible, proceed to step 2.
-2. Run `python3 ~/.claude/scripts/jumpcloud-totp.py`. Capture stdout. If exit code non-zero, surface stderr and fall back to Push.
-3. Type the 6-digit code into each individual digit box (one char per box), then press Enter. Retry once at next 30s boundary if rejected. If rejected twice: abort with `"TOTP rejected twice — check Mac clock: sudo sntp -sS time.apple.com"`.
+**Step B — JumpCloud login** (`sso.jumpcloud.com` / `console.jumpcloud.com` showing email and/or password fields):
+1. If an email/username field is shown, fill it from the Keychain username (A.1) with `browser_type` (the username is non-sensitive).
+2. If a password field is shown, retrieve `security find-generic-password -a jcrawley -s jumpcloud-password -w` and fill it into the field with `browser_type`. (In-page fetch / clipboard auto-fill are CSP/headless-blocked, so a direct fill is required.) The run logs are **gitignored**, so the value stays on local disk only — never committed. Do NOT echo the password in your chat replies or print it to stdout.
+3. Click **Sign In / Continue**. If the profile already has an active JumpCloud session, this is skipped automatically — proceed.
 
-**Push fallback (only when TOTP unavailable):**
-4. Click "Send Push". Poll every 5s for up to 90s for redirect. If no redirect: abort with `"⚠️ Push not approved after 90s"`.
+**Step C — MFA (TOTP primary):**
+1. If a push prompt is shown, click "Try another way" / "Use authenticator code". If the Verification Code input is already visible, skip this click.
+2. Retrieve code: `python3 ~/.claude/scripts/jumpcloud-totp.py` (capture stdout). Non-zero exit → fall back to Push (Step E); surface the helper's stderr verbatim.
+3. Type the 6-digit code into the Verification Code input — **if individual digit boxes are shown, type one char per box** — then Submit / press Enter. Retry once at the next 30s boundary if rejected. Rejected twice → abort: `"TOTP rejected twice — check Mac clock: sudo sntp -sS time.apple.com"`. **Never log the code or seed.**
+
+**Step D — Land back on target:** After auth, if the browser lands on the JumpCloud **console/dashboard** (`console.jumpcloud.com`) instead of the report, **re-navigate to the Hendrick LEI view URL**. The session is now established, so it loads directly.
+
+**Step E — Push fallback (only if TOTP unavailable):** Click "Send Push", output `"⏳ JumpCloud push sent — approve on your phone to continue."`, poll every 5s up to 90s for a redirect off the login page. No redirect after 90s → abort: `"⚠️ Push not approved after 90s — re-run"`.
+
+> **Current status (2026-06-12):** Persistent Playwright profile + Keychain creds (`jumpcloud-username`, `jumpcloud-password`) + TOTP seed all enrolled → login is fully unattended. Push remains a fallback.
 
 ---
 

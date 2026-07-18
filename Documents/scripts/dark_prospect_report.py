@@ -61,9 +61,9 @@ CONFIG = {
     "historical": {
         "period": "May 2025 — their last active month on Cars.com (FPL contract)",
         "stores": [
-            {"store": "Dallas",     "inventory": 129, "vdps": 2078, "connections": 24, "badge": 0.36},
-            {"store": "Fort Worth", "inventory": 57,  "vdps": 1897, "connections": 18, "badge": 0.16},
-            {"store": "Arlington",  "inventory": 44,  "vdps": 1223, "connections": 8,  "badge": 0.20},
+            {"store": "Dallas",     "inventory": 129, "vdps": 2078, "connections": 24, "leads": 9, "badge": 0.36},
+            {"store": "Fort Worth", "inventory": 57,  "vdps": 1897, "connections": 18, "leads": 7, "badge": 0.16},
+            {"store": "Arlington",  "inventory": 44,  "vdps": 1223, "connections": 8,  "leads": 2, "badge": 0.20},
         ],
         "link": "park_place_pitch_v2.html",
         "link_label": "Full Park Place market & historical deck (Polk share, 24-mo trend, competitive set)",
@@ -73,9 +73,16 @@ CONFIG = {
     "quad_mult": {"Churner": 1.30, "Niche": 1.10, "Rarity": 0.85, "Lot Sitter": 0.70, "Unmatched": 1.00},
 
     # revenue framing — store is DARK so projected connections are net-new (incremental)
-    "revenue": {"close_rate": 0.08, "close_range": [0.06, 0.10],
+    "revenue": {"close_rate": 0.08, "close_range": [0.06, 0.10],          # LEAD close rate (phone/email/chat)
+                "click_close_rate": 0.01, "click_close_range": [0.005, 0.015],  # conversion on non-lead connections (VDP deep-link clicks, website transfers)
                 "gpu": 4500, "gpu_range": [4000, 5000],
-                "lead_share_of_conn": 0.45},
+                # Leads (phone+email+chat) / total connections. Park Place's OWN actual,
+                # pooled across the 3 MB stores over their paid-active window (May–Sep 2025):
+                # 62 leads / 269 connections = 0.23. Robust across windows (May–Jul .222, May–Aug .236).
+                # Cross-validated by active comparable MB Plano (Mar–May 2026) = 0.217.
+                # NOTE: ~60% of connections are VDP deep-link clicks; gross is BLENDED — leads close
+                # at close_rate, the click/transfer remainder converts at click_close_rate.
+                "lead_share_of_conn": 0.23},
 
     "out_html": PPDIR / "parkplace_inventory_projection_2026-06-12.html",
     "out_slide": PPDIR / "parkplace_inventory_projection_SLIDE_2026-06-12.html",
@@ -242,7 +249,8 @@ def build_html(cfg, vehicles, market_rows, med_veh, med_vdp, rates, blend_vdp, b
     by_quad = Counter(v["quadrant"] for v in vehicles)
     proj_vdp = sum(v["proj_vdp"] for v in vehicles)        # used-only (drives the used churner calculator)
     proj_conn = sum(v["proj_conn"] for v in vehicles)
-    proj_leads = proj_conn * cfg["revenue"]["lead_share_of_conn"]
+    lead_share = cfg["revenue"]["lead_share_of_conn"]   # Leads = phone+email+chat subset of total connections
+    proj_leads = proj_conn * lead_share                 # used-lot leads (drives the interactive calculator)
     churner_pct = 100*by_quad["Churner"]/n
     matched = sum(1 for v in vehicles if v["quadrant"] != "Unmatched")
 
@@ -253,13 +261,17 @@ def build_html(cfg, vehicles, market_rows, med_veh, med_vdp, rates, blend_vdp, b
     grand_total = used_total + new_total
     proj_vdp_total = grand_total * blend_vdp
     proj_conn_total = grand_total * blend_conn
+    proj_leads_total = proj_conn_total * lead_share     # full-inventory leads — matches the headline connections KPI
 
-    # revenue range (store dark -> projected connections are incremental)
+    # revenue range — BLENDED: close leads (P+E+C) at the lead-close rate, plus a small
+    # conversion on the non-lead connections (VDP deep-link clicks, website transfers).
+    # Store is dark -> all incremental.
     rv = cfg["revenue"]
-    def gross(close, gpu): return proj_conn_total * close * gpu
-    lo = gross(rv["close_range"][0], rv["gpu_range"][0])
-    mid = gross(rv["close_rate"], rv["gpu"])
-    hi = gross(rv["close_range"][1], rv["gpu_range"][1])
+    clicks_total = proj_conn_total - proj_leads_total
+    def gross(close, click, gpu): return (proj_leads_total*close + clicks_total*click) * gpu
+    lo  = gross(rv["close_range"][0], rv["click_close_range"][0], rv["gpu_range"][0])
+    mid = gross(rv["close_rate"], rv["click_close_rate"], rv["gpu"])
+    hi  = gross(rv["close_range"][1], rv["click_close_range"][1], rv["gpu_range"][1])
 
     # scatter points: one per (make, nameplate) present in PP inventory & matched
     pts = defaultdict(lambda: {"count": 0})
@@ -293,7 +305,8 @@ def build_html(cfg, vehicles, market_rows, med_veh, med_vdp, rates, blend_vdp, b
         svd = tot * blend_vdp; sc = tot * blend_conn
         store_rows += (f'<tr><td>{store}</td><td class="num">{new_n:,}</td><td class="num">{used_n:,}</td>'
                        f'<td class="num">{tot:,}</td>'
-                       f'<td class="num">{svd:,.0f}</td><td class="num">{sc:,.0f}</td></tr>')
+                       f'<td class="num">{svd:,.0f}</td><td class="num">{sc:,.0f}</td>'
+                       f'<td class="num">{sc*lead_share:,.0f}</td></tr>')
 
     # benchmark transparency rows
     leg_rows = ""
@@ -318,22 +331,24 @@ def build_html(cfg, vehicles, market_rows, med_veh, med_vdp, rates, blend_vdp, b
     hist_html = ""
     if hist:
         hs = hist["stores"]
-        h_inv = sum(s["inventory"] for s in hs); h_vdp = sum(s["vdps"] for s in hs); h_conn = sum(s["connections"] for s in hs)
+        h_inv = sum(s["inventory"] for s in hs); h_vdp = sum(s["vdps"] for s in hs)
+        h_conn = sum(s["connections"] for s in hs); h_leads = sum(s.get("leads", 0) for s in hs)
         hrows = "".join(
             f'<tr><td>{esc(s["store"])}</td><td class="num">{s["inventory"]}</td><td class="num">{s["vdps"]:,}</td>'
-            f'<td class="num">{s["connections"]}</td><td class="num">{s["badge"]*100:.0f}%</td></tr>' for s in hs)
+            f'<td class="num">{s["connections"]}</td><td class="num">{s.get("leads","&mdash;")}</td><td class="num">{s["badge"]*100:.0f}%</td></tr>' for s in hs)
         hist_html = f"""<div class="section">
   <h2>They've already proven it on Cars.com — Park Place's own results</h2>
   <p style="font-size:13px;margin:0 0 12px">{esc(hist["period"])}, the <b>same inventory</b> generated this on Cars.com:</p>
   <div class="hero">
     <div class="kpi"><div class="v">{h_inv}</div><div class="l">Used vehicles listed<br>(consolidated, 3 stores)</div></div>
     <div class="kpi"><div class="v">{h_vdp:,}</div><div class="l">VDPs / month</div></div>
-    <div class="kpi"><div class="v">{h_conn}</div><div class="l">Connections / month</div></div>
+    <div class="kpi"><div class="v">{h_leads}</div><div class="l">Direct leads / month<br>(phone · email · chat)</div></div>
+    <div class="kpi"><div class="v">{h_conn}</div><div class="l">Total connections / month</div></div>
   </div>
-  <table class="tbl-even" style="margin-top:14px"><thead><tr><th>Store</th><th class="num">Inventory</th><th class="num">VDPs/mo</th><th class="num">Connections/mo</th><th class="num">Price-badge rate</th></tr></thead>
+  <table class="tbl-even" style="margin-top:14px"><thead><tr><th>Store</th><th class="num">Inventory</th><th class="num">VDPs/mo</th><th class="num">Connections/mo</th><th class="num">Leads/mo</th><th class="num">Price-badge rate</th></tr></thead>
   <tbody>{hrows}
-  <tr style="font-weight:700;background:#faf7fc"><td>Total</td><td class="num">{h_inv}</td><td class="num">{h_vdp:,}</td><td class="num">{h_conn}</td><td class="num">&mdash;</td></tr></tbody></table>
-  <p class="note" style="margin-top:14px"><b>This is the most heavily-weighted leg of the projection</b> — same stores, same listings. Today's projected {proj_conn:,.0f} connections/month is anchored to this real prior performance, then cross-checked against an active comparable and current market demand.</p>
+  <tr style="font-weight:700;background:#faf7fc"><td>Total</td><td class="num">{h_inv}</td><td class="num">{h_vdp:,}</td><td class="num">{h_conn}</td><td class="num">{h_leads}</td><td class="num">&mdash;</td></tr></tbody></table>
+  <p class="note" style="margin-top:14px"><b>Proof the demand is real</b> — same stores, same listings. Even under-merchandised (price-badge rates as low as {min(s["badge"] for s in hs)*100:.0f}%), the used lot pulled <b>{h_leads} direct leads/month</b> and {h_vdp:,} VDPs (the balance of connections were map views, website and walk-in activity). Today's projection is benchmarked against an active comparable and current DFW market demand — not this thin tail.</p>
 </div>
 """
 
@@ -397,6 +412,7 @@ ul{{margin:8px 0 0 0;padding-left:20px;font-size:13px}} li{{margin:3px 0}}
     <div class="kpi"><div class="v">{grand_total:,}</div><div class="l">Total vehicles (new + used)<br>{new_total:,} new · {used_total} used</div></div>
     <div class="kpi"><div class="v">{proj_vdp_total:,.0f}</div><div class="l">Projected VDPs / month<br>on Cars.com</div></div>
     <div class="kpi"><div class="v">{proj_conn_total:,.0f}</div><div class="l">Projected connections / month<br>on Cars.com</div></div>
+    <div class="kpi"><div class="v">{proj_leads_total:,.0f}</div><div class="l">Projected leads / month<br>(phone · email · chat)</div></div>
     <div class="kpi"><div class="v">${mid/1000:,.0f}K</div><div class="l">Projected incremental gross / month<br>(midpoint)</div></div>
   </div>
 </div>
@@ -420,22 +436,22 @@ ul{{margin:8px 0 0 0;padding-left:20px;font-size:13px}} li{{margin:3px 0}}
 
 <div class="section">
   <h2>Projected monthly performance on Cars.com</h2>
-  <table class="tbl-even"><thead><tr><th>Store</th><th class="num">New</th><th class="num">Used</th><th class="num">Total</th><th class="num">Proj. VDPs/mo</th><th class="num">Proj. connections/mo</th></tr></thead>
+  <table class="tbl-even"><thead><tr><th>Store</th><th class="num">New</th><th class="num">Used</th><th class="num">Total</th><th class="num">Proj. VDPs/mo</th><th class="num">Proj. connections/mo</th><th class="num">Proj. leads/mo</th></tr></thead>
   <tbody>{store_rows}
-  <tr style="font-weight:700;background:#faf7fc"><td>Total</td><td class="num">{new_total:,}</td><td class="num">{used_total}</td><td class="num">{grand_total:,}</td><td class="num">{proj_vdp_total:,.0f}</td><td class="num">{proj_conn_total:,.0f}</td></tr>
+  <tr style="font-weight:700;background:#faf7fc"><td>Total</td><td class="num">{new_total:,}</td><td class="num">{used_total}</td><td class="num">{grand_total:,}</td><td class="num">{proj_vdp_total:,.0f}</td><td class="num">{proj_conn_total:,.0f}</td><td class="num">{proj_leads_total:,.0f}</td></tr>
   </tbody></table>
-  <p class="small" style="margin-top:8px">Projection covers your <b>full {grand_total:,}-vehicle inventory</b> (new + used) at the blended all-stock per-vehicle rate ({blend_vdp:.1f} VDPs · {blend_conn:.3f} connections / vehicle / month). The demand quadrant above details where your {used_total} used vehicles sit.</p>
+  <p class="small" style="margin-top:8px">Projection covers your <b>full {grand_total:,}-vehicle inventory</b> (new + used) at the blended all-stock per-vehicle rate ({blend_vdp:.1f} VDPs · {blend_conn:.3f} connections / vehicle / month). The demand quadrant above details where your {used_total} used vehicles sit. <b>Leads</b> = phone + email + chat (the direct-contact subset of connections), here {lead_share*100:.0f}% of projected connections.</p>
 </div>
 
 <div class="section">
   <h2>Revenue framing</h2>
-  <p style="font-size:13px;margin:0 0 6px">These stores are currently <b>dark on Cars.com</b>, so the projected <b>{proj_conn_total:,.0f} connections/month</b> are net-new. Applying a luxury close rate and average gross:</p>
+  <p style="font-size:13px;margin:0 0 6px">These stores are currently <b>dark on Cars.com</b>, so all of it is net-new: <b>{proj_leads_total:,.0f} direct leads/month</b> plus the broader {clicks_total:,.0f} click/transfer engagements. Closing the leads at a luxury rate and converting a small slice of the clicks:</p>
   <div class="rev">
-    <div class="box"><div class="v">${lo/1000:,.0f}K</div><div class="small">Conservative<br>({rv['close_range'][0]*100:.0f}% close · ${rv['gpu_range'][0]/1000:.0f}K GPU)</div></div>
-    <div class="box mid"><div class="v" style="color:{PURPLE}">${mid/1000:,.0f}K</div><div class="small">Midpoint<br>({rv['close_rate']*100:.0f}% close · ${rv['gpu']/1000:.1f}K GPU)</div></div>
-    <div class="box"><div class="v">${hi/1000:,.0f}K</div><div class="small">Upper<br>({rv['close_range'][1]*100:.0f}% close · ${rv['gpu_range'][1]/1000:.0f}K GPU)</div></div>
+    <div class="box"><div class="v">${lo/1000:,.0f}K</div><div class="small">Conservative<br>({rv['close_range'][0]*100:.0f}% lead close · {rv['click_close_range'][0]*100:.1f}% click · ${rv['gpu_range'][0]/1000:.0f}K GPU)</div></div>
+    <div class="box mid"><div class="v" style="color:{PURPLE}">${mid/1000:,.0f}K</div><div class="small">Midpoint<br>({rv['close_rate']*100:.0f}% lead close · {rv['click_close_rate']*100:.0f}% click · ${rv['gpu']/1000:.1f}K GPU)</div></div>
+    <div class="box"><div class="v">${hi/1000:,.0f}K</div><div class="small">Upper<br>({rv['close_range'][1]*100:.0f}% lead close · {rv['click_close_range'][1]*100:.1f}% click · ${rv['gpu_range'][1]/1000:.0f}K GPU)</div></div>
   </div>
-  <p class="small" style="margin-top:10px">Monthly incremental gross = projected connections × close rate × avg gross-per-unit. Midpoint ≈ <b>${mid*12/1000:,.0f}K/year</b> incremental.</p>
+  <p class="small" style="margin-top:10px">Monthly incremental gross = (leads × lead-close rate + click/transfer engagements × click-conversion) × avg gross-per-unit. Midpoint ≈ <b>${mid*12/1000:,.0f}K/year</b> incremental.</p>
 </div>
 
 {hist_html}
@@ -473,6 +489,7 @@ const qchart = new Chart(document.getElementById('q'),{{
 const CHIPS = {json.dumps(chips)};
 const QC = {json.dumps(QUAD_COLORS)};
 const REV = {{close:{rv['close_rate']}, gpu:{rv['gpu']}}};
+const LEAD = {lead_share};
 const TOTAL = {{veh:{n}, vdp:{proj_vdp:.0f}, conn:{proj_conn:.0f}}};
 const QORDER = ['Churner','Niche','Lot Sitter','Rarity','Unmatched'];
 (function(){{
@@ -520,6 +537,7 @@ const QORDER = ['Churner','Niche','Lot Sitter','Rarity','Unmatched'];
         <div><span>${{fmt(veh)}}</span>used vehicles</div>
         <div><span>${{fmt(vdp)}}</span>proj. VDPs / mo</div>
         <div><span>${{fmt(conn)}}</span>proj. connections / mo</div>
+        <div><span>${{fmt(conn*LEAD)}}</span>proj. leads / mo</div>
         <div><span>$${{fmt(gross/1000)}}K</span>est. gross / mo</div>
       </div>`
       + (items.length ? `<a id="clearSel">Clear selection</a>` : `<div class="thint">Click nameplates to build a group — these totals update live.</div>`);
@@ -553,9 +571,14 @@ def build_pitch_slide(cfg, vehicles, rates, blend_vdp, blend_conn):
     grand_total = used_total + new_total
     proj_vdp_total = grand_total * blend_vdp
     proj_conn_total = grand_total * blend_conn
+    lead_share = cfg["revenue"]["lead_share_of_conn"]   # Leads = phone+email+chat subset of connections
+    proj_leads_total = proj_conn_total * lead_share
     rv = cfg["revenue"]
-    g = lambda c, gpu: proj_conn_total * c * gpu
-    lo, mid, hi = g(rv["close_range"][0], rv["gpu_range"][0]), g(rv["close_rate"], rv["gpu"]), g(rv["close_range"][1], rv["gpu_range"][1])
+    clicks_total = proj_conn_total - proj_leads_total
+    g = lambda c, ck, gpu: (proj_leads_total*c + clicks_total*ck) * gpu   # blended: lead close + small click conversion
+    lo  = g(rv["close_range"][0], rv["click_close_range"][0], rv["gpu_range"][0])
+    mid = g(rv["close_rate"], rv["click_close_rate"], rv["gpu"])
+    hi  = g(rv["close_range"][1], rv["click_close_range"][1], rv["gpu_range"][1])
     churner_pct = 100*by_quad["Churner"]/n
     date_str = datetime.datetime.strptime(cfg["report_date"], "%Y-%m-%d").strftime("%B %Y")
 
@@ -583,7 +606,7 @@ def build_pitch_slide(cfg, vehicles, rates, blend_vdp, blend_conn):
         if not tot: continue
         sd = tot * blend_vdp; sc = tot * blend_conn
         srows += (f'<tr><td class="b">{s}</td><td class="r">{new_n:,}</td><td class="r">{used_n:,}</td><td class="r">{tot:,}</td>'
-                  f'<td class="r">{sd:,.0f}</td><td class="r">{sc:,.0f}</td></tr>')
+                  f'<td class="r">{sd:,.0f}</td><td class="r">{sc:,.0f}</td><td class="r">{sc*lead_share:,.0f}</td></tr>')
 
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <title>{esc(cfg['prospect_name'])} — Inventory Performance Projection</title>
@@ -594,7 +617,7 @@ body{{font-family:'Poppins',sans-serif;font-size:11px;color:#1a1a2e;background:#
 .hdr{{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:18px;padding-bottom:12px;border-bottom:3px solid #6B2D8B}}
 .hdr h1{{font-size:21px;font-weight:800;color:#6B2D8B;line-height:1.1}} .hdr p{{font-size:10px;color:#666;margin-top:4px}}
 .pill{{display:inline-block;background:#00A88E;color:#fff;font-size:8px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:3px 9px;border-radius:20px}}
-.hero{{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#ede0f5;border:1px solid #ede0f5;border-radius:6px;overflow:hidden;margin-bottom:18px}}
+.hero{{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:#ede0f5;border:1px solid #ede0f5;border-radius:6px;overflow:hidden;margin-bottom:18px}}
 .hc{{background:#fff;padding:13px 15px}} .hc .num{{font-size:27px;font-weight:800;color:#6B2D8B;line-height:1}} .hc .num.teal{{color:#00A88E}}
 .hc .lbl{{font-size:9px;font-weight:600;color:#444;margin-top:4px;line-height:1.35}}
 .sec{{margin-bottom:16px}} .sec-title{{font-size:9px;font-weight:700;color:#6B2D8B;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #ede0f5}}
@@ -635,6 +658,7 @@ th.r,td.r{{text-align:right}} tbody tr:nth-child(even){{background:#faf6fd}} tbo
   <div class="hc"><div class="num">{grand_total:,}</div><div class="lbl">Total vehicles (new + used)<br>{new_total:,} new · {used_total} used</div></div>
   <div class="hc"><div class="num teal">{proj_vdp_total:,.0f}</div><div class="lbl">Projected VDPs / month<br>on Cars.com</div></div>
   <div class="hc"><div class="num">{proj_conn_total:,.0f}</div><div class="lbl">Projected connections / month<br>on Cars.com</div></div>
+  <div class="hc"><div class="num">{proj_leads_total:,.0f}</div><div class="lbl">Projected leads / month<br>phone · email · chat</div></div>
   <div class="hc"><div class="num teal">${mid/1000:,.0f}K</div><div class="lbl">Projected incremental gross / mo<br>≈ ${mid*12/1000:,.0f}K / year</div></div>
 </div>
 
@@ -656,18 +680,18 @@ th.r,td.r{{text-align:right}} tbody tr:nth-child(even){{background:#faf6fd}} tbo
 
 <div class="sec">
   <div class="sec-title">Projected monthly performance on Cars.com</div>
-  <table><thead><tr><th>Store</th><th class="r">New</th><th class="r">Used</th><th class="r">Total</th><th class="r">VDPs / mo</th><th class="r">Connections / mo</th></tr></thead>
+  <table><thead><tr><th>Store</th><th class="r">New</th><th class="r">Used</th><th class="r">Total</th><th class="r">VDPs / mo</th><th class="r">Connections / mo</th><th class="r">Leads / mo</th></tr></thead>
   <tbody>{srows}
-  <tr class="tot"><td>Total</td><td class="r">{new_total:,}</td><td class="r">{used_total}</td><td class="r">{grand_total:,}</td><td class="r">{proj_vdp_total:,.0f}</td><td class="r">{proj_conn_total:,.0f}</td></tr>
+  <tr class="tot"><td>Total</td><td class="r">{new_total:,}</td><td class="r">{used_total}</td><td class="r">{grand_total:,}</td><td class="r">{proj_vdp_total:,.0f}</td><td class="r">{proj_conn_total:,.0f}</td><td class="r">{proj_leads_total:,.0f}</td></tr>
   </tbody></table>
 </div>
 
 <div class="sec">
   <div class="sec-title">What that's worth — incremental gross / month (net-new; stores are dark today)</div>
   <div class="stat-row">
-    <div class="stat-box"><div class="sv">${lo/1000:,.0f}K</div><div class="sl">Conservative · {rv['close_range'][0]*100:.0f}% close · ${rv['gpu_range'][0]/1000:.0f}K GPU</div></div>
-    <div class="stat-box mid"><div class="sv">${mid/1000:,.0f}K</div><div class="sl">Midpoint · {rv['close_rate']*100:.0f}% close · ${rv['gpu']/1000:.1f}K GPU</div></div>
-    <div class="stat-box"><div class="sv">${hi/1000:,.0f}K</div><div class="sl">Upper · {rv['close_range'][1]*100:.0f}% close · ${rv['gpu_range'][1]/1000:.0f}K GPU</div></div>
+    <div class="stat-box"><div class="sv">${lo/1000:,.0f}K</div><div class="sl">Conservative · {rv['close_range'][0]*100:.0f}% lead close + {rv['click_close_range'][0]*100:.1f}% click · ${rv['gpu_range'][0]/1000:.0f}K GPU</div></div>
+    <div class="stat-box mid"><div class="sv">${mid/1000:,.0f}K</div><div class="sl">Midpoint · {rv['close_rate']*100:.0f}% lead close + {rv['click_close_rate']*100:.0f}% click · ${rv['gpu']/1000:.1f}K GPU</div></div>
+    <div class="stat-box"><div class="sv">${hi/1000:,.0f}K</div><div class="sl">Upper · {rv['close_range'][1]*100:.0f}% lead close + {rv['click_close_range'][1]*100:.1f}% click · ${rv['gpu_range'][1]/1000:.0f}K GPU</div></div>
   </div>
 </div>
 
@@ -677,7 +701,7 @@ th.r,td.r{{text-align:right}} tbody tr:nth-child(even){{background:#faf6fd}} tbo
   <div><div class="av">{proj_conn_total:,.0f}</div><div class="al">Net-new connections / mo</div></div>
 </div>
 
-<div class="fn">Modeled from {grand_total:,} vehicles ({new_total:,} new + {used_total} used) scraped live from the Park Place store sites, {date_str}. Used-lot demand quadrant from admin.cars.com Demand Signals (DFW, Used). Per-vehicle rate is an all-stock blend of an active comparable (MB of Plano) and the current DFW Mercedes-Benz market, applied to the full inventory. Projection, not a guarantee — actual results depend on merchandising, pricing, and response speed. Connections = all engagement types (web, email, phone, chat, walk-in).</div>
+<div class="fn">Modeled from {grand_total:,} vehicles ({new_total:,} new + {used_total} used) scraped live from the Park Place store sites, {date_str}. Used-lot demand quadrant from admin.cars.com Demand Signals (DFW, Used). Per-vehicle rate is an all-stock blend of an active comparable (MB of Plano) and the current DFW Mercedes-Benz market, applied to the full inventory. Projection, not a guarantee — actual results depend on merchandising, pricing, and response speed. Connections = all Cars.com engagement events (listing &amp; deep-link clicks, website transfers, phone, email, chat); Leads = the phone + email + chat subset (direct contacts), modeled at {lead_share*100:.0f}% of connections.</div>
 
 </body></html>"""
 

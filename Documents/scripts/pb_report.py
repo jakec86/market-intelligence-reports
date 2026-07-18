@@ -229,11 +229,16 @@ def import_to_sheet(gc, cfg, lei_rows, dem_rows=None):
         )
         # Determine the actual extent of stale data before clearing so we wipe
         # every row a previous (possibly larger) run wrote, not just up to a fixed cap.
+        # Also cover the filter range end_row (for multi-store dealers like Hendrick that
+        # use a basicFilter sort over the full sheet — old data outside the normal data
+        # range but inside the filter range interleaves with new data after the sort).
         stock_col_idx = ord(stock_col_letter) - 64  # D → 4
         existing_stock = pbt_ws.col_values(stock_col_idx)
+        filter_end_row = cfg.get("pbt_filter", {}).get("end_row", 0)
         clear_end = max(
             data_start + n + 50,                    # at least current import + buffer
             len(existing_stock) + data_start - 1,   # actual sheet extent
+            filter_end_row,                         # cover full basicFilter range for multi-store dealers
         )
         pbt_ws.batch_clear([f"{c}{data_start}:{c}{clear_end}" for c in cols_to_clear])
 
@@ -253,6 +258,60 @@ def import_to_sheet(gc, cfg, lei_rows, dem_rows=None):
             pbt_ws.update(values=dealer_vals, range_name=f"B{data_start}:B{data_start+n-1}",
                           value_input_option="RAW")
         print(f"  ✓ Anchored PBT cols B/C/D with {n} static values (sort-safe)")
+
+    # Repair J ("Difference to Next Badge") with a VLOOKUP-by-stock formula on every
+    # run, for every dealer — not just ones with a wide basicFilter. J starts life in
+    # the template as a relative cross-sheet reference (e.g. ='Data Import...'!O136).
+    # Google Sheets preserves that row *offset*, not the target row, when a sort
+    # relocates the row, so after safe_sort_pbt's Pass 2 (sort by J ascending) J
+    # silently shows another vehicle's diff — confirmed 2026-07-13: 60/69 Nalley rows
+    # wrong after a single-dealer sort with no basicFilter involved at all. Cols
+    # C/E-I already VLOOKUP off D (stock#) and are unaffected; this brings J in line.
+    filter_end_row = cfg.get("pbt_filter", {}).get("end_row", 0)
+    repair_end_row = max(filter_end_row, clear_end) if cfg.get("pbt_tab") and cfg.get("data_start_row") else 0
+    if repair_end_row and repair_end_row > data_start:
+        try:
+            import googleapiclient.discovery as _disc
+            from google.oauth2.credentials import Credentials as _Creds
+            # copyPaste silently skips any row currently hiddenByFilter — confirmed
+            # 2026-07-13: leftover filter state (present even on dealers with no
+            # pbt_filter config, e.g. Dyer) left 7/5698 Hendrick rows and 1/54 Dyer
+            # rows on the stale pre-VLOOKUP formula despite this block "succeeding".
+            # Clear any basicFilter unconditionally before pasting so nothing is hidden.
+            try:
+                sh.batch_update({"requests": [{"clearBasicFilter": {"sheetId": pbt_ws.id}}]})
+            except Exception:
+                pass  # no filter present — nothing to clear
+            _creds = _Creds.from_authorized_user_file(TOKEN_SHEETS, SCOPES_SHEETS)
+            if _creds.expired and _creds.refresh_token:
+                from google.auth.transport.requests import Request as _Req
+                _creds.refresh(_Req())
+            _svc = _disc.build("sheets", "v4", credentials=_creds, cache_discovery=False)
+            j_col_idx = 9  # column J (0-indexed)
+            # Write anchor formula to J(data_start) then copyPaste to full filter range
+            j_formula = (
+                f'=IFERROR(IF(I{data_start}="Good",'
+                f'ABS(VLOOKUP(D{data_start},\'Data Import_Inventory Report\'!$C$2:$Q$10000,13,FALSE)),'
+                f'IF(I{data_start}="Great",'
+                f'ABS(VLOOKUP(D{data_start},\'Data Import_Inventory Report\'!$C$2:$Q$10000,15,FALSE)),'
+                f'"")),"")'
+            )
+            pbt_ws.update(f"J{data_start}", [[j_formula]], value_input_option="USER_ENTERED")
+            _svc.spreadsheets().batchUpdate(
+                spreadsheetId=pbt_ws.spreadsheet.id,
+                body={"requests": [{"copyPaste": {
+                    "source": {"sheetId": pbt_ws.id,
+                               "startRowIndex": data_start - 1, "endRowIndex": data_start,
+                               "startColumnIndex": j_col_idx, "endColumnIndex": j_col_idx + 1},
+                    "destination": {"sheetId": pbt_ws.id,
+                                    "startRowIndex": data_start, "endRowIndex": repair_end_row,
+                                    "startColumnIndex": j_col_idx, "endColumnIndex": j_col_idx + 1},
+                    "pasteType": "PASTE_FORMULA",
+                }}]},
+            ).execute()
+            print(f"  ✓ Repaired J formula J{data_start}:J{repair_end_row} (VLOOKUP, sort-safe)")
+        except Exception as _e:
+            print(f"  ⚠ J formula repair skipped: {_e}")
 
     # Dem Signal (Nalley only)
     if dem_rows and cfg["dem_signal_tab"]:
@@ -609,8 +668,13 @@ def read_stats(sh, pbt, cfg):
     except Exception as e:
         print(f"  ⚠ Import-based top-vehicles failed, falling back to PBT: {e}")
 
+    # Recalculate percentage excluding $0 rows (already-qualifying vehicles inflate
+    # the denominator and make the badge-opportunity rate look smaller than it is).
+    non_zero_total = total - len(at_deduped)
+    computed_pct = f"{len(within_deduped)/non_zero_total:.0%}" if non_zero_total > 0 else "0%"
+
     stats = {
-        "pct": pct,
+        "pct": computed_pct,
         "threshold": threshold,
         "total": total,
         "at_threshold_count": len(at_deduped),
@@ -619,8 +683,8 @@ def read_stats(sh, pbt, cfg):
         "already_great": already_great,
         "top_vehicles": top_vehicles_import if top_vehicles_import else _pick_top_vehicles(within_deduped, n=5),
     }
-    print(f"  ✓ Stats: {stats['within_count']}/{total} within {threshold} ({pct}), "
-          f"{len(at_threshold)} at $0, {already_great} already Great")
+    print(f"  ✓ Stats: {stats['within_count']}/{non_zero_total} within {threshold} ({computed_pct}), "
+          f"{len(at_deduped)} at $0 (excluded from %), {already_great} already Great")
     return stats
 
 
@@ -845,25 +909,36 @@ def compose_email_html(cfg, stats, dem_stats=None):
                 f'<li><b>{v["sam"]}</b>{store_label} &mdash; {v["vehicle"]}{price_note} for <b>{v["next"]}</b></li>\n'
             )
 
-    # $0 vehicles: already qualify, badge update pending on Cars.com side
+    # (Removed 2026-06-12 per Jake: the "$0 / already qualify, no action needed"
+    # paragraph was unneeded filler.) Kept empty so the template insertion is a no-op.
     at_threshold_html = ""
-    if stats.get("at_threshold_count", 0) > 0:
-        names = ", ".join(f'<b>{v["vehicle"]}</b>' for v in stats["at_threshold_vehicles"])
-        at_threshold_html = (
-            f'<p>Additionally, <b>{stats["at_threshold_count"]} vehicle(s) already qualify '
-            f'for a badge upgrade at their current price</b> &mdash; no action needed, '
-            f'Cars.com will reflect the updated badge on the next cycle: {names}.</p>'
-        )
 
     dem_paragraph = ""
     if dem_stats:
+        # Closing clause scales to the actual off-market share (above + under),
+        # so it stays accurate whether a store is 92% At Market or 60%.
+        off_market_pct = float(dem_stats["above_market_pct"]) + float(dem_stats["under_market_pct"])
+        if off_market_pct <= 15:
+            dem_close = (
+                f'the vast majority is competitively positioned, with just '
+                f'{off_market_pct:.0f}% sitting off-market.'
+            )
+        elif off_market_pct <= 40:
+            dem_close = (
+                f'most inventory is competitively positioned, though '
+                f'{off_market_pct:.0f}% has room to sharpen up and capture more shopper attention.'
+            )
+        else:
+            dem_close = (
+                f'{off_market_pct:.0f}% of inventory has room to sharpen up and '
+                f'capture more shopper attention.'
+            )
         dem_paragraph = (
             f'<p>From a broader pricing standpoint, your Demand Signals show '
             f'<b>{dem_stats["at_market_pct"]}% At Market</b>, '
             f'<b>{dem_stats["above_market_pct"]}% Above Market</b>, and '
             f'<b>{dem_stats["under_market_pct"]}% Under Market</b> &mdash; '
-            f'majority of inventory is competitively positioned, though '
-            f'nearly a third has room to sharpen up and capture more shopper attention.</p>'
+            f'{dem_close}</p>'
         )
 
     html = f"""\
@@ -881,7 +956,7 @@ def compose_email_html(cfg, stats, dem_stats=None):
 {at_threshold_html}
 
 <p>The full breakdown is in your
-<a href="{cfg["sheet_url"]}">Price Badge Report</a>,
+<a href="{cfg.get("email_link_url", cfg["sheet_url"])}">Price Badge Report</a>,
 sorted by closest to upgrade at the top.
 {f'{stats["already_great"]} vehicles are already sitting at Great.' if stats["already_great"] else ''}</p>
 
@@ -1061,6 +1136,15 @@ def main():
         hide_import_tab(sh, cfg)
     except Exception as e:
         print(f"  ⚠ Could not hide tab: {e}")
+    for tab_name in cfg.get("extra_hide_tabs", []):
+        try:
+            ws_extra = sh.worksheet(tab_name)
+            sh.batch_update({"requests": [{"updateSheetProperties": {
+                "properties": {"sheetId": ws_extra.id, "hidden": True},
+                "fields": "hidden"}}]})
+            print(f"  ✓ Hidden tab '{tab_name}'")
+        except Exception as e:
+            print(f"  ⚠ Could not hide '{tab_name}': {e}")
     qc_other_tabs(sh)
 
     # Apply --to / --cc overrides before composing email

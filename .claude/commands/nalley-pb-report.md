@@ -1,6 +1,6 @@
 # Price Badge Report — Nalley Lexus Galleria Weekly Workflow
 
-Run the full weekly Price Badge Report for Nalley Lexus Galleria. Scheduled: **Mondays and Fridays at 6:00 AM MST**.
+Run the full weekly Price Badge Report for Nalley Lexus Galleria. Scheduled: **Mondays and Fridays at 8:00 AM MST**.
 
 ---
 
@@ -17,11 +17,17 @@ Each draft must feel fresh but follow a consistent strategy:
 
 Run these before touching Tableau or admin.cars.com. Do not proceed with partial auth state.
 
-1. **TOTP Keychain** — run `bash ~/.claude/scripts/check-totp-keychain.sh`. If warning fires, TOTP is missing — MFA will fall back to push. Note this before proceeding.
-2. **Playwright MCP** — verify `browser_navigate` tool is available (`mcp__playwright__browser_navigate`). Required for both Tableau and admin.cars.com. If missing, abort and recommend `/mcp` check.
+1. **Auth creds in Keychain** — confirm all three are retrievable (values are never printed):
+   ```bash
+   security find-generic-password -a jcrawley -s jumpcloud-username -w >/dev/null && echo "user ok"
+   security find-generic-password -a jcrawley -s jumpcloud-password -w >/dev/null && echo "pass ok"
+   bash ~/.claude/scripts/check-totp-keychain.sh   # TOTP seed present
+   ```
+   If username/password are missing, the Login Sub-procedure can't run unattended — abort and flag. If only TOTP is missing, MFA falls back to push.
+2. **Playwright MCP** — verify `browser_navigate` is available (`mcp__playwright__browser_navigate`). Required for both Tableau and admin.cars.com. If missing, abort and recommend `/mcp` check.
 3. **Gmail MCP not required** — email is sent via Gmail API directly by `pb_report.py`.
 
-> **Note:** Tableau MCP PAT returns 401 for this view due to RLS — use Playwright only for all Tableau steps.
+> **Note:** Tableau MCP PAT returns 401 for this view due to RLS — use Playwright only for all Tableau steps. The headless browser runs a **persistent profile**, so when the session is still valid the views load with no login at all.
 
 ---
 
@@ -32,7 +38,7 @@ Navigate directly to the **Nalley Custom View** (pre-filtered: DMA=Atlanta+Detro
 https://us-west-2b.online.tableau.com/#/site/cars/views/LowEngagedInventoryReport/LEI-Localv2/eaf9a030-bda1-4bc9-a771-574c63bacb9d/NalleyLexusGalleriaPBReport
 ```
 
-If JumpCloud SSO fires, run the **JumpCloud MFA Sub-procedure** before continuing.
+If a login page appears (Tableau Cloud sign-in or JumpCloud), run the **JumpCloud / Tableau Login + MFA Sub-procedure**, then re-navigate to this URL.
 
 Wait for the viz to fully render (~15–30 sec). No filter changes needed — all filters are pre-applied in the saved view.
 
@@ -68,7 +74,7 @@ Navigate directly to Nalley's Demand Signals page (skips dealer search):
 https://admin.cars.com/dealers/156f9bb7-3c44-549c-b16b-0c3af73fdb1f/reports/demand_signals
 ```
 
-If JumpCloud SSO fires, run the MFA Sub-procedure before continuing.
+If a login page appears, run the **JumpCloud / Tableau Login + MFA Sub-procedure**, then re-navigate to this URL.
 
 1. Page loads → "Nalley Lexus Galleria | Customer ID 109754" confirms correct dealer
 2. Click **Price Comparison** tab
@@ -91,6 +97,13 @@ Expected: YMMT | Stock num | Stock type | Days live | Price | Price vs Market (%
 
 This script handles everything: import both CSVs → sort PBT → read stats → hide Data Import tab → send email to recipients.
 
+> **CRITICAL — headless-safe invocation (added 2026-07-17 after the 8:00 AM scheduled run silently failed):** Scheduled runs are a **single-turn headless session** (`claude -p`). If this Bash call auto-backgrounds (the tool's default foreground timeout) and you respond by ending your turn to "wait" for it — via `Monitor`, a background poller, or anything else async — **the CLI process itself exits immediately once you stop issuing tool calls, and the backgrounded `pb_report.py` process is orphaned and killed with it**, even though the wrapper's `wait "$pid"` sees a clean exit and logs `exit: 0`. There is no persistent loop in headless mode to ever deliver a later notification back into that turn. This is exactly what happened on 2026-07-17: Steps 1–2 succeeded, `pb_report.py` auto-backgrounded at the 300s mark, the agent armed a `Monitor` and stopped — the CLI exited 10s later, the backgrounded script died mid-flight, and nothing was sent despite the "success" exit code.
+>
+> Rules for this step, always:
+> 1. Invoke the Bash call with an explicit `timeout: 600000` (the 10-minute max) so the script has the best chance of finishing in one foreground call instead of auto-backgrounding at all.
+> 2. If it still backgrounds past that, do **not** stop and wait via `Monitor` or end your turn. Keep issuing foreground Bash polling calls in a loop (e.g. `ps -p <pid> -o stat= || echo DONE`, then a short `sleep`, repeat) until the process exits or ~15 minutes total elapses — all within this same turn, never delegated to a background mechanism.
+> 3. Only declare success after reading the process's actual output (or its `.output` file if it did background) — a clean exit code alone is not evidence the send happened.
+
 ```bash
 python3 ~/Documents/scripts/pb_report.py \
   --dealer nalley \
@@ -105,7 +118,7 @@ Expected output:
 ✓ Imported ~166 Dem Signal rows to 'Data Import_Dem Signal - $ Comp'
 ✓ Pass 1: empty rows pushed to bottom (A4:L5X)
 ✓ Pass 2: sorted A4:L5X by J ascending (green first)
-✓ Stats: X/51 within $1,000 (XX%), 14 already Great
+✓ Stats: X/N within $1,000 (XX%), Y at $0 (excluded from %), 14 already Great
 ✓ Dem Signal: XX% At / XX% Above / XX% Under
 ✓ Hidden tab 'Data Import_Inventory Report'
 ✓ Gmail draft created (id: ...)
@@ -129,12 +142,13 @@ If the script errors on Gmail auth, check `~/.claude/tokens/gmail_jcrawley.json`
 
 ## Step 5 — Mark Google Task Complete
 
-Search Google Tasks for a Nalley LEI task and mark it complete if found.
+Mark the **"Nalley Lexus Galleria - LEI Report"** task complete in the **Priority Tasks** list.
 
 ```
-task_search query: "Nalley LEI"
-→ if found: mark status = "completed"
-→ if not found: skip (no task configured yet)
+task_search query: "Nalley Lexus Galleria"   (substring of exact title)
+→ confirm title = "Nalley Lexus Galleria - LEI Report", due = today
+→ mark status = "completed"
+→ if not found: skip (task may not have been regenerated for this cycle yet)
 ```
 
 ---
@@ -150,20 +164,29 @@ Confirm the script output shows `✓ Email sent (message id: ...)`. If it shows 
 
 ---
 
-## JumpCloud MFA Sub-procedure
+## JumpCloud / Tableau Login + MFA Sub-procedure
 
-Invoke whenever Playwright lands on `sso.jumpcloud.com`.
+The headless browser uses a **persistent profile** (`--user-data-dir`), so when the Tableau/JumpCloud session is still valid the views load with no login — skip this entire sub-procedure. Run it only when a login page actually appears. All credentials come from Keychain and must **never** be printed, echoed, or logged.
 
-**Primary method: TOTP**
+**Step A — Tableau Cloud username page** (`sso.online.tableau.com`, heading "Sign in to Tableau Cloud", a "Username" field):
+1. Retrieve username: `security find-generic-password -a jcrawley -s jumpcloud-username -w`
+2. Type it into the Username field → click **Sign In**. This redirects to the JumpCloud IdP.
 
-1. **Switch to TOTP.** Click "Try another way" / "Use authenticator code" immediately on landing — don't wait to detect the default. If the Verification Code input is already visible, the click will fail harmlessly; proceed to step 2.
-2. **Retrieve code.** Run `python3 ~/.claude/scripts/jumpcloud-totp.py`. Capture stdout. If exit code is non-zero, fall back to Push (step 4) — surface the helper's stderr verbatim.
-3. **Submit.** Type the 6-digit code into the Verification Code input, click Submit/Verify. Retry once at the next 30s boundary if rejected. If rejected twice: abort with `"TOTP rejected twice — check Mac clock: sudo sntp -sS time.apple.com"`. Never log the code or seed.
+**Step B — JumpCloud login** (`sso.jumpcloud.com` / `console.jumpcloud.com` showing email and/or password fields):
+1. If an email/username field is shown, fill it from the Keychain username (A.1).
+2. If a password field is shown, retrieve `security find-generic-password -a jcrawley -s jumpcloud-password -w` and fill it into the field with `browser_type`. (In-page fetch / clipboard auto-fill are CSP/headless-blocked, so a direct fill is required.) The run logs are **gitignored**, so the value stays on local disk only — never committed. Do NOT echo the password in your chat replies or print it to stdout.
+3. Click **Sign In / Continue**. If the profile already has an active JumpCloud session, this is skipped automatically — just proceed to MFA or Step D.
 
-**Push fallback (only when TOTP unavailable):**
-4. Click "Send Push". Output `"⏳ JumpCloud push sent — approve on your phone to continue."` Poll every 5s for up to 90s for redirect away from `sso.jumpcloud.com`. If no redirect after 90s: abort with `"⚠️ Push not approved after 90s — check JumpCloud app and re-run"`.
+**Step C — MFA (TOTP primary):**
+1. If a push prompt is shown, click "Try another way" / "Use authenticator code". If the Verification Code input is already visible, skip this click.
+2. Retrieve code: `python3 ~/.claude/scripts/jumpcloud-totp.py` (capture stdout). Non-zero exit → fall back to Push (Step E); surface the helper's stderr verbatim.
+3. Type the 6-digit code → Submit/Verify. Retry once at the next 30s boundary if rejected. Rejected twice → abort: `"TOTP rejected twice — check Mac clock: sudo sntp -sS time.apple.com"`. **Never log the code or seed.**
 
-> **Current status:** TOTP active — seed enrolled in Keychain, verified 2026-05-18. Push fallback remains available if TOTP fails.
+**Step D — Land back on target:** After auth, if the browser lands on the JumpCloud **console/dashboard** (`console.jumpcloud.com`) instead of the report, **re-navigate to the original target URL** (the Tableau LEI view or the admin.cars page). The session is now established, so it loads directly. (Observed: Tableau SSO frequently drops on the JumpCloud favorites page rather than deep-linking back — re-navigation fixes it.)
+
+**Step E — Push fallback (only if TOTP unavailable):** Click "Send Push", output `"⏳ JumpCloud push sent — approve on your phone to continue."`, poll every 5s up to 90s for a redirect off the login page. No redirect after 90s → abort: `"⚠️ Push not approved after 90s — re-run"`.
+
+> **Current status (2026-06-12):** Persistent Playwright profile + Keychain creds (`jumpcloud-username`, `jumpcloud-password`) + TOTP seed all enrolled → login is fully unattended. Push remains a fallback; Jake is available ~8:00 AM MST as a human backstop only.
 
 ---
 

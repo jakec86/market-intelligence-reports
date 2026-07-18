@@ -1,2 +1,8 @@
 .DS_Store
 .claude/schedules/mcp-config.json
+.claude/schedules/mcp-config-*.json
+
+# Headless PB-report runs fill the SSO password via browser_type; keep the run
+# logs and session transcripts (which capture it) out of git — local disk only.
+.claude/logs/
+.claude/projects/**/*.jsonl

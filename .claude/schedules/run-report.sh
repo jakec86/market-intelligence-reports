@@ -5,6 +5,12 @@
 #         run-report.sh /hendricks-pb-report
 #
 # Reliability features:
+#   - Auth pre-flight: a trivial claude -p ping before the retry loop. A 401
+#     (expired/invalid claude.ai OAuth login) is NOT transient, so we abort
+#     immediately with a distinct "AUTH EXPIRED — run /login" alert instead of
+#     burning all 3 long retries. (2026-06-22: an expired OAuth token 401'd all 6
+#     Hendrick+Nalley attempts in seconds and only surfaced via the failure email.)
+#   - In-loop 401 short-circuit: if any attempt's log shows a 401, stop retrying.
 #   - Real 45-min timeout per attempt (background watchdog — macOS has no `timeout`)
 #   - Up to 3 attempts with backoff (transient Claude API errors killed 3 of 6
 #     scheduled runs in May–June 2026; retries are prompted to check for
@@ -62,6 +68,9 @@ esac
 MCP_CONFIG="$HOME/.claude/schedules/mcp-config-${DEALER}.json"
 [ -f "$MCP_CONFIG" ] || MCP_CONFIG="$HOME/.claude/schedules/mcp-config.json"
 PROFILE_DIR="$HOME/Library/Caches/ms-playwright-mcp/${DEALER}-profile"
+# Empty MCP config for the auth pre-flight: load NO servers so the ping is a pure
+# auth/model check (no playwright/gmail cold-start, no false negatives from a down MCP).
+EMPTY_MCP_CONFIG="$HOME/.claude/schedules/mcp-config-empty.json"
 
 cleanup_stale_processes() {
   # Scoped to THIS dealer's profile only — a concurrent run for another dealer
@@ -71,6 +80,32 @@ cleanup_stale_processes() {
   pkill -f "${DEALER}-profile" 2>/dev/null || true
   rm -f "$PROFILE_DIR"/Singleton* 2>/dev/null || true
   sleep 2
+}
+
+# Regex matching the CLI's authentication-failure output. A 401 here means the
+# claude.ai OAuth login token is expired/invalid — not a transient API blip — so
+# retrying is pointless. Kept broad to catch wording changes across CLI versions.
+AUTH_FAIL_RE='API Error: 401|Invalid authentication credentials|Failed to authenticate|authentication_error|OAuth token (has )?expired|Please run /login|Invalid bearer token'
+
+# Cheap, pure-auth pre-flight: a trivial prompt with NO MCP servers loaded. Returns
+# 2 on a detected auth failure (caller aborts fast), 0 otherwise. A non-auth error
+# is treated as inconclusive (return 0) so a flaky ping never blocks a real run.
+preflight_auth() {
+  local out rc
+  out="$(/Users/jcrawley/.local/bin/claude \
+          -p "Reply with the single word: OK" \
+          --model "opus[1m]" \
+          --mcp-config "$EMPTY_MCP_CONFIG" \
+          --strict-mcp-config \
+          < /dev/null 2>&1)"
+  rc=$?
+  if printf '%s\n' "$out" | grep -qiE "$AUTH_FAIL_RE"; then
+    echo "=== $(date) === AUTH PRE-FLIGHT: detected auth failure ===" >> "$LOGFILE"
+    printf '%s\n' "$out" | tail -3 >> "$LOGFILE"
+    return 2
+  fi
+  echo "=== $(date) === AUTH PRE-FLIGHT: ok (rc=$rc) ===" >> "$LOGFILE"
+  return 0
 }
 
 run_claude_with_timeout() {
@@ -163,6 +198,7 @@ notify_failure() {
 import os, json, urllib.request
 
 skill, rc = os.environ["SKILL_NAME"], os.environ["RC_VAL"]
+reason = os.environ.get("FAIL_REASON", "").strip()
 def tail(path, n=30):
     try:
         with open(path) as f:
@@ -170,11 +206,15 @@ def tail(path, n=30):
     except Exception:
         return "(unreadable)"
 
-subject = f"⚠️ Scheduled report FAILED: {skill} (exit {rc})"
-body = (f"Scheduled run {skill} FAILED (exit {rc}) after all retry attempts.\n\n"
-        f"=== last 30 log lines ===\n{tail(os.environ['LOGFILE_PATH'])}\n"
+subject = f"⚠️ Scheduled report FAILED: {skill} (exit {rc})" + (f" — {reason}" if reason else "")
+recover = (f"AUTH: run /login in an interactive Claude Code session to refresh the "
+           f"claude.ai OAuth token, then re-run {skill}.") if reason.startswith("AUTH") \
+          else f"Recover manually: run {skill} in an interactive session."
+body = (f"Scheduled run {skill} FAILED (exit {rc}).\n"
+        + (f"Reason: {reason}\n" if reason else "")
+        + f"\n=== last 30 log lines ===\n{tail(os.environ['LOGFILE_PATH'])}\n"
         f"=== last 10 err lines ===\n{tail(os.environ['ERRFILE_PATH'], 10)}\n\n"
-        f"Recover manually: run {skill} in an interactive session.")
+        f"{recover}")
 
 def _rpc(payload, sid=None):
     h = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
@@ -228,7 +268,16 @@ except Exception as e1:
 PYEOF
 }
 
+# Auth pre-flight — fail fast on an expired/invalid claude.ai OAuth login (401)
+# rather than burning all MAX_ATTEMPTS × TIMEOUT_SECS retries on a non-transient error.
+if ! preflight_auth; then
+  echo "=== $(date) === $SKILL ABORTED before run — claude.ai OAuth token invalid/expired (401) ===" >> "$LOGFILE"
+  FAIL_REASON="AUTH EXPIRED — run /login to refresh the claude.ai OAuth token" notify_failure 3
+  exit 3
+fi
+
 RC=1
+AUTH_FAIL=0
 for (( attempt=1; attempt<=MAX_ATTEMPTS; attempt++ )); do
   wait_secs="${RETRY_WAITS[$((attempt-1))]:-300}"
   [ "$wait_secs" -gt 0 ] && sleep "$wait_secs"
@@ -245,11 +294,24 @@ for (( attempt=1; attempt<=MAX_ATTEMPTS; attempt++ )); do
   run_claude_with_timeout "$PROMPT" || RC=$?
   echo "=== $(date) === Finished $SKILL attempt $attempt (exit: $RC) ===" >> "$LOGFILE"
   [ "$RC" -eq 0 ] && break
+
+  # In-loop 401 short-circuit: if this attempt failed on auth, the token died
+  # mid-batch — retrying won't help. Stop now and alert with the auth reason.
+  if tail -n 25 "$LOGFILE" | grep -qiE "$AUTH_FAIL_RE"; then
+    echo "=== $(date) === AUTH 401 detected during attempt $attempt — aborting remaining retries ===" >> "$LOGFILE"
+    AUTH_FAIL=1
+    break
+  fi
 done
 
 if [ "$RC" -ne 0 ]; then
-  echo "=== $(date) === $SKILL FAILED after $MAX_ATTEMPTS attempts — sending alert ===" >> "$LOGFILE"
-  notify_failure "$RC"
+  if [ "$AUTH_FAIL" -eq 1 ]; then
+    echo "=== $(date) === $SKILL FAILED (auth 401 mid-run) — sending alert ===" >> "$LOGFILE"
+    FAIL_REASON="AUTH EXPIRED — run /login to refresh the claude.ai OAuth token" notify_failure "$RC"
+  else
+    echo "=== $(date) === $SKILL FAILED after $MAX_ATTEMPTS attempts — sending alert ===" >> "$LOGFILE"
+    notify_failure "$RC"
+  fi
 fi
 
 exit $RC

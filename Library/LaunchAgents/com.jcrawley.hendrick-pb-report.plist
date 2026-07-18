@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jcrawley.hendrick-pb-report</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/jcrawley/.claude/schedules/run-report.sh</string>
+        <string>/hendricks-pb-report</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/jcrawley</string>
+
+    <!-- Mon (1) at 7:30 AM local time -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>1</integer>
+        <key>Hour</key>
+        <integer>7</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+
+    <key>WakeForNetworkAccess</key>
+    <true/>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jcrawley/.claude/logs/hendrick-pb-report.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/jcrawley/.claude/logs/hendrick-pb-report-error.log</string>
+</dict>
+</plist>
