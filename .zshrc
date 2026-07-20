@@ -19,9 +19,11 @@ export PATH=~/.npm-global/bin:$PATH
 export PATH="$HOME/.claude/bin:$PATH"
 export PATH="$HOME/.fzf/bin:$PATH"
 export PATH="$HOME/Library/Python/3.9/bin:$PATH"
+export PATH="/opt/homebrew/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 
 # Environment
-. "$HOME/.local/bin/env"
+[ -f "$HOME/.local/bin/env" ] && . "$HOME/.local/bin/env"
 
 # History
 HISTSIZE=50000
