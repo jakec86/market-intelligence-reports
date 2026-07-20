@@ -6,3 +6,34 @@
 # logs and session transcripts (which capture it) out of git — local disk only.
 .claude/logs/
 .claude/projects/**/*.jsonl
+
+# Safety net: this repo tracks specific files deliberately (see how .gitignore
+# above is scoped). These entries guard against an accidental `git add -A`/
+# `git add .` in $HOME sweeping in credentials, keys, or system/app data.
+.ssh/
+.config/
+.local/
+Applications/
+Desktop/
+Downloads/
+Movies/
+Music/
+Pictures/
+Public/
+Library/
+.zsh_history
+.zsh_sessions/
+.CFUserTextEncoding
+.claude.json
+.claude/.last-cleanup
+.claude/.last-update-result.json
+.claude/backups/
+.claude/cache/
+.claude/history.jsonl
+.claude/mcp-needs-auth-cache.json
+.claude/plugins/
+.claude/policy-limits.json
+.claude/remote-settings.json
+.claude/sessions/
+.claude/shell-snapshots/
+*.bak
