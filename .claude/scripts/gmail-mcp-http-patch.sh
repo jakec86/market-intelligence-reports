@@ -15,7 +15,7 @@
 # Run this after any gmail-mcp upgrade, then: launchctl kickstart -k gui/$(id -u)/com.jcrawley.gmail-mcp-http
 
 set -euo pipefail
-F="$HOME/.npm-global/lib/node_modules/@shinzolabs/gmail-mcp/dist/index.js"
+F="$(npm root -g)/@shinzolabs/gmail-mcp/dist/index.js"
 [ -f "$F" ] || { echo "ERROR: $F not found"; exit 1; }
 
 if grep -q "GMAIL_HTTP_ONLY" "$F"; then

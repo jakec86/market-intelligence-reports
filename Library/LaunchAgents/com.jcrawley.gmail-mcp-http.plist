@@ -6,8 +6,9 @@
     <string>com.jcrawley.gmail-mcp-http</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/node</string>
-        <string>/Users/jcrawley/.npm-global/lib/node_modules/@shinzolabs/gmail-mcp/dist/index.js</string>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>exec node "$(npm root -g)/@shinzolabs/gmail-mcp/dist/index.js"</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>
@@ -20,7 +21,7 @@
         <key>TELEMETRY_ENABLED</key>
         <string>false</string>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin</string>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>
