@@ -44,7 +44,7 @@ mkdir -p "$LOGDIR"
 
 # Set env explicitly — do NOT source .zshrc (bash + set -e + zsh-only commands = exit 127)
 export HOME="/Users/jcrawley"
-export PATH="$HOME/.npm-global/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export PATH="$HOME/.npm-global/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export ANTHROPIC_API_KEY="$(security find-generic-password -s 'anthropic-api-key' -w 2>/dev/null || true)"
 export TABLEAU_PAT_SECRET="$(security find-generic-password -a jcrawley -s 'tableau-pat' -w 2>/dev/null || true)"
 export TABLEAU_PAT_NAME="Claude"

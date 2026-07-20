@@ -1,5 +1,7 @@
 # Memory Index
 
+- [ACA Review Broken Data Path](project_aca_review_broken_data_path.md) — DEALERRATER_JSON points at a dead session scratchpad; aca-review-cycle already broken pre-migration
+- [CLAUDE.md Doc Drift (Gemini)](project_claude_md_doc_drift.md) — chat_app.py/test_prompt.py use Gemini not Anthropic; dealer_health.py has no Claude calls; docs stale, leave as-is
 - [Sheet Sharing Confirm](feedback_sheet_sharing_confirm.md) — Always ask before sharing a new Sheet/Doc, even if a broader plan step already covered "sharing"
 - [JumpCloud Device Trust](reference_jumpcloud_device_trust.md) — Isolated Playwright profiles blocked by device-trust policy on admin.cars.com SSO; pb-profile confirmed trusted 2026-07-17
 - [No Recaps](feedback_no_recaps.md) — No end-of-turn recap sections
