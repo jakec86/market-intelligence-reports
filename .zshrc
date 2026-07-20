@@ -18,6 +18,7 @@ export GITHUB_PERSONAL_ACCESS_TOKEN="$(security find-generic-password -a jcrawle
 export PATH=~/.npm-global/bin:$PATH
 export PATH="$HOME/.claude/bin:$PATH"
 export PATH="$HOME/.fzf/bin:$PATH"
+export PATH="$HOME/Library/Python/3.9/bin:$PATH"
 
 # Environment
 . "$HOME/.local/bin/env"
