@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jcrawley.caffeinate</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/caffeinate</string>
+        <string>-s</string>
+    </array>
+
+    <!-- -s: prevent idle sleep only while on AC power (battery sleep still allowed).
+         Runs at login and restarts if it ever exits, so scheduled report jobs can
+         always fire regardless of display-off/lock state. -->
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jcrawley/.claude/logs/caffeinate.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/jcrawley/.claude/logs/caffeinate.log</string>
+</dict>
+</plist>
